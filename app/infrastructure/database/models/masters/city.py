@@ -1,0 +1,34 @@
+from uuid import UUID, uuid4
+
+from sqlalchemy import Boolean, ForeignKey, String, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.infrastructure.database.models.base_entity import EntityBase
+
+
+class City(EntityBase):
+    __tablename__ = "cities"
+    __table_args__ = (
+        UniqueConstraint(
+            "country_id", "state_id", "name", name="uq_cities_location_name"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    public_id: Mapped[UUID] = mapped_column(
+        unique=True, nullable=False, default=uuid4
+    )
+    country_id: Mapped[int] = mapped_column(
+        ForeignKey("countries.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    state_id: Mapped[int | None] = mapped_column(
+        ForeignKey("states.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )

@@ -7,6 +7,42 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 from app.core.config import settings
 from app.infrastructure.database.base import Base
+
+# General master models
+from app.infrastructure.database.models.masters import (
+    AddressType,
+    City,
+    CommunicationType,
+    Country,
+    Currency,
+    DocumentType,
+    IdentificationType,
+    Industry,
+    Language,
+    State,
+    TimeZone,
+    UnitOfMeasure,
+)
+
+# Organization master models
+from app.infrastructure.database.models.organization import (
+    Branch,
+    BusinessHours,
+    BusinessUnit,
+    CostCenter,
+    Department,
+    DocumentSequence,
+    FiscalPeriod,
+    FiscalYear,
+    Holiday,
+    JobTitle,
+    LegalEntity,
+    Organization,
+    ProfitCenter,
+    Team,
+)
+
+# Masters models
 from app.modules.identity.models import AuthSession
 from app.modules.rbac.models import (
     Permission,

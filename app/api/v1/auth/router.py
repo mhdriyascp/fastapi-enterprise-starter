@@ -32,12 +32,12 @@ router = APIRouter(
 )
 async def register(
     data: UserCreate,
-    db: AsyncSession = Depends(get_db_session),
+    db: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> UserResponse:
     service = UserService(db)
 
     try:
-        user = await service.create_user(data)
+        return await service.create_user(data)
 
     except ValueError as exc:
         raise HTTPException(
@@ -50,30 +50,28 @@ async def register(
 
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "User could not be created because the email "
-                "is already registered."
-            ),
+            detail="User could not be created because the email is already registered.",
         ) from exc
 
-    return user
 
-
-@router.post("/login", response_model=TokenResponse)
+@router.post(
+    "/login",
+    response_model=TokenResponse,
+)
 async def login(
     data: UserLogin,
-    db: AsyncSession = Depends(get_db_session),
+    db: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> TokenResponse:
     service = IdentityService(db)
 
     try:
         access_token, refresh_token = await service.login(data)
 
-    except AccountLockedError:
+    except AccountLockedError as exc:
         raise HTTPException(
             status_code=status.HTTP_423_LOCKED,
             detail="Your account is temporarily locked. Please try again later.",
-        )
+        ) from exc
 
     except ValueError as exc:
         raise HTTPException(
@@ -94,7 +92,7 @@ async def login(
 )
 async def refresh(
     data: RefreshTokenRequest,
-    db: AsyncSession = Depends(get_db_session),
+    db: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> TokenResponse:
     service = IdentityService(db)
 
@@ -107,9 +105,7 @@ async def refresh(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(exc),
-            headers={
-                "WWW-Authenticate": "Bearer",
-            },
+            headers={"WWW-Authenticate": "Bearer"},
         ) from exc
 
     return TokenResponse(
@@ -137,7 +133,7 @@ async def get_me(
 )
 async def logout(
     data: RefreshTokenRequest,
-    db: AsyncSession = Depends(get_db_session),
+    db: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> dict[str, str]:
     service = IdentityService(db)
 
@@ -148,14 +144,10 @@ async def logout(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(exc),
-            headers={
-                "WWW-Authenticate": "Bearer",
-            },
+            headers={"WWW-Authenticate": "Bearer"},
         ) from exc
 
-    return {
-        "message": "Logged out successfully.",
-    }
+    return {"message": "Logged out successfully."}
 
 
 @router.post(
@@ -167,17 +159,17 @@ async def logout_all(
         User,
         Depends(get_current_user),
     ],
-    db: AsyncSession = Depends(get_db_session),
+    db: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> dict[str, str]:
     service = IdentityService(db)
 
     await service.logout_all(current_user.id)
 
     return {
-        "message": "Logged out from all sessions successfully.",
+        "message": "Logged out from all sessions successfully."
     }
-    
-    
+
+
 @router.post(
     "/change-password",
     status_code=status.HTTP_200_OK,
@@ -188,9 +180,10 @@ async def change_password(
         User,
         Depends(get_current_user),
     ],
-    db: AsyncSession = Depends(get_db_session),
+    db: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> dict[str, str]:
     user_service = UserService(db)
+    identity_service = IdentityService(db)
 
     try:
         await user_service.change_password(
@@ -198,18 +191,24 @@ async def change_password(
             data,
         )
 
+        await identity_service.revoke_all_sessions(
+            current_user.id
+        )
+
+        await db.commit()
+
     except ValueError as exc:
+        await db.rollback()
+
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
         ) from exc
 
-    identity_service = IdentityService(db)
-
-    await identity_service.logout_all(
-        current_user.id,
-    )
+    except Exception:
+        await db.rollback()
+        raise
 
     return {
-        "message": "Password changed successfully.",
+        "message": "Password changed successfully. Please log in again."
     }

@@ -1,3 +1,4 @@
+# Ignore environment variables file
 .env
 .venv/
 __pycache__/

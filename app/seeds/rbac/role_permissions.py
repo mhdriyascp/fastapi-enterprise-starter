@@ -3,34 +3,54 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.rbac.models import Permission, Role, RolePermission
 
-# Initial RBAC policy.
-# Extend this mapping when CRM permissions are introduced.
 ROLE_PERMISSION_MAP: dict[str, tuple[str, ...]] = {
     "super_admin": (
+        # Role permissions.
         "role.read",
         "role.create",
         "role.update",
         "role.delete",
+        # Permission management.
         "permission.read",
         "permission.create",
         "permission.update",
         "permission.delete",
+        # Organization permissions.
+        "organization.create",
+        "organization.read",
+        "organization.update",
+        # Master data permissions.
+        "masters:create",
+        "masters:read",
+        "masters:update",
+        "masters:delete",
     ),
     "admin": (
         "role.read",
         "role.create",
         "role.update",
         "permission.read",
+        "organization.read",
+        # Master data permissions.
+        "masters:create",
+        "masters:read",
+        "masters:update",
+        "masters:delete",
     ),
-    "sales_manager": (),
+    "sales_manager": (
+        "organization.read",
+        "masters:read",
+    ),
     "sales_rep": (),
-    "support_agent": (),
+    "support_agent": (
+        "masters:read",
+    ),
 }
 
 
 async def seed_role_permissions(db: AsyncSession) -> None:
-    # Resolve all referenced roles and permissions.
     role_codes = set(ROLE_PERMISSION_MAP)
+
     permission_codes = {
         permission_code
         for codes in ROLE_PERMISSION_MAP.values()
@@ -40,7 +60,10 @@ async def seed_role_permissions(db: AsyncSession) -> None:
     roles_result = await db.execute(
         select(Role).where(Role.code.in_(role_codes))
     )
-    roles = {role.code: role for role in roles_result.scalars().all()}
+    roles = {
+        role.code: role
+        for role in roles_result.scalars().all()
+    }
 
     permissions_result = await db.execute(
         select(Permission).where(
@@ -52,7 +75,6 @@ async def seed_role_permissions(db: AsyncSession) -> None:
         for permission in permissions_result.scalars().all()
     }
 
-    # Fail early if the seed definitions contain invalid references.
     missing_roles = role_codes - roles.keys()
     missing_permissions = permission_codes - permissions.keys()
 
@@ -103,7 +125,6 @@ async def seed_role_permissions(db: AsyncSession) -> None:
             )
             created += 1
 
-    # Flush to surface database errors without committing.
     await db.flush()
 
     print(

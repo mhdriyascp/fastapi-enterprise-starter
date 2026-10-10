@@ -1,14 +1,11 @@
-from typing import Any, TypeVar
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import DeclarativeBase
 
 
-ModelT = TypeVar("ModelT", bound=DeclarativeBase)
-
-
-async def get_or_create(
+async def get_or_create[ModelT: DeclarativeBase](
     db: AsyncSession,
     model: type[ModelT],
     *,

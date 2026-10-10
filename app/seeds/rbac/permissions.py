@@ -4,6 +4,7 @@ from app.modules.rbac.models import Permission
 from app.seeds.helpers import get_or_create
 
 PERMISSIONS = (
+    # Role permissions.
     {
         "name": "Read Roles",
         "code": "role.read",
@@ -40,6 +41,8 @@ PERMISSIONS = (
         "is_system": True,
         "is_active": True,
     },
+
+    # Permission management.
     {
         "name": "Read Permissions",
         "code": "permission.read",
@@ -72,6 +75,73 @@ PERMISSIONS = (
         "code": "permission.delete",
         "description": "Delete eligible permissions.",
         "resource": "permission",
+        "action": "delete",
+        "is_system": True,
+        "is_active": True,
+    },
+
+    # Organization permissions.
+    {
+        "name": "Create Organizations",
+        "code": "organization.create",
+        "description": "Create organizations.",
+        "resource": "organization",
+        "action": "create",
+        "is_system": True,
+        "is_active": True,
+    },
+    {
+        "name": "Read Organizations",
+        "code": "organization.read",
+        "description": "View organizations.",
+        "resource": "organization",
+        "action": "read",
+        "is_system": True,
+        "is_active": True,
+    },
+    {
+        "name": "Update Organizations",
+        "code": "organization.update",
+        "description": "Update organization details and status.",
+        "resource": "organization",
+        "action": "update",
+        "is_system": True,
+        "is_active": True,
+    },
+
+    # Master data permissions.
+    {
+        "name": "Create Master Records",
+        "code": "masters:create",
+        "description": "Create master data records.",
+        "resource": "masters",
+        "action": "create",
+        "is_system": True,
+        "is_active": True,
+    },
+    {
+        "name": "Read Master Records",
+        "code": "masters:read",
+        "description": "View master data records.",
+        "resource": "masters",
+        "action": "read",
+        "is_system": True,
+        "is_active": True,
+    },
+    {
+        "name": "Update Master Records",
+        "code": "masters:update",
+        "description": "Update master data records.",
+        "resource": "masters",
+        "action": "update",
+        "is_system": True,
+        "is_active": True,
+    },
+    {
+        "name": "Delete Master Records",
+        "code": "masters:delete",
+        "description": "Deactivate master data records.",
+        "resource": "masters",
         "action": "delete",
         "is_system": True,
         "is_active": True,
