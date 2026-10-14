@@ -78,6 +78,14 @@ When a client queries `/api/v1/menus/my-menus`, the visibility engine executes t
 ## 🛡️ Business Validations & Integrity
 
 - **Unique Code Constraint**: Menu codes must be unique system identifiers (`^[A-Za-z0-9_-]+$`).
-- **Hierarchy Cycle Prevention**: A menu cannot be set as its own parent, nor can it be set to any of its descendant nodes. Cycles are detected and rejected with `422 Unprocessable Entity`.
-- **Referential Integrity**: Setting a non-existent parent menu returns `404 Not Found`.
 - **Soft Deactivation**: Inactive menus (`is_active=False`) are suppressed from user navigation while remaining editable by administrators.
+
+---
+
+## 🖥️ Frontend Management Workspace (`/menus`)
+
+The Next.js management dashboard provides a full visual CRUD workspace for RBAC navigation:
+- **Interactive Tree View**: Visualizes nested parent/child navigation nodes with real-time active status badges, quick `+ Add Child`, `Edit`, and `Delete` triggers.
+- **High-Density Table View**: Searchable catalog of all menu items filterable by title, code, or destination path.
+- **Create & Edit Modals**: Full form validation for title, unique code, destination path, parent hierarchy, sort order, and icon mapping.
+- **Live Sidebar Synchronization**: Creating, modifying, or deleting any menu item automatically triggers `refreshMenus()`, synchronizing the active navigation sidebar without requiring a page reload.

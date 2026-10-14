@@ -76,3 +76,20 @@ def test_v2_openapi_json_filtering() -> None:
     assert "/api/v1/health" not in paths
     assert "/api/v1/organizations" not in paths
     assert "/api/v1/countries" not in paths
+
+
+def test_cors_preflight_allows_frontend() -> None:
+    """Verifies that CORS preflight requests from the Next.js frontend are permitted."""
+    response = client.options(
+        "/api/v1/auth/login",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "Content-Type",
+        },
+    )
+    assert response.status_code == 200
+    assert (
+        response.headers.get("access-control-allow-origin") == "http://localhost:3000"
+    )
+    assert "POST" in response.headers.get("access-control-allow-methods", "")

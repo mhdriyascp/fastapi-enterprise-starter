@@ -1,3 +1,5 @@
+import re
+
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,8 +21,17 @@ class OrganizationService:
         self,
         data: OrganizationCreate,
     ) -> Organization:
+        if data.code and data.code.strip():
+            clean_code = data.code.strip().upper()
+        else:
+            clean_code = re.sub(
+                r"[^A-Za-z0-9_]+", "_", data.name.strip().upper()
+            ).strip("_")[:30]
+            if len(clean_code) < 2:
+                clean_code = f"{clean_code}_ORG"[:30]
+
         organization = Organization(
-            code=data.code.strip().upper(),
+            code=clean_code,
             name=data.name.strip(),
             legal_name=data.legal_name,
             registration_number=data.registration_number,
@@ -93,3 +104,12 @@ class OrganizationService:
         await self.db.commit()
         await self.db.refresh(organization)
         return organization
+
+    async def delete(self, organization: Organization) -> None:
+        """Deletes an organization entity from the database.
+
+        Args:
+            organization: The organization entity to delete.
+        """
+        await self.db.delete(organization)
+        await self.db.commit()

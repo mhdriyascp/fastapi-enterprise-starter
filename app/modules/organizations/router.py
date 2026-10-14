@@ -122,3 +122,24 @@ async def update_organization_status(
         )
 
     return await service.update_status(organization, data.is_active)
+
+
+@router.delete(
+    "/{organization_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("organization.update"))],
+)
+async def delete_organization(
+    organization_id: int,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+) -> None:
+    service = OrganizationService(db)
+    organization = await service.get(organization_id)
+
+    if organization is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organization not found.",
+        )
+
+    await service.delete(organization)

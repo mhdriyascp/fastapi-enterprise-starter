@@ -1,4 +1,5 @@
 import logging
+import re
 from uuid import UUID
 
 from sqlalchemy import delete, func, select
@@ -95,7 +96,14 @@ class MenuService:
 
     async def create_menu(self, data: MenuCreate) -> Menu:
         """Creates a new menu item with optional parent, roles, and permissions."""
-        clean_code = data.code.strip().lower()
+        if data.code and data.code.strip():
+            clean_code = data.code.strip().lower()
+        else:
+            clean_code = re.sub(r"[^a-z0-9_]+", "_", data.title.strip().lower()).strip(
+                "_"
+            )[:50]
+            if not clean_code:
+                clean_code = "menu_item"
 
         existing = await self.get_menu_by_code(clean_code)
         if existing:

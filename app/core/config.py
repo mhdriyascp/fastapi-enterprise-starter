@@ -21,6 +21,21 @@ class Settings(BaseSettings):
     # Default application timezone
     app_timezone: str = "UTC"
 
+    # Cross-Origin Resource Sharing (CORS) origins
+    cors_origins: list[str] = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def assemble_cors_origins(cls, value: object) -> list[str]:
+        if isinstance(value, str):
+            return [origin.strip() for origin in value.split(",") if origin.strip()]
+        if isinstance(value, list):
+            return [str(origin).strip() for origin in value if str(origin).strip()]
+        return ["http://localhost:3000", "http://127.0.0.1:3000"]
+
     # Initial administrator accounts used by database seeds.
     seed_super_admin_email: str | None = None
     seed_super_admin_username: str | None = None

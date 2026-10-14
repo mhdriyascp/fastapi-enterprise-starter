@@ -27,8 +27,11 @@ The RBAC module provides centralized authorization management, decoupling permis
 ### 2. Permissions Catalog (`/api/v1/permissions`)
 | Method | Endpoint | Required Permission | Description |
 |---|---|---|---|
-| `GET` | `/api/v1/permissions` | `permission.read` | List all registered system permissions. |
+| `POST` | `/api/v1/permissions` | `permission.create` | Register a new custom permission. |
+| `GET` | `/api/v1/permissions` | `permission.read` | List all registered system and custom permissions. |
 | `GET` | `/api/v1/permissions/{id}` | `permission.read` | Get permission details. |
+| `PATCH`| `/api/v1/permissions/{id}` | `permission.update` | Update permission name, description, and active status. |
+| `DELETE`| `/api/v1/permissions/{id}`| `permission.delete` | Delete custom permission (system permissions are protected). |
 
 ### 3. Role-Permission Mappings (`/api/v1/roles/{role_id}/permissions`)
 | Method | Endpoint | Required Permission | Description |
@@ -42,3 +45,14 @@ The RBAC module provides centralized authorization management, decoupling permis
 
 - **`is_system = True`**: Hardcoded core roles (e.g., `SUPER_ADMIN`, `ADMIN`). Protected from deletion to prevent administrative lockout.
 - **`is_system = False`**: Tenant-defined custom roles (e.g., `REGIONAL_SALES_MANAGER`, `INVENTORY_AUDITOR`).
+
+---
+
+## Frontend Dashboard Integration
+
+- **Route**: [`frontend/src/app/(dashboard)/rbac/page.tsx`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/frontend/src/app/%28dashboard%29/rbac/page.tsx) (`/rbac`)
+- **Capabilities**:
+  - Full CRUD operations on custom and system roles with deletion guards.
+  - Resource-grouped system permissions catalog.
+  - Interactive role-permission matrix with real-time assignment/revocation toggles.
+

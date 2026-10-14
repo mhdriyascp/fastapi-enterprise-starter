@@ -23,6 +23,8 @@ Application configuration is centralized under [`app/core/config.py`](file:///Us
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `int` | `15` | Lifetime of short-lived JWT access tokens. |
 | `REFRESH_TOKEN_EXPIRE_DAYS` | `int` | `30` | Lifetime of long-lived cryptographic refresh tokens. |
 | `APP_TIMEZONE` | `str` | `"UTC"` | Default timezone applied across date-time normalization. |
+| `CORS_ORIGINS` | `list[str]` | `["http://localhost:3000", "http://127.0.0.1:3000"]` | Allowed origins for Cross-Origin Resource Sharing (comma-separated string in `.env`). |
+
 
 ---
 

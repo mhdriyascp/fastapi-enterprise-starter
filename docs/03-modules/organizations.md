@@ -60,4 +60,21 @@ class OrganizationService:
 | `POST` | `/api/v1/organizations` | `organization.create` | Register a new organization account. |
 | `GET` | `/api/v1/organizations` | `organization.read` | Paginated listing of organizations. |
 | `GET` | `/api/v1/organizations/{id}` | `organization.read` | Get organization details by ID. |
+| `PATCH`| `/api/v1/organizations/{id}` | `organization.update` | Update organization profile, contacts, and tax info. |
 | `PATCH`| `/api/v1/organizations/{id}/status` | `organization.update` | Update operational status. |
+| `DELETE`| `/api/v1/organizations/{id}` | `organization.delete` | Delete an organization by ID (`204 No Content`). |
+
+---
+
+## Frontend Integration (`/organizations`)
+
+The frontend application provides a complete enterprise CRUD interface:
+- **Location**: [`frontend/src/app/(dashboard)/organizations/page.tsx`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/frontend/src/app/%28dashboard%29/organizations/page.tsx)
+- **Features**:
+  - **Live Filter & Search**: Client-side query matching against name, uppercase code, legal entity name, and tax ID.
+  - **Status Tabs**: Instant filter between All, Active, and Inactive organizations.
+  - **Create Modal**: Validated form with Code, Name, Legal Name, Tax Registration Number, Email, Phone, and Website.
+  - **Edit Modal**: Full attribute updates with optimistic state refresh.
+  - **Status Quick-Toggle**: Inline activation/deactivation button triggering `PATCH /api/v1/organizations/{id}/status`.
+  - **Delete Safeguard**: Dedicated confirmation dialog with red destructive action and toast notification.
+

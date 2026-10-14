@@ -13,7 +13,8 @@ class RoleCreate(BaseModel):
         min_length=2,
         max_length=100,
     )
-    code: str = Field(
+    code: str | None = Field(
+        default=None,
         min_length=2,
         max_length=50,
         pattern=r"^[a-z][a-z0-9_]*$",
@@ -67,7 +68,8 @@ class PermissionCreate(BaseModel):
         min_length=2,
         max_length=100,
     )
-    code: str = Field(
+    code: str | None = Field(
+        default=None,
         min_length=3,
         max_length=100,
         pattern=r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$",
@@ -89,7 +91,10 @@ class PermissionCreate(BaseModel):
 
     @model_validator(mode="after")
     def validate_code_consistency(self):
-        if self.code != f"{self.resource}.{self.action}":
+        expected = f"{self.resource}.{self.action}"
+        if not self.code:
+            self.code = expected
+        elif self.code != expected:
             raise ValueError("Permission code must match 'resource.action'.")
         return self
 

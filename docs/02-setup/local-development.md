@@ -95,5 +95,21 @@ uv run fastapi dev app/main.py
 
 The application is now live:
 - **API Base**: [http://127.0.0.1:8000](http://127.0.0.1:8000)
-- **Global Documentation**: [http://127.0.0.1:8000/scalar](http://127.0.0.1:8000/scalar)
-- **Dedicated v2 Documentation**: [http://127.0.0.1:8000/scalar/v2](http://127.0.0.1:8000/scalar/v2)
+- **API v1 Documentation**: [http://127.0.0.1:8000/scalar/v1](http://127.0.0.1:8000/scalar/v1)
+- **API v2 Documentation**: [http://127.0.0.1:8000/scalar/v2](http://127.0.0.1:8000/scalar/v2)
+
+---
+
+## Step 7: Start the Next.js Frontend Dashboard
+
+In a new terminal window, navigate to the `frontend/` directory and launch the Next.js development server:
+
+```bash
+cd frontend
+npm run dev
+```
+
+The enterprise dashboard is accessible at:
+- **Dashboard UI**: [http://localhost:3000](http://localhost:3000)
+- **Login Portal**: [http://localhost:3000/login](http://localhost:3000/login)
+

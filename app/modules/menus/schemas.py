@@ -6,7 +6,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class MenuCreate(BaseModel):
     title: str = Field(min_length=1, max_length=100)
-    code: str = Field(min_length=1, max_length=50, pattern=r"^[A-Za-z0-9_-]+$")
+    code: str | None = Field(
+        default=None, min_length=1, max_length=50, pattern=r"^[A-Za-z0-9_-]+$"
+    )
     path: str | None = Field(default=None, max_length=255)
     icon: str | None = Field(default=None, max_length=100)
     sort_order: int = Field(default=0, ge=0)

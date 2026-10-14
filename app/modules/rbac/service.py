@@ -1,3 +1,4 @@
+import re
 from uuid import UUID
 
 from sqlalchemy import delete, func, select
@@ -93,14 +94,23 @@ class RoleService:
         self,
         data: RoleCreate,
     ) -> Role:
-        result = await self.db.execute(select(Role.id).where(Role.code == data.code))
+        if data.code and data.code.strip():
+            code = data.code.strip().lower()
+        else:
+            code = re.sub(r"[^a-z0-9_]+", "_", data.name.strip().lower()).strip("_")[
+                :50
+            ]
+            if not code or not code[0].isalpha():
+                code = f"role_{code}"[:50]
+
+        result = await self.db.execute(select(Role.id).where(Role.code == code))
 
         if result.scalar_one_or_none() is not None:
             raise RoleAlreadyExistsError("A role with this code already exists.")
 
         role = Role(
             name=data.name,
-            code=data.code,
+            code=code,
             description=data.description,
             is_system=False,
             is_active=True,
@@ -521,9 +531,13 @@ class PermissionService:
         changes = data.model_dump(exclude_unset=True)
 
         if not changes:
-            raise ValueError("At least one field must be provided.")
+            return permission
 
-        if permission.is_system and "is_active" in changes:
+        if (
+            permission.is_system
+            and "is_active" in changes
+            and changes["is_active"] != permission.is_active
+        ):
             raise SystemPermissionError(
                 "The active status of a system permission cannot be changed."
             )

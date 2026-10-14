@@ -54,16 +54,18 @@ def test_health_check() -> None:
 
 ## Code Quality Gates ("Definition of Done")
 
-Before committing changes or concluding an AI code generation task, execute both commands:
+Before committing changes or concluding an AI code generation task, execute all quality gates:
 
 ```bash
-# 1. Linting & Import Verification
-uv run ruff check app tests
-
-# 2. Code Formatting Verification
-uv run ruff format --check app tests
-
-# 3. Test Suite Pass
+# Backend Quality Verification
+uv run ruff check .
+uv run ruff format --check .
 uv run pytest
+
+# Frontend Quality Verification (when frontend/ is touched)
+cd frontend
+npm run lint
+npm run build
 ```
-If any check fails, the task is **not done** and must be resolved before proceeding.
+If any check fails, the task is strictly **not done** and must be resolved before proceeding.
+
