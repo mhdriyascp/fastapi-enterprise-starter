@@ -10,9 +10,7 @@ class Currency(EntityBase):
     __tablename__ = "currencies"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    public_id: Mapped[UUID] = mapped_column(
-        unique=True, nullable=False, default=uuid4
-    )
+    public_id: Mapped[UUID] = mapped_column(unique=True, nullable=False, default=uuid4)
     code: Mapped[str] = mapped_column(String(3), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     symbol: Mapped[str | None] = mapped_column(String(10))

@@ -15,9 +15,7 @@ class City(EntityBase):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    public_id: Mapped[UUID] = mapped_column(
-        unique=True, nullable=False, default=uuid4
-    )
+    public_id: Mapped[UUID] = mapped_column(unique=True, nullable=False, default=uuid4)
     country_id: Mapped[int] = mapped_column(
         ForeignKey("countries.id", ondelete="RESTRICT"),
         nullable=False,

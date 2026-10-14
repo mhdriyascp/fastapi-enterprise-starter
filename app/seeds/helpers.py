@@ -28,9 +28,7 @@ async def get_or_create[ModelT: DeclarativeBase](
 
     for field in lookup:
         if not hasattr(model, field):
-            raise ValueError(
-                f"{model.__name__} has no field {field!r}."
-            )
+            raise ValueError(f"{model.__name__} has no field {field!r}.")
 
     statement = select(model).filter_by(**lookup)
     result = await db.execute(statement)
@@ -43,9 +41,7 @@ async def get_or_create[ModelT: DeclarativeBase](
 
     for field in values:
         if not hasattr(model, field):
-            raise ValueError(
-                f"{model.__name__} has no field {field!r}."
-            )
+            raise ValueError(f"{model.__name__} has no field {field!r}.")
 
     instance = model(**values)
     db.add(instance)

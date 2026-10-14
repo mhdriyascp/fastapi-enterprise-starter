@@ -49,9 +49,7 @@ async def seed_users(db: AsyncSession) -> None:
                 "Configure its email, username, and password in .env."
             )
 
-        result = await db.execute(
-            select(User).where(User.email == email)
-        )
+        result = await db.execute(select(User).where(User.email == email))
         user = result.scalar_one_or_none()
 
         if user is not None:
@@ -81,9 +79,7 @@ async def seed_users(db: AsyncSession) -> None:
             continue
 
         # Detect a username collision before creating the user.
-        result = await db.execute(
-            select(User).where(User.username == username)
-        )
+        result = await db.execute(select(User).where(User.username == username))
         username_owner = result.scalar_one_or_none()
 
         if username_owner is not None:

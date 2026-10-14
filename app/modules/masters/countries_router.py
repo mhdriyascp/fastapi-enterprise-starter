@@ -70,10 +70,7 @@ async def list_countries_endpoint(
     )
 
     return {
-        "items": [
-            CountryResponse.model_validate(country)
-            for country in countries
-        ],
+        "items": [CountryResponse.model_validate(country) for country in countries],
         "total": total,
         "offset": offset,
         "limit": limit,

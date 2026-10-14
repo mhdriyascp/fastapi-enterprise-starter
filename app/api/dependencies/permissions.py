@@ -49,11 +49,7 @@ def require_permission(permission_code: str):
             )
         )
 
-        result = await db.execute(
-            select(
-                exists(permission_exists)
-            )
-        )
+        result = await db.execute(select(exists(permission_exists)))
 
         has_permission = result.scalar_one()
 

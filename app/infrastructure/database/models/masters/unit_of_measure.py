@@ -10,9 +10,7 @@ class UnitOfMeasure(EntityBase):
     __tablename__ = "units_of_measure"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    public_id: Mapped[UUID] = mapped_column(
-        unique=True, nullable=False, default=uuid4
-    )
+    public_id: Mapped[UUID] = mapped_column(unique=True, nullable=False, default=uuid4)
     code: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     symbol: Mapped[str | None] = mapped_column(String(20))

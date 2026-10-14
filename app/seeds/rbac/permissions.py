@@ -41,7 +41,6 @@ PERMISSIONS = (
         "is_system": True,
         "is_active": True,
     },
-
     # Permission management.
     {
         "name": "Read Permissions",
@@ -79,7 +78,6 @@ PERMISSIONS = (
         "is_system": True,
         "is_active": True,
     },
-
     # Organization permissions.
     {
         "name": "Create Organizations",
@@ -108,7 +106,6 @@ PERMISSIONS = (
         "is_system": True,
         "is_active": True,
     },
-
     # Master data permissions.
     {
         "name": "Create Master Records",
@@ -146,7 +143,6 @@ PERMISSIONS = (
         "is_system": True,
         "is_active": True,
     },
-
     # Navigation menu management.
     {
         "name": "Read Menus",
@@ -197,9 +193,7 @@ async def seed_permissions(db: AsyncSession) -> None:
             Permission,
             lookup={"code": permission_data["code"]},
             defaults={
-                key: value
-                for key, value in permission_data.items()
-                if key != "code"
+                key: value for key, value in permission_data.items() if key != "code"
             },
         )
 
@@ -208,7 +202,4 @@ async def seed_permissions(db: AsyncSession) -> None:
         else:
             existing += 1
 
-    print(
-        f"Permissions: {created} created, "
-        f"{existing} already existed."
-    )
+    print(f"Permissions: {created} created, {existing} already existed.")

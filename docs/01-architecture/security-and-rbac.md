@@ -81,6 +81,7 @@ FastAPI route handlers use the `require_permission(...)` dependency:
 from app.api.dependencies.permissions import require_permission
 from app.modules.users.models import User
 
+
 @router.post(
     "/organizations",
     response_model=OrganizationResponse,
@@ -91,8 +92,7 @@ async def create_organization(
     data: OrganizationCreate,
     current_user: Annotated[User, Depends(require_permission("organization.create"))],
     db: Annotated[AsyncSession, Depends(get_db_session)],
-) -> OrganizationResponse:
-    ...
+) -> OrganizationResponse: ...
 ```
 
 ### Authorization Resolution Flow:

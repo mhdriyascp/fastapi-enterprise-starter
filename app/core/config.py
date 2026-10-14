@@ -36,9 +36,7 @@ class Settings(BaseSettings):
         try:
             ZoneInfo(value)
         except (ZoneInfoNotFoundError, ValueError) as exc:
-            raise ValueError(
-                f"Invalid APP_TIMEZONE: {value}"
-            ) from exc
+            raise ValueError(f"Invalid APP_TIMEZONE: {value}") from exc
 
         return value
 

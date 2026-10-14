@@ -11,9 +11,7 @@ class FiscalYear(EntityBase):
     __tablename__ = "fiscal_years"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    public_id: Mapped[UUID] = mapped_column(
-        unique=True, nullable=False, default=uuid4
-    )
+    public_id: Mapped[UUID] = mapped_column(unique=True, nullable=False, default=uuid4)
     organization_id: Mapped[int] = mapped_column(
         ForeignKey("organizations.id", ondelete="RESTRICT"),
         nullable=False,

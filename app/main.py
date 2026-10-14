@@ -1,6 +1,7 @@
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, status
+from fastapi.responses import RedirectResponse
 from scalar_fastapi import get_scalar_api_reference
 
 from app.api.v1.router import router as v1_router
@@ -8,12 +9,14 @@ from app.api.v2.router import router as v2_router
 from app.core.config import settings
 from app.core.lifecycle import lifespan
 
-# Tags from shared domains to include in dedicated v2 documentation.
+# Tags from shared general domains to include in dedicated v2 documentation.
 V2_SHARED_TAGS = {
     "Authentication",
-    "RBAC - Roles",
-    "RBAC - Permissions",
-    "RBAC - Role Permissions",
+    "Users",
+    "Menus",
+    "Admin",
+    "Mobile",
+    "Public",
 }
 
 # Initialize FastAPI application.
@@ -41,8 +44,56 @@ app.include_router(
 )
 
 
+def get_v1_openapi_schema() -> dict[str, Any]:
+    """Generates a filtered OpenAPI schema for API v1 consumers.
+
+    Excludes all v2 endpoints to maintain strict version isolation.
+
+    Returns:
+        A dictionary containing the OpenAPI 3.1 specification for v1 consumers.
+    """
+    cached_schema: dict[str, Any] | None = getattr(app.state, "v1_openapi_schema", None)
+    if cached_schema is not None:
+        return cached_schema
+
+    full_schema = app.openapi()
+
+    v1_paths: dict[str, Any] = {}
+    used_tags: set[str] = set()
+
+    for path, path_item in full_schema.get("paths", {}).items():
+        if path.startswith("/api/v1"):
+            v1_paths[path] = path_item
+            for op in path_item.values():
+                if isinstance(op, dict):
+                    used_tags.update(op.get("tags", []))
+
+    v1_tags = [
+        tag for tag in full_schema.get("tags", []) if tag.get("name") in used_tags
+    ]
+
+    schema: dict[str, Any] = {
+        "openapi": full_schema.get("openapi", "3.1.0"),
+        "info": {
+            "title": f"{settings.app_name} - API v1",
+            "version": "1.0.0",
+            "description": "Dedicated API documentation for v1 services and master data.",
+        },
+        "paths": v1_paths,
+        "components": full_schema.get("components", {}),
+    }
+    if v1_tags:
+        schema["tags"] = v1_tags
+
+    app.state.v1_openapi_schema = schema
+    return schema
+
+
 def get_v2_openapi_schema() -> dict[str, Any]:
-    """Generates a filtered OpenAPI schema for API v2 plus shared Auth and RBAC.
+    """Generates a filtered OpenAPI schema for API v2 plus shared general APIs.
+
+    Includes v2 endpoints along with shared foundational APIs: Authentication,
+    RBAC (Roles, Permissions), Users, Menus, Admin, Mobile, and Public.
 
     Returns:
         A dictionary containing the OpenAPI 3.1 specification for v2 consumers.
@@ -64,7 +115,7 @@ def get_v2_openapi_schema() -> dict[str, Any]:
             if isinstance(operation, dict):
                 op_tags = operation.get("tags", [])
                 if any(
-                    tag == "Authentication" or tag.startswith("RBAC") for tag in op_tags
+                    tag in V2_SHARED_TAGS or tag.startswith("RBAC") for tag in op_tags
                 ):
                     has_shared_tag = True
                     break
@@ -85,8 +136,8 @@ def get_v2_openapi_schema() -> dict[str, Any]:
             "title": f"{settings.app_name} - API v2",
             "version": "2.0.0",
             "description": (
-                "Dedicated API documentation for v2 including shared "
-                "Authentication and RBAC."
+                "Dedicated API documentation for v2 including shared General APIs "
+                "(Authentication, RBAC, Users, Menus)."
             ),
         },
         "paths": v2_paths,
@@ -99,28 +150,45 @@ def get_v2_openapi_schema() -> dict[str, Any]:
     return schema
 
 
+# Dedicated OpenAPI JSON schema for API v1 consumers.
+@app.get("/api/v1/openapi.json", include_in_schema=False)
+async def v1_openapi() -> dict[str, Any]:
+    """Returns the OpenAPI JSON specification filtered strictly for API v1."""
+    return get_v1_openapi_schema()
+
+
 # Dedicated OpenAPI JSON schema for API v2 consumers.
 @app.get("/api/v2/openapi.json", include_in_schema=False)
 async def v2_openapi() -> dict[str, Any]:
-    """Returns the OpenAPI JSON specification filtered for API v2 and Auth/RBAC."""
+    """Returns the OpenAPI JSON specification filtered for API v2 and shared General APIs."""
     return get_v2_openapi_schema()
+
+
+# Dedicated Scalar documentation reference for API v1 consumers.
+@app.get("/scalar/v1", include_in_schema=False)
+async def scalar_v1_docs():
+    """Renders the Scalar API reference restricted to v1 services."""
+    return get_scalar_api_reference(
+        openapi_url="/api/v1/openapi.json",
+        title=f"{settings.app_name} - API v1",
+    )
 
 
 # Dedicated Scalar documentation reference for API v2 consumers.
 @app.get("/scalar/v2", include_in_schema=False)
 async def scalar_v2_docs():
-    """Renders the Scalar API reference restricted to v2 and shared Auth/RBAC."""
+    """Renders the Scalar API reference restricted to v2 and shared General APIs."""
     return get_scalar_api_reference(
         openapi_url="/api/v2/openapi.json",
         title=f"{settings.app_name} - API v2",
     )
 
 
-# Global Scalar API documentation (includes all v1, v2, and shared routes).
+# Default Scalar redirect to API v1 documentation.
 @app.get("/scalar", include_in_schema=False)
 async def scalar_docs():
-    """Renders the global Scalar API reference across all API versions."""
-    return get_scalar_api_reference(
-        openapi_url=app.openapi_url,
-        title=app.title,
+    """Redirects default /scalar path to the isolated API v1 documentation."""
+    return RedirectResponse(
+        url="/scalar/v1",
+        status_code=status.HTTP_307_TEMPORARY_REDIRECT,
     )

@@ -31,9 +31,7 @@ async def seed_user_roles(db: AsyncSession) -> None:
         email = getattr(settings, mapping["user_setting"])
 
         if not email:
-            raise ValueError(
-                f"Missing configuration: {mapping['user_setting']}."
-            )
+            raise ValueError(f"Missing configuration: {mapping['user_setting']}.")
 
         user_result = await db.execute(
             select(User).where(
@@ -85,7 +83,4 @@ async def seed_user_roles(db: AsyncSession) -> None:
 
     await db.flush()
 
-    print(
-        f"User roles: {created} created, "
-        f"{existing} already existed."
-    )
+    print(f"User roles: {created} created, {existing} already existed.")

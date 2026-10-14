@@ -78,6 +78,7 @@ config.set_main_option(
     settings.database_url.replace("%", "%%"),
 )
 
+
 def process_revision_directives(
     context: Any,
     revision: Any,

@@ -10,9 +10,7 @@ class TimeZone(EntityBase):
     __tablename__ = "time_zones"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    public_id: Mapped[UUID] = mapped_column(
-        unique=True, nullable=False, default=uuid4
-    )
+    public_id: Mapped[UUID] = mapped_column(unique=True, nullable=False, default=uuid4)
     name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     label: Mapped[str] = mapped_column(String(150), nullable=False)
     utc_offset: Mapped[str | None] = mapped_column(String(10))

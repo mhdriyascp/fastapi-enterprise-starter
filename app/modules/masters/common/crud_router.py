@@ -79,10 +79,7 @@ def create_master_router(
         )
 
         return {
-            "items": [
-                response_schema.model_validate(record)
-                for record in records
-            ],
+            "items": [response_schema.model_validate(record) for record in records],
             "total": total,
             "offset": offset,
             "limit": limit,

@@ -99,7 +99,9 @@ class MenuService:
 
         existing = await self.get_menu_by_code(clean_code)
         if existing:
-            raise MenuAlreadyExistsError(f"Menu with code '{clean_code}' already exists.")
+            raise MenuAlreadyExistsError(
+                f"Menu with code '{clean_code}' already exists."
+            )
 
         if data.parent_id:
             parent = await self.get_menu_by_id(data.parent_id)
@@ -133,7 +135,9 @@ class MenuService:
         except IntegrityError as exc:
             await self.db.rollback()
             logger.warning("Integrity error creating menu: %s", exc)
-            raise MenuAlreadyExistsError("A menu with this code already exists.") from exc
+            raise MenuAlreadyExistsError(
+                "A menu with this code already exists."
+            ) from exc
 
         loaded = await self.get_menu_by_id(menu.id)
         if not loaded:
@@ -216,9 +220,7 @@ class MenuService:
 
         # Update role assignments if provided
         if data.role_ids is not None:
-            await self.db.execute(
-                delete(MenuRole).where(MenuRole.menu_id == menu.id)
-            )
+            await self.db.execute(delete(MenuRole).where(MenuRole.menu_id == menu.id))
             for role_id in set(data.role_ids):
                 self.db.add(MenuRole(menu_id=menu.id, role_id=role_id))
 

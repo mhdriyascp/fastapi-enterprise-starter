@@ -20,6 +20,7 @@ password_hasher = PasswordHasher()
 
 # Password security
 
+
 def hash_password(password: str) -> str:
     return password_hasher.hash(password)
 
@@ -37,11 +38,10 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 # JWT security
 
+
 def create_access_token(user_id: UUID) -> str:
     now = datetime.now(UTC)
-    expires_at = now + timedelta(
-        minutes=settings.access_token_expire_minutes
-    )
+    expires_at = now + timedelta(minutes=settings.access_token_expire_minutes)
 
     payload = {
         "sub": str(user_id),
@@ -66,9 +66,7 @@ class RefreshToken:
 
 def create_refresh_token(user_id: UUID) -> RefreshToken:
     now = datetime.now(UTC)
-    expires_at = now + timedelta(
-        days=settings.refresh_token_expire_days
-    )
+    expires_at = now + timedelta(days=settings.refresh_token_expire_days)
 
     token_id = uuid.uuid7()
 
@@ -111,7 +109,7 @@ def decode_access_token(token: str) -> UUID | None:
 
         return UUID(subject)
 
-    except (InvalidTokenError, ValueError):
+    except InvalidTokenError, ValueError:
         return None
 
 
@@ -136,12 +134,10 @@ def decode_refresh_token(
 
         return UUID(subject), UUID(token_id)
 
-    except (InvalidTokenError, ValueError):
+    except InvalidTokenError, ValueError:
         return None
 
 
 # Refresh-token security
 def hash_refresh_token(token: str) -> str:
-    return hashlib.sha256(
-        token.encode("utf-8")
-    ).hexdigest()
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()

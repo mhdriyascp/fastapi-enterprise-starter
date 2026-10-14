@@ -81,10 +81,7 @@ async def list_cities_endpoint(
         ) from None
 
     return {
-        "items": [
-            CityResponse.model_validate(item)
-            for item in items
-        ],
+        "items": [CityResponse.model_validate(item) for item in items],
         "total": total,
         "offset": offset,
         "limit": limit,

@@ -10,9 +10,7 @@ class Language(EntityBase):
     __tablename__ = "languages"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    public_id: Mapped[UUID] = mapped_column(
-        unique=True, nullable=False, default=uuid4
-    )
+    public_id: Mapped[UUID] = mapped_column(unique=True, nullable=False, default=uuid4)
     code: Mapped[str] = mapped_column(String(10), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     native_name: Mapped[str | None] = mapped_column(String(100))

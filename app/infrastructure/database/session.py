@@ -11,6 +11,7 @@ SessionFactory = async_sessionmaker(
     expire_on_commit=False,
 )
 
+
 # Dependency function to provide a database session.
 async def get_db_session() -> AsyncGenerator[AsyncSession]:
     async with SessionFactory() as session:

@@ -1,10 +1,11 @@
 """create organizations schema
 
 Revision ID: 20261014120001
-Revises: 
+Revises:
 Create Date: 2026-10-14 12:00:01.000000
 
 """
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa
@@ -46,9 +47,7 @@ def upgrade() -> None:
     op.create_index(
         op.f("ix_organizations_code"), "organizations", ["code"], unique=True
     )
-    op.create_index(
-        op.f("ix_organizations_id"), "organizations", ["id"], unique=False
-    )
+    op.create_index(op.f("ix_organizations_id"), "organizations", ["id"], unique=False)
 
     op.create_table(
         "business_units",
@@ -92,9 +91,7 @@ def upgrade() -> None:
         sa.Column("name", sa.String(length=100), nullable=False),
         sa.Column("start_date", sa.Date(), nullable=False),
         sa.Column("end_date", sa.Date(), nullable=False),
-        sa.Column(
-            "is_current", sa.Boolean(), server_default="false", nullable=False
-        ),
+        sa.Column("is_current", sa.Boolean(), server_default="false", nullable=False),
         sa.Column("is_closed", sa.Boolean(), server_default="false", nullable=False),
         sa.Column(
             "created_at",
@@ -279,9 +276,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
-        sa.ForeignKeyConstraint(
-            ["branch_id"], ["branches.id"], ondelete="RESTRICT"
-        ),
+        sa.ForeignKeyConstraint(["branch_id"], ["branches.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(
             ["organization_id"], ["organizations.id"], ondelete="RESTRICT"
         ),
@@ -319,15 +314,11 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
-        sa.ForeignKeyConstraint(
-            ["branch_id"], ["branches.id"], ondelete="RESTRICT"
-        ),
+        sa.ForeignKeyConstraint(["branch_id"], ["branches.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(
             ["organization_id"], ["organizations.id"], ondelete="RESTRICT"
         ),
-        sa.ForeignKeyConstraint(
-            ["parent_id"], ["departments.id"], ondelete="RESTRICT"
-        ),
+        sa.ForeignKeyConstraint(["parent_id"], ["departments.id"], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("public_id"),
     )
@@ -362,9 +353,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
-        sa.ForeignKeyConstraint(
-            ["branch_id"], ["branches.id"], ondelete="RESTRICT"
-        ),
+        sa.ForeignKeyConstraint(["branch_id"], ["branches.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(
             ["organization_id"], ["organizations.id"], ondelete="RESTRICT"
         ),
@@ -393,9 +382,7 @@ def upgrade() -> None:
         sa.Column("name", sa.String(length=150), nullable=False),
         sa.Column("holiday_date", sa.Date(), nullable=False),
         sa.Column("description", sa.String(length=500), nullable=True),
-        sa.Column(
-            "is_optional", sa.Boolean(), server_default="false", nullable=False
-        ),
+        sa.Column("is_optional", sa.Boolean(), server_default="false", nullable=False),
         sa.Column("is_active", sa.Boolean(), server_default="true", nullable=False),
         sa.Column(
             "created_at",
@@ -404,9 +391,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
-        sa.ForeignKeyConstraint(
-            ["branch_id"], ["branches.id"], ondelete="RESTRICT"
-        ),
+        sa.ForeignKeyConstraint(["branch_id"], ["branches.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(
             ["organization_id"], ["organizations.id"], ondelete="RESTRICT"
         ),
@@ -438,9 +423,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
-        sa.ForeignKeyConstraint(
-            ["branch_id"], ["branches.id"], ondelete="RESTRICT"
-        ),
+        sa.ForeignKeyConstraint(["branch_id"], ["branches.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(
             ["business_unit_id"], ["business_units.id"], ondelete="RESTRICT"
         ),
@@ -475,9 +458,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
-        sa.ForeignKeyConstraint(
-            ["branch_id"], ["branches.id"], ondelete="RESTRICT"
-        ),
+        sa.ForeignKeyConstraint(["branch_id"], ["branches.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(
             ["department_id"], ["departments.id"], ondelete="RESTRICT"
         ),
@@ -538,9 +519,7 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_teams_organization_id"), table_name="teams")
     op.drop_index(op.f("ix_teams_department_id"), table_name="teams")
     op.drop_table("teams")
-    op.drop_index(
-        op.f("ix_cost_centers_organization_id"), table_name="cost_centers"
-    )
+    op.drop_index(op.f("ix_cost_centers_organization_id"), table_name="cost_centers")
     op.drop_table("cost_centers")
     op.drop_index(
         op.f("ix_profit_centers_organization_id"), table_name="profit_centers"
@@ -553,18 +532,14 @@ def downgrade() -> None:
         table_name="document_sequences",
     )
     op.drop_table("document_sequences")
-    op.drop_index(
-        op.f("ix_departments_organization_id"), table_name="departments"
-    )
+    op.drop_index(op.f("ix_departments_organization_id"), table_name="departments")
     op.drop_index(op.f("ix_departments_branch_id"), table_name="departments")
     op.drop_table("departments")
     op.drop_index(
         op.f("ix_business_hours_organization_id"), table_name="business_hours"
     )
     op.drop_table("business_hours")
-    op.drop_index(
-        op.f("ix_fiscal_periods_fiscal_year_id"), table_name="fiscal_periods"
-    )
+    op.drop_index(op.f("ix_fiscal_periods_fiscal_year_id"), table_name="fiscal_periods")
     op.drop_table("fiscal_periods")
     op.drop_index(op.f("ix_branches_organization_id"), table_name="branches")
     op.drop_index(op.f("ix_branches_legal_entity_id"), table_name="branches")
@@ -577,9 +552,7 @@ def downgrade() -> None:
     op.drop_table("legal_entities")
     op.drop_index(op.f("ix_job_titles_organization_id"), table_name="job_titles")
     op.drop_table("job_titles")
-    op.drop_index(
-        op.f("ix_fiscal_years_organization_id"), table_name="fiscal_years"
-    )
+    op.drop_index(op.f("ix_fiscal_years_organization_id"), table_name="fiscal_years")
     op.drop_table("fiscal_years")
     op.drop_index(
         op.f("ix_business_units_organization_id"), table_name="business_units"

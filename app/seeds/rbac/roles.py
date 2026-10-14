@@ -51,11 +51,7 @@ async def seed_roles(db: AsyncSession) -> None:
             db,
             Role,
             lookup={"code": role_data["code"]},
-            defaults={
-                key: value
-                for key, value in role_data.items()
-                if key != "code"
-            },
+            defaults={key: value for key, value in role_data.items() if key != "code"},
         )
 
         if was_created:
@@ -63,6 +59,4 @@ async def seed_roles(db: AsyncSession) -> None:
         else:
             existing += 1
 
-    print(
-        f"Roles: {created} created, {existing} already existed."
-    )
+    print(f"Roles: {created} created, {existing} already existed.")

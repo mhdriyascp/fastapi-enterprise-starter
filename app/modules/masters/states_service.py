@@ -84,9 +84,7 @@ async def list_states(
     count_query = select(func.count()).select_from(query.subquery())
     total = await db.scalar(count_query)
 
-    result = await db.scalars(
-        query.order_by(State.name).offset(offset).limit(limit)
-    )
+    result = await db.scalars(query.order_by(State.name).offset(offset).limit(limit))
 
     return list(result.all()), total or 0
 
@@ -159,6 +157,4 @@ async def deactivate_state(
         await db.commit()
     except IntegrityError as exc:
         await db.rollback()
-        raise StateConflictError(
-            "Unable to deactivate this state."
-        ) from exc
+        raise StateConflictError("Unable to deactivate this state.") from exc

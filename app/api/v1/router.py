@@ -28,6 +28,7 @@ from app.modules.organizations.router import router as organizations_router
 from app.modules.rbac.permissions_router import permissions_router
 from app.modules.rbac.role_permissions_router import role_permissions_router
 from app.modules.rbac.roles_router import roles_router
+from app.modules.users.router import router as users_router
 
 router = APIRouter()
 
@@ -47,6 +48,10 @@ async def health_check(
 
 # Authentication routes.
 router.include_router(auth_router)
+
+# User management routes.
+router.include_router(users_router)
+
 
 # RBAC routes.
 router.include_router(admin_router, prefix="/admin")

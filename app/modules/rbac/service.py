@@ -93,16 +93,10 @@ class RoleService:
         self,
         data: RoleCreate,
     ) -> Role:
-        result = await self.db.execute(
-            select(Role.id).where(
-                Role.code == data.code
-            )
-        )
+        result = await self.db.execute(select(Role.id).where(Role.code == data.code))
 
         if result.scalar_one_or_none() is not None:
-            raise RoleAlreadyExistsError(
-                "A role with this code already exists."
-            )
+            raise RoleAlreadyExistsError("A role with this code already exists.")
 
         role = Role(
             name=data.name,
@@ -130,9 +124,7 @@ class RoleService:
         page: int = 1,
         page_size: int = 20,
     ) -> tuple[list[Role], int]:
-        total_result = await self.db.execute(
-            select(func.count()).select_from(Role)
-        )
+        total_result = await self.db.execute(select(func.count()).select_from(Role))
         total = total_result.scalar_one()
 
         result = await self.db.execute(
@@ -165,9 +157,7 @@ class RoleService:
         changes = data.model_dump(exclude_unset=True)
 
         if not changes:
-            raise ValueError(
-                "At least one field must be provided."
-            )
+            raise ValueError("At least one field must be provided.")
 
         if role.is_system and "is_active" in changes:
             raise SystemRoleError(
@@ -195,14 +185,10 @@ class RoleService:
         role = await self.get_role(role_id)
 
         if role.is_system:
-            raise SystemRoleError(
-                "System roles cannot be deleted."
-            )
+            raise SystemRoleError("System roles cannot be deleted.")
 
         result = await self.db.execute(
-            select(UserRole.id)
-            .where(UserRole.role_id == role_id)
-            .limit(1)
+            select(UserRole.id).where(UserRole.role_id == role_id).limit(1)
         )
 
         if result.scalar_one_or_none() is not None:
@@ -275,9 +261,7 @@ class RoleService:
         )
 
         if permission is None:
-            raise PermissionNotFoundError(
-                "Permission not found."
-            )
+            raise PermissionNotFoundError("Permission not found.")
 
         if not permission.is_active:
             raise InactivePermissionError(
@@ -346,16 +330,13 @@ class RoleService:
 
         if permission_ids:
             result = await self.db.execute(
-                select(Permission).where(
-                    Permission.id.in_(permission_ids)
-                )
+                select(Permission).where(Permission.id.in_(permission_ids))
             )
 
             permissions = list(result.scalars().all())
 
             permissions_by_id = {
-                permission.id: permission
-                for permission in permissions
+                permission.id: permission for permission in permissions
             }
 
             missing_ids = [
@@ -365,14 +346,10 @@ class RoleService:
             ]
 
             if missing_ids:
-                raise PermissionNotFoundError(
-                    "One or more permissions were not found."
-                )
+                raise PermissionNotFoundError("One or more permissions were not found.")
 
             inactive_permissions = [
-                permission
-                for permission in permissions
-                if not permission.is_active
+                permission for permission in permissions if not permission.is_active
             ]
 
             if inactive_permissions:
@@ -382,16 +359,13 @@ class RoleService:
 
             # Preserve the order supplied by the caller.
             permissions = [
-                permissions_by_id[permission_id]
-                for permission_id in permission_ids
+                permissions_by_id[permission_id] for permission_id in permission_ids
             ]
 
         try:
             # Delete the existing assignments for this role only.
             await self.db.execute(
-                delete(RolePermission).where(
-                    RolePermission.role_id == role_id
-                )
+                delete(RolePermission).where(RolePermission.role_id == role_id)
             )
 
             # Add the requested assignments.
@@ -469,9 +443,7 @@ class PermissionService:
         data: PermissionCreate,
     ) -> Permission:
         result = await self.db.execute(
-            select(Permission.id).where(
-                Permission.code == data.code
-            )
+            select(Permission.id).where(Permission.code == data.code)
         )
 
         if result.scalar_one_or_none() is not None:
@@ -535,9 +507,7 @@ class PermissionService:
         )
 
         if permission is None:
-            raise PermissionNotFoundError(
-                "Permission not found."
-            )
+            raise PermissionNotFoundError("Permission not found.")
 
         return permission
 
@@ -546,16 +516,12 @@ class PermissionService:
         permission_id: UUID,
         data: PermissionUpdate,
     ) -> Permission:
-        permission = await self.get_permission(
-            permission_id
-        )
+        permission = await self.get_permission(permission_id)
 
         changes = data.model_dump(exclude_unset=True)
 
         if not changes:
-            raise ValueError(
-                "At least one field must be provided."
-            )
+            raise ValueError("At least one field must be provided.")
 
         if permission.is_system and "is_active" in changes:
             raise SystemPermissionError(
@@ -580,20 +546,14 @@ class PermissionService:
         self,
         permission_id: UUID,
     ) -> None:
-        permission = await self.get_permission(
-            permission_id
-        )
+        permission = await self.get_permission(permission_id)
 
         if permission.is_system:
-            raise SystemPermissionError(
-                "System permissions cannot be deleted."
-            )
+            raise SystemPermissionError("System permissions cannot be deleted.")
 
         result = await self.db.execute(
             select(RolePermission.id)
-            .where(
-                RolePermission.permission_id == permission_id
-            )
+            .where(RolePermission.permission_id == permission_id)
             .limit(1)
         )
 

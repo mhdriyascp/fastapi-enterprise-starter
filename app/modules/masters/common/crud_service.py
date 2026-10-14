@@ -48,13 +48,9 @@ async def list_records(
     if is_active is not None and "is_active" in mapper.columns:
         query = query.where(model.is_active.is_(is_active))
 
-    total = await db.scalar(
-        select(func.count()).select_from(query.subquery())
-    )
+    total = await db.scalar(select(func.count()).select_from(query.subquery()))
 
-    result = await db.scalars(
-        query.order_by(model.id).offset(offset).limit(limit)
-    )
+    result = await db.scalars(query.order_by(model.id).offset(offset).limit(limit))
 
     return list(result.all()), total or 0
 
@@ -128,9 +124,7 @@ async def deactivate_record(
     record = await get_record(db, model, public_id)
 
     if not hasattr(record, "is_active"):
-        raise MasterValidationError(
-            "This master does not support deactivation."
-        )
+        raise MasterValidationError("This master does not support deactivation.")
 
     record.is_active = False
 

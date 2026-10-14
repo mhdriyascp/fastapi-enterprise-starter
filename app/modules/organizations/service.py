@@ -37,9 +37,7 @@ class OrganizationService:
             await self.db.refresh(organization)
         except IntegrityError as exc:
             await self.db.rollback()
-            raise ValueError(
-                "An organization with this code already exists."
-            ) from exc
+            raise ValueError("An organization with this code already exists.") from exc
 
         return organization
 
@@ -50,18 +48,13 @@ class OrganizationService:
         limit: int = 50,
     ) -> list[Organization]:
         result = await self.db.execute(
-            select(Organization)
-            .order_by(Organization.id)
-            .offset(offset)
-            .limit(limit)
+            select(Organization).order_by(Organization.id).offset(offset).limit(limit)
         )
         return list(result.scalars().all())
 
     async def get(self, organization_id: int) -> Organization | None:
         result = await self.db.execute(
-            select(Organization).where(
-                Organization.id == organization_id
-            )
+            select(Organization).where(Organization.id == organization_id)
         )
         return result.scalar_one_or_none()
 
@@ -87,9 +80,7 @@ class OrganizationService:
             await self.db.refresh(organization)
         except IntegrityError as exc:
             await self.db.rollback()
-            raise ValueError(
-                "The organization could not be updated."
-            ) from exc
+            raise ValueError("The organization could not be updated.") from exc
 
         return organization
 

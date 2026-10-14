@@ -39,7 +39,7 @@ class UserResponse(BaseModel):
     email_verified_at: datetime | None
     created_at: datetime
     updated_at: datetime | None
-    
+
 
 class ChangePasswordRequest(BaseModel):
     current_password: str = Field(
@@ -50,3 +50,10 @@ class ChangePasswordRequest(BaseModel):
         min_length=8,
         max_length=128,
     )
+
+
+class UserUpdate(BaseModel):
+    first_name: str | None = Field(default=None, max_length=100)
+    last_name: str | None = Field(default=None, max_length=100)
+    display_name: str | None = Field(default=None, max_length=150)
+    phone: str | None = Field(default=None, max_length=30)

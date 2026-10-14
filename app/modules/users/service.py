@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, timedelta
+from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -11,6 +12,7 @@ from app.modules.users.schemas import (
     ChangePasswordRequest,
     UserCreate,
     UserLogin,
+    UserUpdate,
 )
 
 
@@ -24,9 +26,7 @@ class UserService:
         email = data.email.strip().lower()
 
         # Check whether the email is already registered.
-        result = await self.db.execute(
-            select(User).where(User.email == email)
-        )
+        result = await self.db.execute(select(User).where(User.email == email))
 
         existing_user = result.scalar_one_or_none()
 
@@ -59,9 +59,7 @@ class UserService:
         # Lock the user row so concurrent login attempts cannot
         # overwrite each other's failed_login_attempts value.
         result = await self.db.execute(
-            select(User)
-            .where(User.email == email)
-            .with_for_update()
+            select(User).where(User.email == email).with_for_update()
         )
 
         user = result.scalar_one_or_none()
@@ -91,15 +89,9 @@ class UserService:
             user.failed_login_attempts += 1
 
             # Lock the account when the configured threshold is reached.
-            if (
-                user.failed_login_attempts
-                >= settings.max_login_attempts
-            ):
-                user.locked_until = (
-                    now
-                    + timedelta(
-                        minutes=settings.login_lockout_minutes
-                    )
+            if user.failed_login_attempts >= settings.max_login_attempts:
+                user.locked_until = now + timedelta(
+                    minutes=settings.login_lockout_minutes
                 )
 
             return None
@@ -136,9 +128,7 @@ class UserService:
             )
 
         # Hash the new password before storing it.
-        user.password_hash = hash_password(
-            data.new_password
-        )
+        user.password_hash = hash_password(data.new_password)
 
         # Record when the password was changed.
         user.password_changed_at = datetime.now(UTC)
@@ -150,3 +140,62 @@ class UserService:
         # inside the same database transaction.
         #
         # The caller is responsible for committing the transaction.
+
+    async def get_by_id(self, user_id: UUID) -> User | None:
+        """Fetches an active user by primary ID."""
+        result = await self.db.execute(
+            select(User).where(
+                User.id == user_id,
+                User.deleted_at.is_(None),
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def list_users(
+        self,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> tuple[list[User], int]:
+        """Lists active users with pagination.
+
+        Args:
+            offset: Number of items to skip.
+            limit: Maximum number of items to return.
+
+        Returns:
+            A tuple of (items, total_count).
+        """
+        count_result = await self.db.execute(
+            select(func.count()).select_from(User).where(User.deleted_at.is_(None))
+        )
+        total = count_result.scalar_one()
+
+        query = (
+            select(User)
+            .where(User.deleted_at.is_(None))
+            .order_by(User.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        result = await self.db.execute(query)
+        items = list(result.scalars().all())
+
+        return items, total
+
+    async def update_user(self, user: User, data: UserUpdate) -> User:
+        """Updates user profile information.
+
+        Args:
+            user: The user entity to update.
+            data: The update payload.
+
+        Returns:
+            The updated user entity.
+        """
+        update_data = data.model_dump(exclude_unset=True)
+        for key, value in update_data.items():
+            setattr(user, key, value)
+
+        await self.db.commit()
+        await self.db.refresh(user)
+        return user

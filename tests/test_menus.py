@@ -158,7 +158,9 @@ async def test_menu_visibility_role_and_permission() -> None:
         # Cleanup test entities cleanly adhering to FK order
         await service.delete_menu(menu_role_only.id)
         await service.delete_menu(menu_perm_only.id)
-        await db.execute(delete(RolePermission).where(RolePermission.role_id == role.id))
+        await db.execute(
+            delete(RolePermission).where(RolePermission.role_id == role.id)
+        )
         await db.execute(delete(UserRole).where(UserRole.user_id == user.id))
         await db.delete(user)
         await db.delete(role)

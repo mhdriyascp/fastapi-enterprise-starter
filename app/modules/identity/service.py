@@ -47,9 +47,7 @@ class IdentityService:
             user_id=user.id,
             token_family_id=token_family_id,
             token_id=refresh_token.token_id,
-            refresh_token_hash=hash_refresh_token(
-                refresh_token.token
-            ),
+            refresh_token_hash=hash_refresh_token(refresh_token.token),
             expires_at=refresh_token.expires_at,
         )
 
@@ -105,9 +103,7 @@ class IdentityService:
             # Reuse of a genuine, previously revoked token
             # revokes the remaining active sessions in its family.
             if session.revoked_at is not None:
-                await self._revoke_token_family(
-                    session.token_family_id
-                )
+                await self._revoke_token_family(session.token_family_id)
                 await self.db.commit()
 
                 raise ValueError("Refresh token reuse detected.")
@@ -117,11 +113,7 @@ class IdentityService:
 
             user = await self.db.get(User, user_id)
 
-            if (
-                user is None
-                or user.deleted_at is not None
-                or user.status != "active"
-            ):
+            if user is None or user.deleted_at is not None or user.status != "active":
                 raise ValueError("User account is not active.")
 
             # Rotate the refresh token.
@@ -134,9 +126,7 @@ class IdentityService:
                 user_id=user.id,
                 token_family_id=session.token_family_id,
                 token_id=new_refresh_token.token_id,
-                refresh_token_hash=hash_refresh_token(
-                    new_refresh_token.token
-                ),
+                refresh_token_hash=hash_refresh_token(new_refresh_token.token),
                 expires_at=new_refresh_token.expires_at,
             )
 

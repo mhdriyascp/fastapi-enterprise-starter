@@ -97,9 +97,7 @@ async def refresh(
     service = IdentityService(db)
 
     try:
-        access_token, refresh_token = await service.refresh(
-            data.refresh_token
-        )
+        access_token, refresh_token = await service.refresh(data.refresh_token)
 
     except ValueError as exc:
         raise HTTPException(
@@ -165,9 +163,7 @@ async def logout_all(
 
     await service.logout_all(current_user.id)
 
-    return {
-        "message": "Logged out from all sessions successfully."
-    }
+    return {"message": "Logged out from all sessions successfully."}
 
 
 @router.post(
@@ -191,9 +187,7 @@ async def change_password(
             data,
         )
 
-        await identity_service.revoke_all_sessions(
-            current_user.id
-        )
+        await identity_service.revoke_all_sessions(current_user.id)
 
         await db.commit()
 
@@ -209,6 +203,4 @@ async def change_password(
         await db.rollback()
         raise
 
-    return {
-        "message": "Password changed successfully. Please log in again."
-    }
+    return {"message": "Password changed successfully. Please log in again."}

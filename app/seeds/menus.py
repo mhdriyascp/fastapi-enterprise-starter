@@ -157,7 +157,11 @@ async def seed_menus(db: AsyncSession) -> None:
             # Map permissions
             for p_code in item["permissions"]:
                 if p_code in perms:
-                    db.add(MenuPermission(menu_id=parent.id, permission_id=perms[p_code].id))
+                    db.add(
+                        MenuPermission(
+                            menu_id=parent.id, permission_id=perms[p_code].id
+                        )
+                    )
         else:
             existing += 1
 
@@ -186,7 +190,11 @@ async def seed_menus(db: AsyncSession) -> None:
 
                 for p_code in child_item["permissions"]:
                     if p_code in perms:
-                        db.add(MenuPermission(menu_id=child.id, permission_id=perms[p_code].id))
+                        db.add(
+                            MenuPermission(
+                                menu_id=child.id, permission_id=perms[p_code].id
+                            )
+                        )
             else:
                 existing += 1
 

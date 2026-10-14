@@ -79,10 +79,7 @@ async def list_states_endpoint(
         ) from None
 
     return {
-        "items": [
-            StateResponse.model_validate(item)
-            for item in items
-        ],
+        "items": [StateResponse.model_validate(item) for item in items],
         "total": total,
         "offset": offset,
         "limit": limit,

@@ -90,9 +90,7 @@ class PermissionCreate(BaseModel):
     @model_validator(mode="after")
     def validate_code_consistency(self):
         if self.code != f"{self.resource}.{self.action}":
-            raise ValueError(
-                "Permission code must match 'resource.action'."
-            )
+            raise ValueError("Permission code must match 'resource.action'.")
         return self
 
 
@@ -146,9 +144,7 @@ class RolePermissionReplace(BaseModel):
     @model_validator(mode="after")
     def validate_unique_permission_ids(self):
         if len(self.permission_ids) != len(set(self.permission_ids)):
-            raise ValueError(
-                "Duplicate permission IDs are not allowed."
-            )
+            raise ValueError("Duplicate permission IDs are not allowed.")
         return self
 
 

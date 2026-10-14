@@ -10,9 +10,7 @@ class Country(EntityBase):
     __tablename__ = "countries"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    public_id: Mapped[UUID] = mapped_column(
-        unique=True, nullable=False, default=uuid4
-    )
+    public_id: Mapped[UUID] = mapped_column(unique=True, nullable=False, default=uuid4)
     code: Mapped[str] = mapped_column(String(2), unique=True, nullable=False)
     iso3_code: Mapped[str | None] = mapped_column(String(3), unique=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)

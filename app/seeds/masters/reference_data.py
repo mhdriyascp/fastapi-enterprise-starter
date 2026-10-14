@@ -35,7 +35,12 @@ async def seed_reference_data(db: AsyncSession) -> None:
         {"code": "BHD", "name": "Bahraini Dinar", "symbol": "د.ب", "decimal_places": 3},
         {"code": "OMR", "name": "Omani Rial", "symbol": "ر.ع.", "decimal_places": 3},
         {"code": "CAD", "name": "Canadian Dollar", "symbol": "C$", "decimal_places": 2},
-        {"code": "AUD", "name": "Australian Dollar", "symbol": "A$", "decimal_places": 2},
+        {
+            "code": "AUD",
+            "name": "Australian Dollar",
+            "symbol": "A$",
+            "decimal_places": 2,
+        },
         {"code": "JPY", "name": "Japanese Yen", "symbol": "¥", "decimal_places": 0},
     ]
 
@@ -54,19 +59,84 @@ async def seed_reference_data(db: AsyncSession) -> None:
     # 2. COUNTRIES
     # ---------------------------------------------------------
     countries = [
-        {"code": "IN", "iso3_code": "IND", "name": "India", "phone_code": "+91", "currency": "INR"},
-        {"code": "US", "iso3_code": "USA", "name": "United States", "phone_code": "+1", "currency": "USD"},
-        {"code": "GB", "iso3_code": "GBR", "name": "United Kingdom", "phone_code": "+44", "currency": "GBP"},
-        {"code": "CA", "iso3_code": "CAN", "name": "Canada", "phone_code": "+1", "currency": "CAD"},
-        {"code": "AU", "iso3_code": "AUS", "name": "Australia", "phone_code": "+61", "currency": "AUD"},
-
+        {
+            "code": "IN",
+            "iso3_code": "IND",
+            "name": "India",
+            "phone_code": "+91",
+            "currency": "INR",
+        },
+        {
+            "code": "US",
+            "iso3_code": "USA",
+            "name": "United States",
+            "phone_code": "+1",
+            "currency": "USD",
+        },
+        {
+            "code": "GB",
+            "iso3_code": "GBR",
+            "name": "United Kingdom",
+            "phone_code": "+44",
+            "currency": "GBP",
+        },
+        {
+            "code": "CA",
+            "iso3_code": "CAN",
+            "name": "Canada",
+            "phone_code": "+1",
+            "currency": "CAD",
+        },
+        {
+            "code": "AU",
+            "iso3_code": "AUS",
+            "name": "Australia",
+            "phone_code": "+61",
+            "currency": "AUD",
+        },
         # Gulf Cooperation Council (GCC)
-        {"code": "SA", "iso3_code": "SAU", "name": "Saudi Arabia", "phone_code": "+966", "currency": "SAR"},
-        {"code": "AE", "iso3_code": "ARE", "name": "United Arab Emirates", "phone_code": "+971", "currency": "AED"},
-        {"code": "QA", "iso3_code": "QAT", "name": "Qatar", "phone_code": "+974", "currency": "QAR"},
-        {"code": "KW", "iso3_code": "KWT", "name": "Kuwait", "phone_code": "+965", "currency": "KWD"},
-        {"code": "BH", "iso3_code": "BHR", "name": "Bahrain", "phone_code": "+973", "currency": "BHD"},
-        {"code": "OM", "iso3_code": "OMN", "name": "Oman", "phone_code": "+968", "currency": "OMR"},
+        {
+            "code": "SA",
+            "iso3_code": "SAU",
+            "name": "Saudi Arabia",
+            "phone_code": "+966",
+            "currency": "SAR",
+        },
+        {
+            "code": "AE",
+            "iso3_code": "ARE",
+            "name": "United Arab Emirates",
+            "phone_code": "+971",
+            "currency": "AED",
+        },
+        {
+            "code": "QA",
+            "iso3_code": "QAT",
+            "name": "Qatar",
+            "phone_code": "+974",
+            "currency": "QAR",
+        },
+        {
+            "code": "KW",
+            "iso3_code": "KWT",
+            "name": "Kuwait",
+            "phone_code": "+965",
+            "currency": "KWD",
+        },
+        {
+            "code": "BH",
+            "iso3_code": "BHR",
+            "name": "Bahrain",
+            "phone_code": "+973",
+            "currency": "BHD",
+        },
+        {
+            "code": "OM",
+            "iso3_code": "OMN",
+            "name": "Oman",
+            "phone_code": "+968",
+            "currency": "OMR",
+        },
     ]
 
     country_ids: dict[str, int] = {}
@@ -95,17 +165,13 @@ async def seed_reference_data(db: AsyncSession) -> None:
         ("IN", "KA", "Karnataka"),
         ("IN", "TN", "Tamil Nadu"),
         ("IN", "MH", "Maharashtra"),
-
         # United States
         ("US", "CA", "California"),
         ("US", "NY", "New York"),
-
         # Canada
         ("CA", "ON", "Ontario"),
-
         # Australia
         ("AU", "NSW", "New South Wales"),
-
         # Saudi Arabia — 13 administrative regions
         ("SA", "RIY", "Riyadh Region"),
         ("SA", "MAK", "Makkah Region"),
@@ -120,7 +186,6 @@ async def seed_reference_data(db: AsyncSession) -> None:
         ("SA", "NAJ", "Najran Region"),
         ("SA", "BAH", "Al-Bahah Region"),
         ("SA", "JAW", "Al-Jawf Region"),
-
         # United Arab Emirates — 7 emirates
         ("AE", "AUH", "Abu Dhabi"),
         ("AE", "DXB", "Dubai"),
@@ -129,7 +194,6 @@ async def seed_reference_data(db: AsyncSession) -> None:
         ("AE", "UAQ", "Umm Al Quwain"),
         ("AE", "RAK", "Ras Al Khaimah"),
         ("AE", "FUJ", "Fujairah"),
-
         # Qatar — 8 municipalities
         ("QA", "DAW", "Doha"),
         ("QA", "RAY", "Al Rayyan"),
@@ -139,7 +203,6 @@ async def seed_reference_data(db: AsyncSession) -> None:
         ("QA", "ZAY", "Al Daayen"),
         ("QA", "SHA", "Al Shahaniya"),
         ("QA", "DHK", "Umm Salal"),
-
         # Kuwait — 6 governorates
         ("KW", "CAP", "Capital Governorate"),
         ("KW", "HAW", "Hawalli Governorate"),
@@ -147,13 +210,11 @@ async def seed_reference_data(db: AsyncSession) -> None:
         ("KW", "MUB", "Mubarak Al-Kabeer Governorate"),
         ("KW", "AHM", "Ahmadi Governorate"),
         ("KW", "JAH", "Jahra Governorate"),
-
         # Bahrain — 4 governorates
         ("BH", "CAP", "Capital Governorate"),
         ("BH", "MUH", "Muharraq Governorate"),
         ("BH", "NOR", "Northern Governorate"),
         ("BH", "SOU", "Southern Governorate"),
-
         # Oman — 11 governorates
         ("OM", "MUS", "Muscat Governorate"),
         ("OM", "DHO", "Dhofar Governorate"),
@@ -200,7 +261,6 @@ async def seed_reference_data(db: AsyncSession) -> None:
         ("US", "NY", "New York City"),
         ("CA", "ON", "Toronto"),
         ("AU", "NSW", "Sydney"),
-
         # Saudi Arabia
         ("SA", "RIY", "Riyadh"),
         ("SA", "MAK", "Jeddah"),
@@ -208,7 +268,6 @@ async def seed_reference_data(db: AsyncSession) -> None:
         ("SA", "MAD", "Madinah"),
         ("SA", "EAS", "Dammam"),
         ("SA", "EAS", "Al Khobar"),
-
         # UAE
         ("AE", "AUH", "Abu Dhabi"),
         ("AE", "DXB", "Dubai"),
@@ -216,22 +275,18 @@ async def seed_reference_data(db: AsyncSession) -> None:
         ("AE", "AJM", "Ajman"),
         ("AE", "RAK", "Ras Al Khaimah"),
         ("AE", "FUJ", "Fujairah"),
-
         # Qatar
         ("QA", "DAW", "Doha"),
         ("QA", "RAY", "Al Rayyan"),
         ("QA", "WAK", "Al Wakrah"),
-
         # Kuwait
         ("KW", "CAP", "Kuwait City"),
         ("KW", "HAW", "Hawalli"),
         ("KW", "AHM", "Al Ahmadi"),
-
         # Bahrain
         ("BH", "CAP", "Manama"),
         ("BH", "MUH", "Muharraq"),
         ("BH", "SOU", "Riffa"),
-
         # Oman
         ("OM", "MUS", "Muscat"),
         ("OM", "DHO", "Salalah"),

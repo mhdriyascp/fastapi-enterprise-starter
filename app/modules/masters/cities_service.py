@@ -45,9 +45,7 @@ async def _get_state(
     state = result.one_or_none()
 
     if state is None:
-        raise CityNotFoundError(
-            "Active state not found for the selected country."
-        )
+        raise CityNotFoundError("Active state not found for the selected country.")
 
     return state
 
@@ -111,13 +109,9 @@ async def list_cities(
             state = await _get_state(db, state_public_id, country.id)
             query = query.where(City.state_id == state.id)
 
-    total = await db.scalar(
-        select(func.count()).select_from(query.subquery())
-    )
+    total = await db.scalar(select(func.count()).select_from(query.subquery()))
 
-    result = await db.scalars(
-        query.order_by(City.name).offset(offset).limit(limit)
-    )
+    result = await db.scalars(query.order_by(City.name).offset(offset).limit(limit))
 
     return list(result.all()), total or 0
 
@@ -147,11 +141,10 @@ async def create_city(db: AsyncSession, data: dict) -> City:
         await db.refresh(city)
     except IntegrityError as exc:
         await db.rollback()
-        raise CityConflictError(
-            "A city with conflicting data already exists."
-        ) from exc
+        raise CityConflictError("A city with conflicting data already exists.") from exc
 
     return city
+
 
 async def update_city(
     db: AsyncSession,
@@ -198,11 +191,10 @@ async def update_city(
         await db.refresh(city)
     except IntegrityError as exc:
         await db.rollback()
-        raise CityConflictError(
-            "A city with conflicting data already exists."
-        ) from exc
+        raise CityConflictError("A city with conflicting data already exists.") from exc
 
     return city
+
 
 async def deactivate_city(db: AsyncSession, public_id: UUID) -> None:
     city = await get_city(db, public_id)

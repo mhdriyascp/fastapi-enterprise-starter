@@ -61,6 +61,7 @@ class PaginationParams:
 ```python
 from app.shared.pagination import PaginationParams, get_pagination
 
+
 @router.get("")
 async def list_items(
     pagination: Annotated[PaginationParams, Depends(get_pagination)],

@@ -120,7 +120,7 @@ class User(EntityBase):
         DateTime(timezone=True),
         nullable=True,
     )
-    
+
     status: Mapped[str] = mapped_column(
         String(20),
         nullable=False,

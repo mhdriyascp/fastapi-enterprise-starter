@@ -229,6 +229,7 @@ crm-platform/
   ```python
   from app.api.dependencies.permissions import require_permission
 
+
   @router.post("/roles")
   async def create_role(
       data: RoleCreate,
@@ -268,13 +269,18 @@ crm-platform/
   from app.shared.pagination import PaginationParams, get_pagination
   from app.shared.response import PagedResponse
 
+
   @router.get("", response_model=PagedResponse[ItemResponse])
   async def list_items(
       db: Annotated[AsyncSession, Depends(get_db_session)],
       pagination: Annotated[PaginationParams, Depends(get_pagination)],
   ) -> PagedResponse[ItemResponse]:
-      items, total = await service.list(offset=pagination.offset, limit=pagination.page_size)
-      return PagedResponse.build(items=items, total=total, page=pagination.page, page_size=pagination.page_size)
+      items, total = await service.list(
+          offset=pagination.offset, limit=pagination.page_size
+      )
+      return PagedResponse.build(
+          items=items, total=total, page=pagination.page, page_size=pagination.page_size
+      )
   ```
 
 ### 7. Database Infrastructure & Models
