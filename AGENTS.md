@@ -1,0 +1,264 @@
+# AI Team Coding Standards & Generation Instructions
+
+> **MANDATORY FOR ALL AI AGENTS & ASSISTANTS**  
+> Before generating, modifying, or refactoring ANY code in this repository, you **MUST** read and strictly comply with the instructions and standards set out in this document.  
+> Do not bypass these rules. If a user prompt conflicts with these standards, prioritize these standards and explain the discrepancy to the developer.
+
+---
+
+## 🚦 Pre-Generation Gate (The "Check-First" Protocol)
+
+Before generating any code, every AI agent must execute this 4-step checklist:
+
+1. **Verify Context & Codebase Paths**:
+   - Models live under [`app/infrastructure/database/models/`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/app/infrastructure/database/models/).
+   - Domain modules live under `app/modules/<domain>/` containing:
+     - `schemas.py`: Pydantic v2 request/response data contracts.
+     - `service.py`: Domain business logic and database transactions.
+     - `router.py`: FastAPI endpoints and dependency bindings.
+   - Reference implementation for standard patterns: [`app/modules/organizations`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/app/modules/organizations).
+2. **Reuse Existing Utilities**:
+   - Response envelope: [`app.shared.response.PagedResponse[T]`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/app/shared/response.py).
+   - Pagination parameters: [`app.shared.pagination.PaginationParams`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/app/shared/pagination.py) via `Depends(get_pagination)`.
+   - Database session: `Annotated[AsyncSession, Depends(get_db_session)]` from [`app.infrastructure.database.session`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/app/infrastructure/database/session.py).
+   - Application configuration: `from app.core.config import settings`.
+3. **Verify Dependencies & Language Standards**:
+   - Check [`pyproject.toml`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/pyproject.toml). Python 3.14+ / 3.12+ syntax (e.g. `class MyClass[T]:`, `str | None`).
+   - Do **NOT** introduce new external libraries or packages without explicit approval.
+4. **Enforce the Pre-Completion Gate ("Definition of Done")**:
+   - Before handing code back to the developer, verify code health via CLI:
+     ```bash
+     uv run ruff check .
+     uv run ruff format --check .
+     uv run pytest
+     ```
+
+---
+
+## 🏛️ The 9 Pillars of Team AI Coding Standards
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                        9 PILLARS OF CODE GENERATION                    │
+├───────────────────┬────────────────────┬───────────────────────────────┤
+│ 1. Architecture   │ 2. Human-Readable  │ 3. Reusable                   │
+│ 4. Documented     │ 5. Reliable        │ 6. Secure                     │
+│ 7. Maintainable   │ 8. Traceable       │ 9. Controlled (Human-in-Loop) │
+└───────────────────┴────────────────────┴───────────────────────────────┘
+```
+
+---
+
+### Pillar 1: Architecturally Consistent
+*Same design principles across the whole team.*
+
+- **Strict Layered Architecture**:
+  - `schemas.py`: Pydantic v2 data models. No database queries or business operations here.
+  - `models`: SQLAlchemy 2.0 Declarative models in `app/infrastructure/database/models/`.
+  - `service.py`: Encapsulates all query building, mutations, business validations, and commits.
+  - `router.py`: Handles HTTP requests, dependency injection, and status codes. **Never execute raw SQL queries inside route functions.**
+- **Async SQLAlchemy 2.0 Strict Guidelines**:
+  - **No `db.query()`**: Always use 2.0 Core/ORM style `select(Model).where(...)`.
+  - **Async Execution**: Always `(await db.execute(query)).scalars().all()` or `.scalar_one_or_none()`.
+  - **Avoid `MissingGreenlet` Errors**: When querying entities that have relationships, **always** explicitly eager load using `selectinload` or `joinedload`:
+    ```python
+    from sqlalchemy.orm import selectinload
+
+    query = select(Organization).options(selectinload(Organization.contacts))
+    ```
+- **Pydantic v2 Standards**:
+  - Use `model_config = ConfigDict(from_attributes=True)` instead of v1 `class Config: orm_mode = True`.
+  - Use `@field_validator` and `@model_validator(mode="before"|"after")` instead of deprecated `@validator`.
+  - Use modern typing: `list[str]`, `dict[str, Any]`, `str | None`.
+- **API Versioning**:
+  - v1 routes live under `app/api/v1/` and `app/modules/` with prefix `/api/v1`.
+  - v2 routes live under `app/api/v2/` with prefix `/api/v2`.
+  - Never introduce breaking changes to existing v1 schemas or endpoints.
+
+---
+
+### Pillar 2: Human-Readable
+*Understandable regardless of who or what generated the code.*
+
+- **Naming Conventions**:
+  - Functions and variables: Clear, descriptive `snake_case` (e.g., `fetch_active_organizations_by_tenant`, not `get_orgs`).
+  - Classes: `PascalCase` (e.g., `OrganizationService`, `UserProfileResponse`).
+  - Constants: `UPPER_SNAKE_CASE`.
+  - No cryptic abbreviations, single-letter variables (except indices `i`), or confusing acronyms.
+- **Strict Typing**:
+  - Explicit Python type hints on **all** parameters and returns.
+  - Use `Annotated[...]` for FastAPI dependencies, query params, and path params:
+    ```python
+    async def list_items(
+        db: Annotated[AsyncSession, Depends(get_db_session)],
+        pagination: Annotated[PaginationParams, Depends(get_pagination)],
+    ) -> PagedResponse[ItemResponse]:
+    ```
+- **Formatting Standards**:
+  - Maximum line length: 88 characters (Black / Ruff standard).
+  - Code must pass `ruff check .` and `ruff format .` without manual interventions.
+  - No dense one-liners or nested ternary chains.
+
+---
+
+### Pillar 3: Reusable
+*Shared where it makes sense, without unnecessary abstractions.*
+
+- **Shared Components First**:
+  - Always use `app.shared.pagination.PaginationParams` via `Annotated[PaginationParams, Depends(get_pagination)]`.
+  - Always envelope paginated list responses with `app.shared.response.PagedResponse[T].build(...)`.
+  - Always reuse auth dependencies from `app.core.security` and `app.modules.rbac`.
+- **Rule of Three**:
+  - Do not create abstract base classes or generic utilities until a pattern is independently repeated across at least three domains.
+  - Prefer composition and explicit service methods over deep class inheritance.
+- **Domain Independence**:
+  - Sibling domain modules under `app/modules/` must remain decoupled. Cross-domain interactions should go through service contracts, not direct imports of another domain's private internals.
+
+---
+
+### Pillar 4: Well-Documented
+*At code, module, and system levels.*
+
+- **FastAPI OpenAPI Annotations**:
+  - Every endpoint must declare: `tags`, `summary`, `description`, `status_code`, and `response_model`.
+  ```python
+  @router.get(
+      "/{organization_id}",
+      response_model=OrganizationResponse,
+      status_code=status.HTTP_200_OK,
+      summary="Get organization details",
+      description="Fetches detailed information for a specific organization by ID.",
+      tags=["Organizations"],
+  )
+  async def get_organization(...) -> OrganizationResponse:
+  ```
+- **Docstrings**:
+  - Include Google-style docstrings on all service methods and complex helper functions:
+  ```python
+  async def get_by_code(self, code: str) -> Organization | None:
+      """Fetches an organization by its unique system code.
+
+      Args:
+          code: The unique upper-case alphanumeric identifier (e.g., 'ORG-001').
+
+      Returns:
+          The matching Organization entity or None if not found.
+      """
+  ```
+- **Continuous Documentation Synchronization (MANDATORY)**:
+  - **Zero Stale Docs Policy**: Every AI generation that adds, refactors, or deletes code MUST update the corresponding documentation under `docs/` before concluding the task:
+    - New or modified API endpoints / business logic ➔ update [`docs/03-modules/<domain>.md`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/docs/03-modules/).
+    - New or modified database entities / columns ➔ update [`docs/01-architecture/project-structure.md`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/docs/01-architecture/project-structure.md) and [`docs/04-database/`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/docs/04-database/).
+    - New or modified environment variables / settings ➔ update [`docs/02-setup/configuration.md`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/docs/02-setup/configuration.md) and `.env.example`.
+    - Architectural changes (routers, auth, versions) ➔ update [`docs/01-architecture/`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/docs/01-architecture/).
+  - A task is strictly **INCOMPLETE** if code changes are made without updating the corresponding documentation in `docs/`.
+
+
+
+---
+
+### Pillar 5: Reliable
+*Predictable exception handling and testing.*
+
+- **Exception Standards**:
+  - Use custom domain exceptions mapped to appropriate HTTP status codes (e.g., `EntityNotFoundError` → 404, `DuplicateRecordError` → 409).
+  - **NEVER** use bare `except:` or `except Exception: pass`.
+  - Catch specific exceptions (e.g. `IntegrityError`, `SQLAlchemyError`) and log with context before raising domain errors.
+- **Transactional Integrity**:
+  - Ensure database operations are committed explicitly and rolled back cleanly on error:
+  ```python
+  try:
+      self.db.add(entity)
+      await self.db.commit()
+      await self.db.refresh(entity)
+  except IntegrityError as exc:
+      await self.db.rollback()
+      logger.warning("Duplicate record violation: %s", exc)
+      raise DuplicateRecordError("Record already exists") from exc
+  except SQLAlchemyError:
+      await self.db.rollback()
+      logger.exception("Database transaction failed")
+      raise DatabaseError("Unable to persist record")
+  ```
+- **Automated Testing**:
+  - Every new endpoint or service MUST include corresponding unit or integration tests under `tests/`.
+  - Use `pytest` and `pytest-asyncio` with isolated test database sessions or mock fixtures.
+
+---
+
+### Pillar 6: Secure
+*Enforced access controls and automated checks.*
+
+- **Zero Hardcoded Secrets**:
+  - API keys, JWT secrets, database credentials, and certificates must NEVER appear in code. All values must be loaded via `settings` from `.env`.
+- **Enforced RBAC**:
+  - Endpoints exposing tenant or administrative data must enforce permissions via RBAC dependencies (`require_permissions(...)`).
+- **Input Sanitization & Validation**:
+  - Always validate incoming payload structures via Pydantic `Field()` (e.g. `min_length`, `max_length`, `ge`, regex patterns).
+  - Use `EmailStr`, `HttpUrl`, and constrained numeric types where applicable.
+- **SQL Injection Prevention**:
+  - Never format or concatenate strings into raw SQL queries. Always use SQLAlchemy Core / ORM `select()` or parameterized queries with `text()`.
+
+---
+
+### Pillar 7: Maintainable
+*Sustainable as the codebase and team grow.*
+
+- **Single Responsibility Principle (SRP)**:
+  - Routers handle HTTP translation and validation.
+  - Services handle logic and orchestration.
+  - Repositories/Models define database structure.
+- **Code Health Automation**:
+  - Code must pass `ruff check .` and `ruff format .` without manual interventions.
+  - Keep modules cohesive and focused.
+
+---
+
+### Pillar 8: Traceable
+*Business requirement to implementation, testing, and documentation.*
+
+- **Requirement Linking**:
+  - In commit messages and PR summaries, cite the relevant ticket / issue ID (e.g., `feat(orgs): [CRM-104] implement organization tenant filter`).
+- **Structured Logging**:
+  - **NEVER use `print()` statements** in production code.
+  - Use standard library `logging.getLogger(__name__)`.
+  - Include contextual fields: user ID, organization ID, and request action.
+- **Conventional Commits**:
+  - Follow standard prefixes: `feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`.
+
+---
+
+### Pillar 9: Controlled
+*Human engineering decisions and governed changes.*
+
+- **Human-in-the-Loop Principle**:
+  - AI operates as an assistant, never as an unreviewed autonomous committer.
+  - Provide complete, reproducible diffs or files for human engineering review.
+- **Alembic Database Migration Protocol**:
+  - **Timestamped Revisions (No Random Hashing)**:
+    - Every migration file and revision ID MUST use a UTC timestamp (`YYYYMMDDHHMMSS`, e.g. `20261014120001`) as both the `revision` identifier and file prefix.
+    - **Never** use random hexadecimal hashes (such as `732700ee0bae` or `aeafa3d4d6aa`).
+    - `alembic.ini` is configured with `file_template = %%(rev)s_%%(slug)s` and `revision_environment = true`.
+    - `alembic/env.py` implements `process_revision_directives` to automatically inject UTC timestamps into generated migration scripts.
+  - **Modular Migrations by Domain**:
+    - Keep migrations organized and modular per domain/module (e.g., `organizations`, `users/identity`, `rbac/menus`, `masters`). Do not combine unrelated domains into monolithic migration files.
+    - Foreign key dependencies dictate the `down_revision` chain across domain boundaries.
+  - **Generation & Safety Protocol**:
+    - AI **MAY** generate migrations via:
+      ```bash
+      uv run alembic revision --autogenerate -m "descriptive_migration_name"
+      ```
+    - AI **MUST** inspect the generated migration script to verify `nullable` constraints, column types, foreign keys, and ensure `downgrade()` is fully implemented.
+    - AI **MUST NEVER** execute `alembic downgrade` or drop database tables autonomously in production environments.
+- **Review Checklist**:
+  - AI generations must conclude with a self-verification checklist:
+    - [ ] Type hints verified on all params & returns
+    - [ ] Modern Async SQLAlchemy 2.0 (eager loading, no greenlet errors)
+    - [ ] Reused `PagedResponse` & `get_pagination` from `app.shared`
+    - [ ] Security & RBAC verified
+    - [ ] Transaction rollback & exception handling covered
+    - [ ] Migrations use UTC timestamps for revision IDs and modular domain structure (no hex hashes)
+    - [ ] Documentation updated in `docs/` (`docs/03-modules/`, `docs/01-architecture/`, `docs/04-database/`, etc.)
+    - [ ] Code passes `ruff check .` and `pytest`
+
+

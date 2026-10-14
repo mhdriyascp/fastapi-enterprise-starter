@@ -1,5 +1,8 @@
+from datetime import UTC, datetime
 from logging.config import fileConfig
+from typing import Any
 
+from alembic.operations.ops import MigrationScript
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
@@ -44,6 +47,11 @@ from app.infrastructure.database.models.organization import (
 
 # Masters models
 from app.modules.identity.models import AuthSession
+from app.modules.menus.models import (
+    Menu,
+    MenuPermission,
+    MenuRole,
+)
 from app.modules.rbac.models import (
     Permission,
     Role,
@@ -70,6 +78,17 @@ config.set_main_option(
     settings.database_url.replace("%", "%%"),
 )
 
+def process_revision_directives(
+    context: Any,
+    revision: Any,
+    directives: list[MigrationScript],
+) -> None:
+    """Ensure generated revision IDs use UTC timestamps (YYYYMMDDHHMMSS) instead of random hashes."""
+    for directive in directives:
+        # If no custom rev_id was provided or it is a default short hex hash
+        if not directive.rev_id or len(directive.rev_id) < 14:
+            directive.rev_id = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
+
 
 def run_migrations_offline() -> None:
     url = config.get_main_option("sqlalchemy.url")
@@ -81,6 +100,7 @@ def run_migrations_offline() -> None:
         dialect_opts={
             "paramstyle": "named",
         },
+        process_revision_directives=process_revision_directives,
     )
 
     with context.begin_transaction():
@@ -91,6 +111,7 @@ def do_run_migrations(connection: Connection) -> None:
     context.configure(
         connection=connection,
         target_metadata=target_metadata,
+        process_revision_directives=process_revision_directives,
     )
 
     with context.begin_transaction():

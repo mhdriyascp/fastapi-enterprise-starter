@@ -23,6 +23,7 @@ from app.modules.masters.registry import (
     unit_of_measure_router,
 )
 from app.modules.masters.states_router import router as states_router
+from app.modules.menus.router import router as menus_router
 from app.modules.organizations.router import router as organizations_router
 from app.modules.rbac.permissions_router import permissions_router
 from app.modules.rbac.role_permissions_router import role_permissions_router
@@ -55,6 +56,9 @@ router.include_router(public_router, prefix="/public")
 router.include_router(roles_router)
 router.include_router(permissions_router)
 router.include_router(role_permissions_router)
+
+# Navigation menus routes.
+router.include_router(menus_router)
 
 # Organization routes.
 router.include_router(organizations_router)

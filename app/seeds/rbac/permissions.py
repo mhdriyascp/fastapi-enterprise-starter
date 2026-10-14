@@ -146,6 +146,44 @@ PERMISSIONS = (
         "is_system": True,
         "is_active": True,
     },
+
+    # Navigation menu management.
+    {
+        "name": "Read Menus",
+        "code": "menu.read",
+        "description": "View navigation menu structures and tree.",
+        "resource": "menu",
+        "action": "read",
+        "is_system": True,
+        "is_active": True,
+    },
+    {
+        "name": "Create Menus",
+        "code": "menu.create",
+        "description": "Create navigation menu items.",
+        "resource": "menu",
+        "action": "create",
+        "is_system": True,
+        "is_active": True,
+    },
+    {
+        "name": "Update Menus",
+        "code": "menu.update",
+        "description": "Update navigation menu items and access assignments.",
+        "resource": "menu",
+        "action": "update",
+        "is_system": True,
+        "is_active": True,
+    },
+    {
+        "name": "Delete Menus",
+        "code": "menu.delete",
+        "description": "Delete navigation menu items.",
+        "resource": "menu",
+        "action": "delete",
+        "is_system": True,
+        "is_active": True,
+    },
 )
 
 

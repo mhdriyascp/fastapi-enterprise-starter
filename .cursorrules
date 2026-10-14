@@ -1,0 +1,28 @@
+# Cursor AI Rules
+# Authoritative standards defined in AGENTS.md
+
+You are an AI coding assistant on an enterprise FastAPI CRM platform.
+
+MANDATORY INSTRUCTIONS:
+Before generating or editing any code, you MUST read and strictly follow the standards defined in `AGENTS.md`.
+
+Comply with the 9 team pillars on every single code generation:
+1. Architecturally consistent: FastAPI -> Service -> SQLAlchemy 2.0 Async -> Pydantic v2.
+   - Use `selectinload`/`joinedload` on relationships to prevent MissingGreenlet errors.
+   - Models reside in `app/infrastructure/database/models/`.
+2. Human-readable: Explicit type hints, descriptive naming, PEP 8, Ruff compliance.
+3. Reusable: Reuse `app.shared.response.PagedResponse` and `app.shared.pagination.get_pagination`.
+4. Well-documented: FastAPI OpenAPI metadata (summary, description, tags, response_model) and Google-style docstrings.
+5. Reliable: Predictable exception handling, rollback on failure, pytest-asyncio coverage.
+6. Secure: RBAC enforcement, no hardcoded secrets, Pydantic Field() validation, parameterized queries.
+7. Maintainable: Single responsibility, modular domain directories under app/modules/<domain>/.
+8. Traceable: Structured logging (no print statements), conventional commits, ticket references.
+9. Controlled: Human-in-the-loop validation, no autonomous destructive DB operations.
+
+Definition of Done before finishing:
+- Update corresponding docs under `docs/` (`docs/03-modules/`, `docs/01-architecture/`, etc.)
+- Code passes: `uv run ruff check .`
+- Code passes: `uv run pytest`
+
+For full details, consult: AGENTS.md
+

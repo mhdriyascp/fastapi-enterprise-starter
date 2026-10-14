@@ -24,6 +24,11 @@ ROLE_PERMISSION_MAP: dict[str, tuple[str, ...]] = {
         "masters:read",
         "masters:update",
         "masters:delete",
+        # Menu permissions.
+        "menu.read",
+        "menu.create",
+        "menu.update",
+        "menu.delete",
     ),
     "admin": (
         "role.read",
@@ -36,6 +41,10 @@ ROLE_PERMISSION_MAP: dict[str, tuple[str, ...]] = {
         "masters:read",
         "masters:update",
         "masters:delete",
+        # Menu permissions.
+        "menu.read",
+        "menu.create",
+        "menu.update",
     ),
     "sales_manager": (
         "organization.read",

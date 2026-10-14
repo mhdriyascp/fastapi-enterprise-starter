@@ -29,6 +29,14 @@ The following is a conceptual overview of the main project directories. Individu
 
 crm-platform/
 │
+├── AGENTS.md
+├── .cursor/
+│   └── rules/
+│       └── crm-coding-standards.mdc
+├── .cursorrules
+├── .github/
+│   └── copilot-instructions.md
+│
 ├── app/
 │   ├── main.py
 │   │
@@ -37,20 +45,27 @@ crm-platform/
 │   │   │   ├── auth.py
 │   │   │   └── permissions.py
 │   │   │
-│   │   └── v1/
-│   │       ├── router.py
-│   │       ├── admin/
-│   │       ├── auth/
-│   │       ├── mobile/
-│   │       └── public/
+│   │   ├── v1/
+│   │   │   ├── router.py
+│   │   │   ├── admin/
+│   │   │   ├── auth/
+│   │   │   ├── mobile/
+│   │   │   └── public/
+│   │   │
+│   │   └── v2/
+│   │       ├── __init__.py
+│   │       └── router.py
 │   │
 │   ├── core/
 │   │   ├── config.py
-│   │   └── lifecycle.py
+│   │   ├── lifecycle.py
+│   │   ├── security.py
+│   │   └── timezone.py
 │   │
 │   ├── infrastructure/
 │   │   └── database/
 │   │       ├── models/
+│   │       ├── base.py
 │   │       └── session.py
 │   │
 │   ├── modules/
@@ -59,7 +74,12 @@ crm-platform/
 │   │   │   ├── common/
 │   │   │   └── schemas/
 │   │   ├── organizations/
-│   │   └── rbac/
+│   │   ├── rbac/
+│   │   └── users/
+│   │
+│   ├── shared/
+│   │   ├── pagination.py
+│   │   └── response.py
 │   │
 │   └── seeds/
 │       ├── __main__.py
@@ -73,16 +93,18 @@ crm-platform/
 │   └── versions/
 │
 ├── docs/
-│   └── PROJECT_STRUCTURE.md
+│   ├── PROJECT_STRUCTURE.md
+│   └── apps-commands.md
 │
 ├── tests/
+│   └── api/
 │
 ├── pyproject.toml
 ├── uv.lock
 ├── alembic.ini
 └── .env
 
-Important: This is a conceptual structure based on the current architecture. It is not an exhaustive file listing. Keep this document synchronized with the actual repository as new modules and files are added.
+Important: This architecture is the canonical reference. Keep this document synchronized with the actual repository as new modules and files are added.
 
 Never commit .env files containing secrets or credentials.
 
@@ -660,7 +682,33 @@ The permissions actually available depend on the RBAC seed definitions.
 
 ⸻
 
-13. Database Seeding
+13. Menus Module
+
+Directory:
+
+app/modules/menus/
+
+The menus module manages hierarchical navigation menus with user role and permission access controls.
+
+Its router is registered under:
+
+/api/v1/menus
+
+Key capabilities:
+* Role and permission-based menu visibility for the current user (`/api/v1/menus/my-menus`).
+* Full menu tree management (`/api/v1/menus/tree`).
+* CRUD endpoints with cycle detection and validation.
+* Direct many-to-many role assignments (`menu_roles`) and permission assignments (`menu_permissions`).
+
+Permissions:
+* menu.read
+* menu.create
+* menu.update
+* menu.delete
+
+⸻
+
+14. Database Seeding
 
 Directory:
 

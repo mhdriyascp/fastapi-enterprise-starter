@@ -1,0 +1,33 @@
+# Version control
+.git
+.gitignore
+
+# Python artifacts
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+.pytest_cache
+.ruff_cache
+
+# Virtual environments
+.venv
+
+# Local environment — never bake secrets into the image
+.env
+
+# Dev/editor files
+.python-version
+docs/
+scripts/
+tests/
+*.md
+
+# IDE & AI Assistant rules
+.idea
+.vscode
+.cursor
+.cursorrules
+.github
+
