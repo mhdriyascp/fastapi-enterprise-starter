@@ -18,8 +18,13 @@ import {
   ArrowRight,
   DollarSign,
   Building2,
+  Trash2,
+  Loader2,
+  ExternalLink,
 } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
+import { apiFetch } from '@/lib/api-client';
+import { NotificationItem, PagedResponse, UnreadCountResponse } from '@/lib/types';
 
 export interface HeaderProps {
   /** Optional handler triggered when the mobile navigation hamburger icon is clicked */
@@ -39,15 +44,24 @@ interface RouteSuggestion {
 }
 
 /**
- * Enterprise dummy notification item.
+ * Formats a UTC ISO timestamp into a human-friendly relative time string.
  */
-interface NotificationItem {
-  id: string;
-  title: string;
-  message: string;
-  time: string;
-  unread: boolean;
-  type: 'deal' | 'security' | 'tenant' | 'system';
+function formatRelativeTime(dateStr: string): string {
+  try {
+    const now = new Date();
+    const date = new Date(dateStr);
+    const diffSecs = Math.max(0, Math.floor((now.getTime() - date.getTime()) / 1000));
+    if (diffSecs < 60) return 'Just now';
+    const diffMins = Math.floor(diffSecs / 60);
+    if (diffMins < 60) return `${diffMins}m ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString();
+  } catch {
+    return 'Recently';
+  }
 }
 
 const SYSTEM_ROUTES: RouteSuggestion[] = [
@@ -116,55 +130,12 @@ const SYSTEM_ROUTES: RouteSuggestion[] = [
     keywords: ['menus', 'navigation', 'sidebar', 'hierarchy', 'tree', 'order', 'sort'],
   },
   {
-    id: 'r-profile',
-    title: 'Account Settings & Credentials',
-    description: 'User profile details, credentials password rotation, and theme mode',
-    path: '/profile',
+    id: 'r-notifications',
+    title: 'System Notifications & Activity Stream',
+    description: 'Centralized operational alerts, security events, deal updates, and system activities',
+    path: '/notifications',
     category: 'Settings',
-    keywords: ['profile', 'password', 'credentials', 'account', 'security', 'theme', 'dark mode'],
-  },
-];
-
-const INITIAL_NOTIFICATIONS: NotificationItem[] = [
-  {
-    id: 'notif-1',
-    title: 'Enterprise Contract Finalized',
-    message: 'Acme International Corporation signed a $45,000 ARR multi-year SLA.',
-    time: '12m ago',
-    unread: true,
-    type: 'deal',
-  },
-  {
-    id: 'notif-2',
-    title: 'Role Permissions Updated',
-    message: 'Security policy updated: 4 permissions granted to "Regional_Manager".',
-    time: '45m ago',
-    unread: true,
-    type: 'security',
-  },
-  {
-    id: 'notif-3',
-    title: 'New Tenant Partition Verified',
-    message: 'Apex Global Holdings (ORG-002) database partition verified healthy.',
-    time: '2h ago',
-    unread: true,
-    type: 'tenant',
-  },
-  {
-    id: 'notif-4',
-    title: 'Database Defragmentation Complete',
-    message: 'Automated index maintenance completed with zero query degradation.',
-    time: '6h ago',
-    unread: false,
-    type: 'system',
-  },
-  {
-    id: 'notif-5',
-    title: 'Q4 Billing Batch Auto-Reconciled',
-    message: 'Zoho Books auto-settlement completed successfully for 48 accounts.',
-    time: '1d ago',
-    unread: false,
-    type: 'deal',
+    keywords: ['notifications', 'alerts', 'activity', 'events', 'feed', 'stream', 'inbox', 'messages'],
   },
 ];
 
@@ -186,13 +157,18 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [selectedSearchIndex, setSelectedSearchIndex] = useState(0);
 
-  // Notifications State
+  // Dynamic Notifications State
   const [showNotifications, setShowNotifications] = useState(false);
-  const [notifications, setNotifications] = useState<NotificationItem[]>(INITIAL_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [unreadCount, setUnreadCount] = useState<number>(0);
+  const [isLoadingNotifications, setIsLoadingNotifications] = useState<boolean>(false);
   const [notifFilter, setNotifFilter] = useState<'all' | 'unread'>('all');
 
   // User Menu State
   const [showUserMenu, setShowUserMenu] = useState(false);
+
+  // System Status Hover Tooltip State
+  const [showStatusTooltip, setShowStatusTooltip] = useState(false);
 
   // Element Refs
   const searchContainerRef = useRef<HTMLDivElement>(null);
@@ -201,13 +177,10 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
   const userMenuRef = useRef<HTMLDivElement>(null);
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Unread notifications count
-  const unreadCount = useMemo(() => notifications.filter((n) => n.unread).length, [notifications]);
-
   // Filtered notifications
   const filteredNotifications = useMemo(() => {
     if (notifFilter === 'unread') {
-      return notifications.filter((n) => n.unread);
+      return notifications.filter((n) => !n.is_read);
     }
     return notifications;
   }, [notifications, notifFilter]);
@@ -233,18 +206,138 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
     router.push(path);
   };
 
-  const handleMarkAllRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })));
+  // Load notifications from API (used on manual refresh and user interactions)
+  const loadNotifications = React.useCallback(async () => {
+    if (!user) return;
+    try {
+      setIsLoadingNotifications(true);
+      const res = await apiFetch<PagedResponse<NotificationItem>>('/notifications?page=1&page_size=25');
+      setNotifications(res.items);
+      const unread = res.items.filter((n) => !n.is_read).length;
+      setUnreadCount(unread);
+    } catch {
+      // Retain existing notifications on network failure
+    } finally {
+      setIsLoadingNotifications(false);
+    }
+  }, [user]);
+
+  // Initial fetch and 30s polling
+  useEffect(() => {
+    if (!user) return;
+
+    let isMounted = true;
+    const fetchInitial = async () => {
+      try {
+        const [notifRes, countRes] = await Promise.allSettled([
+          apiFetch<PagedResponse<NotificationItem>>('/notifications?page=1&page_size=25'),
+          apiFetch<UnreadCountResponse>('/notifications/unread-count'),
+        ]);
+        if (isMounted) {
+          if (notifRes.status === 'fulfilled') {
+            setNotifications(notifRes.value.items);
+          }
+          if (countRes.status === 'fulfilled') {
+            setUnreadCount(countRes.value.unread_count);
+          }
+        }
+      } catch {
+        // Ignore initial load failure
+      }
+    };
+
+    void fetchInitial();
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await apiFetch<UnreadCountResponse>('/notifications/unread-count');
+        if (isMounted) {
+          setUnreadCount(res.unread_count);
+        }
+      } catch {
+        // Ignore background poll errors
+      }
+    }, 30000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [user]);
+
+  const handleToggleNotifications = () => {
+    const nextOpen = !showNotifications;
+    setShowNotifications(nextOpen);
+    if (nextOpen) {
+      loadNotifications();
+    }
   };
 
-  const handleToggleRead = (id: string) => {
+  const handleMarkAllRead = async () => {
+    // Optimistic UI update
+    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    setUnreadCount(0);
+    try {
+      await apiFetch<{ updated: number }>('/notifications/mark-all-read', {
+        method: 'POST',
+      });
+    } catch {
+      loadNotifications();
+    }
+  };
+
+  const handleToggleRead = async (id: string, currentIsRead: boolean, link?: string | null) => {
+    const nextStatus = !currentIsRead;
+    // Optimistic update
     setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, unread: !n.unread } : n))
+      prev.map((n) => (n.id === id ? { ...n, is_read: nextStatus } : n))
     );
+    setUnreadCount((prev) => (nextStatus ? Math.max(0, prev - 1) : prev + 1));
+
+    try {
+      await apiFetch<NotificationItem>(`/notifications/${id}/read`, {
+        method: 'PATCH',
+        body: JSON.stringify({ is_read: nextStatus }),
+      });
+      if (link) {
+        setShowNotifications(false);
+        router.push(link);
+      }
+    } catch {
+      // Revert on error
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, is_read: currentIsRead } : n))
+      );
+      setUnreadCount((prev) => (currentIsRead ? Math.max(0, prev - 1) : prev + 1));
+    }
   };
 
-  const handleClearNotifications = () => {
+  const handleClearNotifications = async () => {
     setNotifications([]);
+    setUnreadCount(0);
+    try {
+      await apiFetch<{ deleted: number }>('/notifications/clear-all', {
+        method: 'DELETE',
+      });
+    } catch {
+      loadNotifications();
+    }
+  };
+
+  const handleDeleteNotification = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    const item = notifications.find((n) => n.id === id);
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+    if (item && !item.is_read) {
+      setUnreadCount((prev) => Math.max(0, prev - 1));
+    }
+    try {
+      await apiFetch(`/notifications/${id}`, {
+        method: 'DELETE',
+      });
+    } catch {
+      loadNotifications();
+    }
   };
 
   const handleUserMouseEnter = () => {
@@ -345,7 +438,7 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
   }
 
   return (
-    <header className="top-header" style={{ position: 'relative' }}>
+    <header className="top-header">
       {/* Left Area: Mobile Navigation Toggle & Left-Aligned Global Search */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', flex: 1, maxWidth: '440px', minWidth: 0 }}>
         {onToggleMobileSidebar && (
@@ -449,19 +542,19 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
         {/* Floating Auto-Suggestions Dropdown */}
         {isSearchOpen && searchQuery.trim() && (
           <div
-            className="glass-panel"
             style={{
               position: 'absolute',
               top: 'calc(100% + 8px)',
               left: 0,
               right: 0,
-              zIndex: 70,
-              boxShadow: 'var(--shadow-lg)',
+              zIndex: 9999,
+              backgroundColor: 'var(--bg-surface)',
+              boxShadow: '0 16px 36px -4px rgba(0, 0, 0, 0.65), 0 4px 12px rgba(0, 0, 0, 0.35)',
               padding: '0.5rem',
               borderRadius: 'var(--radius-lg)',
               maxHeight: '380px',
               overflowY: 'auto',
-              border: '1px solid var(--border-subtle)',
+              border: '1px solid var(--border-color)',
               animation: 'fadeIn 0.15s ease-out',
             }}
           >
@@ -555,7 +648,7 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
         <div ref={notificationsRef} style={{ position: 'relative' }}>
           <button
             type="button"
-            onClick={() => setShowNotifications(!showNotifications)}
+            onClick={handleToggleNotifications}
             title="Notifications & Activity Stream"
             aria-label="Notifications"
             style={{
@@ -605,7 +698,6 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
           {/* Designed Notifications Popover */}
           {showNotifications && (
             <div
-              className="glass-panel"
               style={{
                 position: 'absolute',
                 top: 'calc(100% + 10px)',
@@ -613,9 +705,10 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
                 width: '370px',
                 padding: '1rem',
                 borderRadius: 'var(--radius-lg)',
-                zIndex: 80,
-                boxShadow: 'var(--shadow-lg)',
-                border: '1px solid var(--border-subtle)',
+                zIndex: 9999,
+                backgroundColor: 'var(--bg-surface)',
+                boxShadow: '0 16px 36px -4px rgba(0, 0, 0, 0.65), 0 4px 12px rgba(0, 0, 0, 0.35)',
+                border: '1px solid var(--border-color)',
                 animation: 'fadeIn 0.15s ease-out',
               }}
             >
@@ -713,18 +806,33 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
                   paddingTop: '0.5rem',
                 }}
               >
-                {filteredNotifications.length > 0 ? (
+                {isLoadingNotifications && notifications.length === 0 ? (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '2rem 1rem',
+                      gap: '0.5rem',
+                      color: 'var(--text-muted)',
+                      fontSize: '0.8rem',
+                    }}
+                  >
+                    <Loader2 size={16} className="animate-spin" />
+                    <span>Syncing notifications...</span>
+                  </div>
+                ) : filteredNotifications.length > 0 ? (
                   filteredNotifications.map((n) => (
                     <div
                       key={n.id}
-                      onClick={() => handleToggleRead(n.id)}
+                      onClick={() => handleToggleRead(n.id, n.is_read, n.link)}
                       style={{
                         display: 'flex',
                         alignItems: 'flex-start',
                         gap: '0.75rem',
                         padding: '0.65rem',
                         borderRadius: 'var(--radius-md)',
-                        background: n.unread ? 'var(--accent-glow)' : 'transparent',
+                        background: !n.is_read ? 'var(--accent-glow)' : 'transparent',
                         cursor: 'pointer',
                         transition: 'background 0.15s ease',
                       }}
@@ -747,29 +855,59 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
                       </div>
 
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                          <span
+                            style={{
+                              fontSize: '0.8rem',
+                              fontWeight: 700,
+                              color: 'var(--text-primary)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.35rem',
+                            }}
+                          >
                             {n.title}
+                            {n.link && <ExternalLink size={11} color="var(--text-muted)" />}
                           </span>
-                          <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{n.time}</span>
+                          <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                            {formatRelativeTime(n.created_at)}
+                          </span>
                         </div>
                         <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.15rem', lineHeight: 1.4 }}>
                           {n.message}
                         </div>
                       </div>
 
-                      {n.unread && (
-                        <div
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '4px', flexShrink: 0 }}>
+                        {!n.is_read && (
+                          <div
+                            style={{
+                              width: '7px',
+                              height: '7px',
+                              borderRadius: '50%',
+                              background: 'var(--accent-primary)',
+                            }}
+                          />
+                        )}
+                        <button
+                          type="button"
+                          onClick={(e) => handleDeleteNotification(e, n.id)}
+                          title="Dismiss notification"
                           style={{
-                            width: '7px',
-                            height: '7px',
-                            borderRadius: '50%',
-                            background: 'var(--accent-primary)',
-                            marginTop: '6px',
-                            flexShrink: 0,
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'var(--text-muted)',
+                            cursor: 'pointer',
+                            padding: '2px',
+                            display: 'flex',
+                            alignItems: 'center',
                           }}
-                        />
-                      )}
+                          onMouseEnter={(e) => (e.currentTarget.style.color = '#f43f5e')}
+                          onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
                     </div>
                   ))
                 ) : (
@@ -806,11 +944,11 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
                   Clear all
                 </button>
                 <Link
-                  href="/dashboard"
+                  href="/notifications"
                   onClick={() => setShowNotifications(false)}
                   style={{ color: 'var(--accent-primary)', fontWeight: 600, textDecoration: 'none' }}
                 >
-                  View Activity Feed
+                  View All Notifications
                 </Link>
               </div>
             </div>
@@ -881,7 +1019,6 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
             {/* Hover & Click User Details Popover */}
             {showUserMenu && (
               <div
-                className="glass-panel"
                 style={{
                   position: 'absolute',
                   top: 'calc(100% + 8px)',
@@ -889,8 +1026,10 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
                   width: '280px',
                   padding: '0.85rem',
                   borderRadius: 'var(--radius-md)',
-                  zIndex: 80,
-                  boxShadow: 'var(--shadow-lg)',
+                  zIndex: 9999,
+                  backgroundColor: 'var(--bg-surface)',
+                  boxShadow: '0 16px 36px -4px rgba(0, 0, 0, 0.65), 0 4px 12px rgba(0, 0, 0, 0.35)',
+                  border: '1px solid var(--border-color)',
                   display: 'flex',
                   flexDirection: 'column',
                   gap: '0.75rem',
@@ -1085,24 +1224,168 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
           </div>
         )}
 
-        {/* Online Status Indicator (Moved to Top Right Corner) */}
+        {/* Online Status Indicator with Enterprise Hover Tooltip */}
         <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: '28px',
-            height: '28px',
-            borderRadius: '50%',
-            background: 'var(--accent-success-bg)',
-            border: '1px solid rgba(16, 185, 129, 0.25)',
-            cursor: 'default',
-            flexShrink: 0,
-          }}
-          title="System Status: Online & Operational (99.98% uptime)"
-          aria-label="System Online"
+          style={{ position: 'relative' }}
+          onMouseEnter={() => setShowStatusTooltip(true)}
+          onMouseLeave={() => setShowStatusTooltip(false)}
+          onFocus={() => setShowStatusTooltip(true)}
+          onBlur={() => setShowStatusTooltip(false)}
+          tabIndex={0}
+          aria-haspopup="true"
+          aria-expanded={showStatusTooltip}
+          id="header-status-indicator"
         >
-          <div className="pulse-dot" />
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '28px',
+              height: '28px',
+              borderRadius: '50%',
+              background: 'var(--accent-success-bg)',
+              border: showStatusTooltip
+                ? '1px solid rgba(16, 185, 129, 0.6)'
+                : '1px solid rgba(16, 185, 129, 0.25)',
+              cursor: 'pointer',
+              flexShrink: 0,
+              transition: 'var(--transition)',
+              boxShadow: showStatusTooltip
+                ? '0 0 14px rgba(16, 185, 129, 0.35)'
+                : 'none',
+            }}
+            aria-label="System Status: Online & Operational (99.98% uptime)"
+          >
+            <div className="pulse-dot" />
+          </div>
+
+          {showStatusTooltip && (
+            <div
+              role="tooltip"
+              className="card"
+              style={{
+                position: 'absolute',
+                top: 'calc(100% + 10px)',
+                right: 0,
+                width: '310px',
+                padding: '1.1rem',
+                background: 'var(--bg-card)',
+                backdropFilter: 'blur(16px)',
+                WebkitBackdropFilter: 'blur(16px)',
+                border: '1px solid rgba(16, 185, 129, 0.35)',
+                boxShadow:
+                  '0 20px 35px -10px rgba(0, 0, 0, 0.45), 0 0 1px 1px rgba(16, 185, 129, 0.25)',
+                zIndex: 1000,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.75rem',
+                animation: 'fadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1)',
+                pointerEvents: 'none',
+              }}
+            >
+              {/* Header */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  borderBottom: '1px solid var(--border-subtle)',
+                  paddingBottom: '0.65rem',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <div
+                    style={{
+                      width: '8px',
+                      height: '8px',
+                      borderRadius: '50%',
+                      background: '#10b981',
+                      boxShadow: '0 0 8px #10b981',
+                    }}
+                  />
+                  <span
+                    style={{
+                      fontSize: '0.8125rem',
+                      fontWeight: 700,
+                      color: 'var(--text-primary)',
+                    }}
+                  >
+                    System Status
+                  </span>
+                </div>
+                <span
+                  className="badge badge-success"
+                  style={{ fontSize: '0.7rem', padding: '0.15rem 0.5rem' }}
+                >
+                  Online &amp; Operational
+                </span>
+              </div>
+
+              {/* Uptime metric banner */}
+              <div
+                style={{
+                  background: 'rgba(16, 185, 129, 0.08)',
+                  border: '1px solid rgba(16, 185, 129, 0.2)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '0.5rem 0.75rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                  Rolling SLA Uptime
+                </span>
+                <span
+                  style={{
+                    fontSize: '0.85rem',
+                    fontWeight: 800,
+                    color: '#10b981',
+                    fontFamily: 'var(--font-geist-mono)',
+                  }}
+                >
+                  99.98%
+                </span>
+              </div>
+
+              {/* Service Health Breakdown */}
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.4rem',
+                  fontSize: '0.75rem',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Core API Gateway</span>
+                  <span style={{ color: '#10b981', fontWeight: 600 }}>Active (24ms)</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>PostgreSQL Cluster</span>
+                  <span style={{ color: '#10b981', fontWeight: 600 }}>Healthy (Connected)</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>RBAC Security Policy</span>
+                  <span style={{ color: '#10b981', fontWeight: 600 }}>Synchronized</span>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div
+                style={{
+                  fontSize: '0.7rem',
+                  color: 'var(--text-muted)',
+                  borderTop: '1px solid var(--border-subtle)',
+                  paddingTop: '0.5rem',
+                  textAlign: 'center',
+                }}
+              >
+                All enterprise services operating within normal parameters
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </header>

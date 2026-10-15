@@ -59,9 +59,9 @@ export default function ProfilePage() {
   return (
     <div style={{ maxWidth: '800px', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
       <div>
-        <h2 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
           Account & Profile
-        </h2>
+        </h1>
         <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
           Manage your personal details, theme preferences, and security credentials.
         </p>
@@ -100,21 +100,12 @@ export default function ProfilePage() {
 
         <div
           style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-            gap: '1rem',
             paddingTop: '1.5rem',
             borderTop: '1px solid var(--border-subtle)',
           }}
         >
           <div>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Public ID</span>
-            <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)', marginTop: '0.2rem' }}>
-              <code>{user?.public_id}</code>
-            </div>
-          </div>
-          <div>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Created At</span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Account Registered</span>
             <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)', marginTop: '0.2rem' }}>
               {user?.created_at ? new Date(user.created_at).toLocaleString() : 'N/A'}
             </div>

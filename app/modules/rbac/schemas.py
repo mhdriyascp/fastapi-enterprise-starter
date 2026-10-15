@@ -91,11 +91,8 @@ class PermissionCreate(BaseModel):
 
     @model_validator(mode="after")
     def validate_code_consistency(self):
-        expected = f"{self.resource}.{self.action}"
-        if not self.code:
-            self.code = expected
-        elif self.code != expected:
-            raise ValueError("Permission code must match 'resource.action'.")
+        expected = f"{self.resource.strip().lower()}.{self.action.strip().lower()}"
+        self.code = expected
         return self
 
 

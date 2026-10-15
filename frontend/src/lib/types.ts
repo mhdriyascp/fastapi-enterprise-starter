@@ -15,6 +15,8 @@ export interface User {
   display_name: string | null;
   /** Primary contact email address */
   email: string;
+  /** Primary phone number */
+  phone?: string | null;
   /** User account lifecycle status ('active', 'pending', 'suspended', 'disabled') */
   status: string;
   /** Timestamp when the email address was verified, or null if pending */
@@ -23,6 +25,21 @@ export interface User {
   created_at: string;
   /** UTC timestamp of the most recent profile modification */
   updated_at: string | null;
+  /** Active assigned role codes */
+  roles?: string[];
+  /** Whether user is a protected Super Administrator */
+  is_super_admin?: boolean;
+  /** Granular assigned RBAC permission codes */
+  permissions?: string[];
+}
+
+export interface UserUpdatePayload {
+  first_name?: string | null;
+  last_name?: string | null;
+  display_name?: string | null;
+  phone?: string | null;
+  status?: string | null;
+  role_codes?: string[];
 }
 
 /**
@@ -239,4 +256,137 @@ export interface PermissionUpdateInput {
   description?: string | null;
   is_active?: boolean;
 }
+
+/**
+ * Platform notification entity.
+ * Mirrored from FastAPI Pydantic schema: app/modules/notifications/schemas.py (NotificationResponse).
+ */
+export interface NotificationItem {
+  /** Internal UUID primary key */
+  id: string;
+  /** Targeted user UUID or null for system-wide broadcast */
+  user_id?: string | null;
+  /** Subject/title of notification */
+  title: string;
+  /** Detailed content body */
+  message: string;
+  /** Event taxonomy classification */
+  type: 'deal' | 'security' | 'tenant' | 'system';
+  /** Optional deep-link destination URL */
+  link?: string | null;
+  /** Read status flag */
+  is_read: boolean;
+  /** UTC timestamp when recipient marked notification as read */
+  read_at?: string | null;
+  /** UTC timestamp when notification was created */
+  created_at: string;
+  /** UTC timestamp of last update */
+  updated_at?: string | null;
+}
+
+export interface UnreadCountResponse {
+  unread_count: number;
+}
+
+export interface NotificationCreateInput {
+  title: string;
+  message: string;
+  type?: 'deal' | 'security' | 'tenant' | 'system';
+  link?: string | null;
+  user_id?: string | null;
+}
+
+export interface NotificationUpdateInput {
+  is_read: boolean;
+}
+
+/**
+ * Standard pagination envelope returned by /api/v1/masters/* collection endpoints.
+ */
+export interface MasterListResponse<T> {
+  items: T[];
+  total: number;
+  offset: number;
+  limit: number;
+}
+
+export interface MasterCountry {
+  public_id: string;
+  code: string;
+  iso3_code?: string | null;
+  name: string;
+  phone_code?: string | null;
+  is_active: boolean;
+}
+
+export interface MasterState {
+  public_id: string;
+  country_id: number;
+  code?: string | null;
+  name: string;
+  is_active: boolean;
+}
+
+export interface MasterCity {
+  public_id: string;
+  country_id: number;
+  state_id?: number | null;
+  name: string;
+  is_active: boolean;
+}
+
+export interface MasterCurrency {
+  public_id: string;
+  code: string;
+  name: string;
+  symbol?: string | null;
+  decimal_places: number;
+  is_active: boolean;
+}
+
+export interface MasterTimeZone {
+  public_id: string;
+  name: string;
+  label: string;
+  utc_offset?: string | null;
+  is_active: boolean;
+}
+
+export interface MasterLanguage {
+  public_id: string;
+  code: string;
+  name: string;
+  native_name?: string | null;
+  is_active: boolean;
+}
+
+export interface MasterIndustry {
+  public_id: string;
+  code: string;
+  name: string;
+  description?: string | null;
+  is_active: boolean;
+}
+
+export interface MasterUnitOfMeasure {
+  public_id: string;
+  code: string;
+  name: string;
+  symbol?: string | null;
+  category?: string | null;
+  is_active: boolean;
+}
+
+export interface MasterTypeEntity {
+  public_id: string;
+  code: string;
+  name: string;
+  description?: string | null;
+  is_active: boolean;
+}
+
+export type MasterAddressType = MasterTypeEntity;
+export type MasterCommunicationType = MasterTypeEntity;
+export type MasterDocumentType = MasterTypeEntity;
+export type MasterIdentificationType = MasterTypeEntity;
 

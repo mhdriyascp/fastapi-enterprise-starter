@@ -19,6 +19,9 @@ import {
   Layers,
   Globe,
   Database,
+  Coins,
+  MapPin,
+  Clock,
   ExternalLink,
   Sparkles,
   X,
@@ -36,8 +39,21 @@ function normalizeRoute(rawRoute: string | null | undefined): string {
   if (clean === '/access-control') return '/rbac';
   if (clean === '/access-control/roles') return '/rbac?tab=roles';
   if (clean === '/access-control/permissions') return '/rbac?tab=permissions';
+  if (clean === '/access-control/matrix' || clean === '/access-control/access-matrix') return '/rbac?tab=matrix';
   if (clean === '/organizations/new') return '/organizations';
-  if (clean === '/masters' || clean.startsWith('/masters/')) return '/';
+  if (clean === '/masters') return '/masters';
+  if (clean === '/masters/countries' || clean === 'countries') return '/masters?tab=countries';
+  if (clean === '/masters/states' || clean === 'states') return '/masters?tab=states';
+  if (clean === '/masters/cities' || clean === 'cities') return '/masters?tab=cities';
+  if (clean === '/masters/currencies' || clean === 'currencies') return '/masters?tab=currencies';
+  if (clean === '/masters/time-zones' || clean === 'time-zones') return '/masters?tab=time-zones';
+  if (clean === '/masters/languages' || clean === 'languages') return '/masters?tab=languages';
+  if (clean === '/masters/industries' || clean === 'industries') return '/masters?tab=industries';
+  if (clean === '/masters/address-types' || clean === 'address-types') return '/masters?tab=address-types';
+  if (clean === '/masters/communication-types' || clean === 'communication-types') return '/masters?tab=communication-types';
+  if (clean === '/masters/document-types' || clean === 'document-types') return '/masters?tab=document-types';
+  if (clean === '/masters/identification-types' || clean === 'identification-types') return '/masters?tab=identification-types';
+  if (clean === '/masters/units-of-measure' || clean === 'units-of-measure') return '/masters?tab=units-of-measure';
   return clean;
 }
 
@@ -177,6 +193,9 @@ function getIconComponent(iconName: string | null): React.ReactNode {
   if (normalized.includes('setting')) return <Settings size={18} />;
   if (normalized.includes('globe') || normalized.includes('public')) return <Globe size={18} />;
   if (normalized.includes('data') || normalized.includes('master')) return <Database size={18} />;
+  if (normalized.includes('coin') || normalized.includes('curr') || normalized.includes('money')) return <Coins size={18} />;
+  if (normalized.includes('pin') || normalized.includes('map') || normalized.includes('state')) return <MapPin size={18} />;
+  if (normalized.includes('time') || normalized.includes('clock')) return <Clock size={18} />;
   return <Layers size={18} />;
 }
 
@@ -219,13 +238,18 @@ function isRouteActive(
     const itemParams = new URLSearchParams(routeQuery);
     const expectedTab = itemParams.get('tab');
     if (expectedTab) {
-      const actualTab = currentTab || 'roles';
+      const defaultTab = routePath === '/rbac' ? 'roles' : (routePath === '/masters' ? 'countries' : '');
+      const actualTab = currentTab || defaultTab;
       return actualTab === expectedTab;
     }
   } else {
     if (routePath === '/rbac') {
       const actualTab = currentTab || 'roles';
       return actualTab === 'roles';
+    }
+    if (routePath === '/masters') {
+      const actualTab = currentTab || 'countries';
+      return actualTab === 'countries';
     }
   }
 

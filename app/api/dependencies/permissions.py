@@ -27,6 +27,21 @@ def require_permission(permission_code: str):
             Depends(get_db_session),
         ],
     ) -> User:
+        # 1. Super Administrator priority check: super_admin has universal access
+        super_admin_query = (
+            select(UserRole.id)
+            .join(Role, Role.id == UserRole.role_id)
+            .where(
+                UserRole.user_id == current_user.id,
+                Role.code.in_(("super_admin", "superadmin")),
+                Role.is_active.is_(True),
+            )
+        )
+        is_super = (await db.execute(select(exists(super_admin_query)))).scalar_one()
+        if is_super:
+            return current_user
+
+        # 2. Granular RBAC Role-Permission assignment check
         permission_exists = (
             select(Permission.id)
             .join(
@@ -50,13 +65,12 @@ def require_permission(permission_code: str):
         )
 
         result = await db.execute(select(exists(permission_exists)))
-
         has_permission = result.scalar_one()
 
         if not has_permission:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You do not have permission to perform this action.",
+                detail=f"You do not have the required permission ({permission_code}) to perform this action.",
             )
 
         return current_user

@@ -168,24 +168,25 @@ export default function DashboardOverviewPage() {
               Executive Workspace • Account: {user?.email}
             </span>
           </div>
-          <h2
+          <h1
             style={{
               fontSize: '1.75rem',
               fontWeight: 800,
               letterSpacing: '-0.03em',
               color: 'var(--text-primary)',
+              margin: '0 0 0.25rem 0',
             }}
           >
             Welcome back, {user?.first_name || user?.display_name || 'Executive'}
-          </h2>
+          </h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
             Live portfolio analytics across client accounts, revenue pipeline, and team operations.
           </p>
         </div>
 
         {/* Action Controls & Date Period Selector (Zoho Books & Salesforce style) */}
-        <div className="dashboard-toolbar-actions" style={{ position: 'relative', zIndex: 25 }}>
-          <div style={{ width: '230px', minWidth: '190px', position: 'relative', zIndex: 30 }}>
+        <div className="dashboard-toolbar-actions">
+          <div style={{ width: '230px', minWidth: '190px' }}>
             <SearchableSelect
               options={[
                 { value: 'This Fiscal Quarter', label: 'This Fiscal Quarter (Q4)', sublabel: 'Oct - Dec 2026' },
@@ -495,7 +496,9 @@ export default function DashboardOverviewPage() {
                           </div>
                           <div>
                             <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{org.name}</div>
-                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>ID: #{org.id}</div>
+                            {org.email && (
+                              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{org.email}</div>
+                            )}
                           </div>
                         </div>
                       </td>

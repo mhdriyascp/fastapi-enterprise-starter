@@ -93,7 +93,6 @@ export function ThemeToggle({ variant = 'segmented', className = '' }: ThemeTogg
 
         {isOpen && (
           <div
-            className="glass-panel"
             style={{
               position: 'absolute',
               top: 'calc(100% + 6px)',
@@ -101,8 +100,10 @@ export function ThemeToggle({ variant = 'segmented', className = '' }: ThemeTogg
               minWidth: '150px',
               padding: '0.35rem',
               borderRadius: 'var(--radius-md)',
-              zIndex: 70,
-              boxShadow: 'var(--shadow-lg)',
+              zIndex: 9999,
+              backgroundColor: 'var(--bg-surface)',
+              border: '1px solid var(--border-color)',
+              boxShadow: '0 16px 36px -4px rgba(0, 0, 0, 0.65), 0 4px 12px rgba(0, 0, 0, 0.35)',
               display: 'flex',
               flexDirection: 'column',
               gap: '2px',

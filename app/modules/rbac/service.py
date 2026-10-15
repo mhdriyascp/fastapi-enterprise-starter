@@ -1,7 +1,7 @@
 import re
 from uuid import UUID
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import case, delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -96,17 +96,27 @@ class RoleService:
     ) -> Role:
         if data.code and data.code.strip():
             code = data.code.strip().lower()
+            result = await self.db.execute(select(Role.id).where(Role.code == code))
+            if result.scalar_one_or_none() is not None:
+                raise RoleAlreadyExistsError("A role with this code already exists.")
         else:
-            code = re.sub(r"[^a-z0-9_]+", "_", data.name.strip().lower()).strip("_")[
-                :50
-            ]
-            if not code or not code[0].isalpha():
-                code = f"role_{code}"[:50]
+            base_code = re.sub(r"[^a-z0-9_]+", "_", data.name.strip().lower()).strip(
+                "_"
+            )[:50]
+            if not base_code or not base_code[0].isalpha():
+                base_code = f"role_{base_code}"[:50]
 
-        result = await self.db.execute(select(Role.id).where(Role.code == code))
-
-        if result.scalar_one_or_none() is not None:
-            raise RoleAlreadyExistsError("A role with this code already exists.")
+            candidate = base_code
+            counter = 1
+            while True:
+                result = await self.db.execute(
+                    select(Role.id).where(Role.code == candidate)
+                )
+                if result.scalar_one_or_none() is None:
+                    code = candidate
+                    break
+                candidate = f"{base_code[:44]}_{counter}"
+                counter += 1
 
         role = Role(
             name=data.name,
@@ -137,9 +147,16 @@ class RoleService:
         total_result = await self.db.execute(select(func.count()).select_from(Role))
         total = total_result.scalar_one()
 
+        role_priority = case(
+            (Role.code.in_(("super_admin", "superadmin")), 0),
+            (Role.code.in_(("admin", "administrator")), 1),
+            (Role.is_system.is_(True), 2),
+            else_=3,
+        )
+
         result = await self.db.execute(
             select(Role)
-            .order_by(Role.name, Role.id)
+            .order_by(role_priority, Role.name.asc(), Role.id.asc())
             .offset((page - 1) * page_size)
             .limit(page_size)
         )
@@ -255,9 +272,9 @@ class RoleService:
         """
         role = await self.get_role(role_id)
 
-        if role.is_system:
+        if role.code in ("super_admin", "superadmin"):
             raise SystemRoleError(
-                "Permissions assigned to system roles cannot be modified."
+                "Permissions assigned to the Super Administrator role are fixed and cannot be modified."
             )
 
         if not role.is_active:
@@ -319,9 +336,9 @@ class RoleService:
         """
         role = await self.get_role(role_id)
 
-        if role.is_system:
+        if role.code in ("super_admin", "superadmin"):
             raise SystemRoleError(
-                "Permissions assigned to system roles cannot be modified."
+                "Permissions assigned to the Super Administrator role are fixed and cannot be modified."
             )
 
         if not role.is_active:
@@ -409,9 +426,9 @@ class RoleService:
         """
         role = await self.get_role(role_id)
 
-        if role.is_system:
+        if role.code in ("super_admin", "superadmin"):
             raise SystemRoleError(
-                "Permissions assigned to system roles cannot be modified."
+                "Permissions assigned to the Super Administrator role are fixed and cannot be modified."
             )
 
         result = await self.db.execute(

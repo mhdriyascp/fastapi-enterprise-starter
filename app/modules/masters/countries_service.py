@@ -89,7 +89,7 @@ async def update_country(
     public_id: UUID,
     payload: CountryUpdate,
 ) -> Country:
-    country = await get_country(db, public_id)
+    country = await get_country(db, public_id, include_inactive=True)
 
     changes = payload.model_dump(exclude_unset=True)
 

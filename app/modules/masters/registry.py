@@ -1,5 +1,6 @@
 from app.infrastructure.database.models.masters import (
     AddressType,
+    Brand,
     CommunicationType,
     Currency,
     DocumentType,
@@ -9,12 +10,14 @@ from app.infrastructure.database.models.masters import (
     TimeZone,
     UnitOfMeasure,
 )
+from app.infrastructure.database.models.masters.tax import Tax
 from app.modules.masters.common.crud_router import create_master_router
 from app.modules.masters.schemas.address_type import (
     AddressTypeCreate,
     AddressTypeResponse,
     AddressTypeUpdate,
 )
+from app.modules.masters.schemas.brand import BrandCreate, BrandResponse, BrandUpdate
 from app.modules.masters.schemas.communication_type import (
     CommunicationTypeCreate,
     CommunicationTypeResponse,
@@ -44,6 +47,11 @@ from app.modules.masters.schemas.language import (
     LanguageCreate,
     LanguageResponse,
     LanguageUpdate,
+)
+from app.modules.masters.schemas.tax import (
+    TaxCreate,
+    TaxResponse,
+    TaxUpdate,
 )
 from app.modules.masters.schemas.time_zone import (
     TimeZoneCreate,
@@ -135,4 +143,22 @@ unit_of_measure_router = create_master_router(
     response_schema=UnitOfMeasureResponse,
     prefix="/masters/units-of-measure",
     tag="Master Data - Units of Measure",
+)
+
+tax_router = create_master_router(
+    model=Tax,
+    create_schema=TaxCreate,
+    update_schema=TaxUpdate,
+    response_schema=TaxResponse,
+    prefix="/masters/taxes",
+    tag="Master Data - Taxes",
+)
+
+brand_router = create_master_router(
+    model=Brand,
+    create_schema=BrandCreate,
+    update_schema=BrandUpdate,
+    response_schema=BrandResponse,
+    prefix="/masters/brands",
+    tag="Master Data - Brands",
 )

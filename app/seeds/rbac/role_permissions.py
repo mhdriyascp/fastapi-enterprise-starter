@@ -5,53 +5,89 @@ from app.modules.rbac.models import Permission, Role, RolePermission
 
 ROLE_PERMISSION_MAP: dict[str, tuple[str, ...]] = {
     "super_admin": (
-        # Role permissions.
+        # Roles & Permissions
         "role.read",
         "role.create",
         "role.update",
         "role.delete",
-        # Permission management.
         "permission.read",
         "permission.create",
         "permission.update",
         "permission.delete",
-        # Organization permissions.
-        "organization.create",
+        # User management
+        "user.read",
+        "user.create",
+        "user.update",
+        "user.delete",
+        # Organizations
         "organization.read",
+        "organization.create",
         "organization.update",
-        # Master data permissions.
+        "organization.delete",
+        # Master data
         "masters:create",
         "masters:read",
         "masters:update",
         "masters:delete",
-        # Menu permissions.
+        # Navigation menus
         "menu.read",
         "menu.create",
         "menu.update",
         "menu.delete",
+        # Notifications
+        "notification.read",
+        "notification.create",
+        "notification.update",
+        "notification.delete",
     ),
     "admin": (
+        # Roles & Permissions (Read/Create/Update non-system roles)
         "role.read",
         "role.create",
         "role.update",
         "permission.read",
+        # User management
+        "user.read",
+        "user.create",
+        "user.update",
+        "user.delete",
+        # Organizations
         "organization.read",
-        # Master data permissions.
+        "organization.create",
+        "organization.update",
+        "organization.delete",
+        # Master data
         "masters:create",
         "masters:read",
         "masters:update",
         "masters:delete",
-        # Menu permissions.
+        # Navigation menus
         "menu.read",
         "menu.create",
         "menu.update",
+        "menu.delete",
+        # Notifications
+        "notification.read",
+        "notification.create",
+        "notification.update",
+        "notification.delete",
     ),
     "sales_manager": (
         "organization.read",
+        "organization.create",
+        "organization.update",
         "masters:read",
+        "notification.read",
     ),
-    "sales_rep": (),
-    "support_agent": ("masters:read",),
+    "sales_rep": (
+        "organization.read",
+        "masters:read",
+        "notification.read",
+    ),
+    "support_agent": (
+        "masters:read",
+        "notification.read",
+    ),
 }
 
 

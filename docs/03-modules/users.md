@@ -35,17 +35,33 @@ The User module encapsulates identity profiles, credentials, state management, a
 
 ## API Endpoints (`/api/v1/users`)
 
-| Method | Endpoint | Summary | Response | Shared in v2 Doc? |
-|---|---|---|---|---|
-| `GET` | `/api/v1/users` | List users with pagination | `PagedResponse[UserResponse]` | Yes |
-| `GET` | `/api/v1/users/{user_id}` | Get user details by ID | `UserResponse` | Yes |
-| `PATCH` | `/api/v1/users/{user_id}` | Update user profile | `UserResponse` | Yes |
+| Method | Endpoint | Required Permission | Summary | Response | Shared in v2 Doc? |
+|---|---|---|---|---|---|
+| `GET` | `/api/v1/users` | `user.read` | List users with pagination, enriched roles, and permissions | `PagedResponse[UserResponse]` | Yes |
+| `GET` | `/api/v1/users/{user_id}` | `user.read` | Get user details by ID with assigned roles and permissions | `UserResponse` | Yes |
+| `PATCH` | `/api/v1/users/{user_id}` | `user.update` | Update profile, status, and assigned roles | `UserResponse` | Yes |
+| `POST` | `/api/v1/users/{user_id}/toggle-status` | `user.update` | Toggle user status (active <-> suspended) | `UserResponse` | Yes |
+| `DELETE` | `/api/v1/users/{user_id}` | `user.delete` | Soft-delete user account (Super Admin protected) | `204 No Content` | Yes |
+
+---
+
+## Super Administrator Governance & Security Rules
+
+1. **Super Administrator Protection**:
+   - Any user account with the `super_admin` role or configured as `seed_super_admin_email` is protected.
+   - Non-superadmin operators cannot modify (`PATCH`), toggle status (`POST /toggle-status`), or delete (`DELETE`) a Super Administrator account. Doing so is rejected with `403 Forbidden`.
+   - Only another authenticated Super Administrator can modify or delete a Super Administrator account.
+2. **Role Assignment Restrictions**:
+   - The `super_admin` role can only be granted by another Super Administrator. Attempts by standard admins to assign `super_admin` are rejected with `403 Forbidden`.
+3. **Self-Governance Safety**:
+   - Operators cannot delete their own account (`400 Bad Request`).
+   - Operators cannot suspend their own active account (`400 Bad Request`).
 
 ---
 
 ## Pydantic Schemas
 
 - **`UserCreate`**: Validates registration requests, ensuring `email` format and minimum password complexity.
-- **`UserUpdate`**: Allows partial updates for `first_name`, `last_name`, `display_name`, and `phone`.
-- **`UserResponse`**: Safe serialization format returning `id`, `public_id`, `email`, `first_name`, `last_name`, `display_name`, `status`, and timestamps. **Never exposes `password_hash`**.
+- **`UserUpdate`**: Allows updates for `first_name`, `last_name`, `display_name`, `phone`, `status`, and `role_codes`.
+- **`UserResponse`**: Safe serialization format returning `id`, `public_id`, `email`, `phone`, `first_name`, `last_name`, `display_name`, `status`, `roles`, `is_super_admin`, and timestamps. **Never exposes `password_hash`**.
 - **`ChangePasswordRequest`**: Requires `current_password` and `new_password`.

@@ -9,6 +9,7 @@ from app.api.v1.auth.router import router as auth_router
 from app.api.v1.mobile.router import router as mobile_router
 from app.api.v1.public.router import router as public_router
 from app.infrastructure.database.session import get_db_session
+from app.modules.addresses.router import router as addresses_router
 from app.modules.masters.cities_router import router as cities_router
 from app.modules.masters.countries_router import router as countries_router
 from app.modules.masters.registry import (
@@ -19,11 +20,14 @@ from app.modules.masters.registry import (
     identification_type_router,
     industry_router,
     language_router,
+    tax_router,
     time_zone_router,
     unit_of_measure_router,
+    brand_router,
 )
 from app.modules.masters.states_router import router as states_router
 from app.modules.menus.router import router as menus_router
+from app.modules.notifications.router import router as notifications_router
 from app.modules.organizations.router import router as organizations_router
 from app.modules.rbac.permissions_router import permissions_router
 from app.modules.rbac.role_permissions_router import role_permissions_router
@@ -68,17 +72,24 @@ router.include_router(menus_router)
 # Organization routes.
 router.include_router(organizations_router)
 
+# Notification routes.
+router.include_router(notifications_router)
+
 # Master Data routes.
 router.include_router(countries_router)
 router.include_router(currency_router)
 router.include_router(states_router)
 router.include_router(cities_router)
-
 router.include_router(address_type_router)
 router.include_router(communication_type_router)
 router.include_router(document_type_router)
 router.include_router(identification_type_router)
 router.include_router(industry_router)
 router.include_router(language_router)
+router.include_router(tax_router)
 router.include_router(time_zone_router)
 router.include_router(unit_of_measure_router)
+router.include_router(brand_router)
+router.include_router(addresses_router)
+
+

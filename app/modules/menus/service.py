@@ -98,18 +98,27 @@ class MenuService:
         """Creates a new menu item with optional parent, roles, and permissions."""
         if data.code and data.code.strip():
             clean_code = data.code.strip().lower()
+            existing = await self.get_menu_by_code(clean_code)
+            if existing:
+                raise MenuAlreadyExistsError(
+                    f"Menu with code '{clean_code}' already exists."
+                )
         else:
-            clean_code = re.sub(r"[^a-z0-9_]+", "_", data.title.strip().lower()).strip(
+            base_code = re.sub(r"[^a-z0-9_]+", "_", data.title.strip().lower()).strip(
                 "_"
             )[:50]
-            if not clean_code:
-                clean_code = "menu_item"
+            if not base_code:
+                base_code = "menu_item"
 
-        existing = await self.get_menu_by_code(clean_code)
-        if existing:
-            raise MenuAlreadyExistsError(
-                f"Menu with code '{clean_code}' already exists."
-            )
+            candidate = base_code
+            counter = 1
+            while True:
+                existing = await self.get_menu_by_code(candidate)
+                if not existing:
+                    clean_code = candidate
+                    break
+                candidate = f"{base_code[:44]}_{counter}"
+                counter += 1
 
         if data.parent_id:
             parent = await self.get_menu_by_id(data.parent_id)

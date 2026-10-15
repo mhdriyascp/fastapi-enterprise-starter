@@ -28,8 +28,6 @@ import {
   AlertCircle,
   Loader2,
   Eye,
-  Copy,
-  Check,
 } from 'lucide-react';
 
 /**
@@ -66,7 +64,6 @@ export default function MenusPage() {
   const [modalMode, setModalMode] = useState<'create' | 'edit' | null>(null);
   const [selectedMenu, setSelectedMenu] = useState<MenuItem | null>(null);
   const [viewingMenu, setViewingMenu] = useState<MenuItem | null>(null);
-  const [copiedId, setCopiedId] = useState<boolean>(false);
   const [deleteCandidate, setDeleteCandidate] = useState<MenuItem | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
@@ -92,15 +89,6 @@ export default function MenusPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
-
-  const handleCopyId = (id: string) => {
-    if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      navigator.clipboard.writeText(id);
-      setCopiedId(true);
-      setTimeout(() => setCopiedId(false), 2000);
-      toast.info('Menu ID copied to clipboard');
-    }
-  };
 
   // Flatten tree into flat array for parent dropdown and table
   function flattenTree(items: MenuItem[]): MenuItem[] {
@@ -521,9 +509,9 @@ export default function MenusPage() {
         }}
       >
         <div>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
             RBAC Navigation Menus
-          </h2>
+          </h1>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
             Configure dynamic enterprise navigation structure, route permissions, and role hierarchy.
           </p>
@@ -758,28 +746,16 @@ export default function MenusPage() {
       {/* Individual Menu Item View Modal */}
       {viewingMenu && (
         <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0, 0, 0, 0.65)',
-            backdropFilter: 'blur(8px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '1.5rem',
-            zIndex: 100,
-          }}
+          className="modal-backdrop"
           onClick={(e) => {
             if (e.target === e.currentTarget) setViewingMenu(null);
           }}
         >
           <div
-            className="glass-panel"
+            className="modal-dialog glass-panel"
             style={{
-              width: '100%',
-              maxWidth: '620px',
+              maxWidth: '680px',
               padding: '2rem',
-              boxShadow: 'var(--shadow-lg)',
               borderRadius: 'var(--radius-xl)',
               maxHeight: '90vh',
               overflowY: 'auto',
@@ -840,92 +816,83 @@ export default function MenusPage() {
               </button>
             </div>
 
-            {/* Structured Details Sections */}
+            {/* Formatted Key-Value Tables */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-              {/* Navigation Route & Hierarchy */}
-              <div
-                style={{
-                  background: 'var(--bg-tertiary)',
-                  padding: '1.2rem',
-                  borderRadius: 'var(--radius-lg)',
-                  border: '1px solid var(--border-color)',
-                }}
-              >
-                <div style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
-                  Navigation Route & Hierarchy
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
-                  <div>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>Destination Path</span>
-                    {viewingMenu.path || viewingMenu.route ? (
-                      <code style={{ fontSize: '0.85rem', color: 'var(--accent-primary)', display: 'block', marginTop: '0.25rem' }}>
-                        {viewingMenu.path || viewingMenu.route}
-                      </code>
-                    ) : (
-                      <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Folder group (no route)</span>
-                    )}
-                  </div>
-                  <div>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>Parent Navigation Item</span>
-                    <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', display: 'block', marginTop: '0.25rem' }}>
+              {/* Section 1: Navigation Hierarchy & Routing */}
+              <div className="detail-table-section-title">
+                <Route size={14} color="var(--accent-primary)" />
+                <span>Navigation Route &amp; Hierarchy</span>
+              </div>
+              <table className="detail-spec-table">
+                <tbody>
+                  <tr>
+                    <th>Title &amp; Navigation Label</th>
+                    <td style={{ fontWeight: 600 }}>{viewingMenu.title}</td>
+                  </tr>
+                  <tr>
+                    <th>Destination Path</th>
+                    <td>
+                      {viewingMenu.path || viewingMenu.route ? (
+                        <code style={{ fontSize: '0.85rem', color: 'var(--accent-primary)' }}>
+                          {viewingMenu.path || viewingMenu.route}
+                        </code>
+                      ) : (
+                        <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Folder group (no route)</span>
+                      )}
+                    </td>
+                  </tr>
+                  <tr>
+                    <th>Parent Navigation Item</th>
+                    <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
                       {viewingMenu.parent_id
                         ? flatList.find((p) => p.id === viewingMenu.parent_id)?.title || 'Parent Menu'
                         : 'Root / Top-Level Item'}
-                    </span>
-                  </div>
-                  <div>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>Display Sort Order</span>
-                    <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginTop: '0.25rem' }}>
-                      {viewingMenu.sort_order ?? viewingMenu.order_no ?? 0}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* System Identifiers */}
-              <div
-                style={{
-                  background: 'var(--bg-tertiary)',
-                  padding: '1.2rem',
-                  borderRadius: 'var(--radius-lg)',
-                  border: '1px solid var(--border-color)',
-                }}
-              >
-                <div style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
-                  System Identifiers & State
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
-                  <div>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>Unique Code</span>
-                    <span className="badge badge-neutral" style={{ fontFamily: 'monospace', marginTop: '0.25rem' }}>
-                      {viewingMenu.code}
-                    </span>
-                  </div>
-                  <div>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>Visibility</span>
-                    <span style={{ fontWeight: 600, color: viewingMenu.is_active ? '#22c55e' : '#ef4444', fontSize: '0.85rem', display: 'block', marginTop: '0.25rem' }}>
-                      {viewingMenu.is_active ? 'Visible in sidebar' : 'Hidden / Disabled'}
-                    </span>
-                  </div>
-                  <div>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>Menu Item ID</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.2rem' }}>
-                      <code style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                        {viewingMenu.id}
+                    </td>
+                  </tr>
+                  <tr>
+                    <th>Display Sort Order</th>
+                    <td>
+                      <span className="badge badge-neutral">
+                        #{viewingMenu.sort_order ?? viewingMenu.order_no ?? 0}
+                      </span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <th>Icon Token</th>
+                    <td>
+                      <code style={{ color: 'var(--accent-primary)', fontSize: '0.825rem' }}>
+                        {viewingMenu.icon || 'layers'}
                       </code>
-                      <button
-                        type="button"
-                        onClick={() => handleCopyId(viewingMenu.id)}
-                        className="btn btn-secondary"
-                        style={{ padding: '0.2rem 0.4rem', height: '22px' }}
-                        title="Copy UUID"
-                      >
-                        {copiedId ? <Check size={11} color="#22c55e" /> : <Copy size={11} />}
-                      </button>
-                    </div>
-                  </div>
-                </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+
+              {/* Section 2: System Identifiers & Access State */}
+              <div className="detail-table-section-title">
+                <Shield size={14} color="var(--accent-primary)" />
+                <span>System Identifiers &amp; Access State</span>
               </div>
+              <table className="detail-spec-table">
+                <tbody>
+                  <tr>
+                    <th>System Identifier Code</th>
+                    <td>
+                      <span className="badge badge-neutral" style={{ fontFamily: 'monospace' }}>
+                        {viewingMenu.code}
+                      </span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <th>Navigation Visibility</th>
+                    <td>
+                      <span style={{ fontWeight: 600, color: viewingMenu.is_active ? '#22c55e' : '#ef4444', fontSize: '0.85rem' }}>
+                        {viewingMenu.is_active ? 'Active / Visible in Sidebar' : 'Hidden / Inactive'}
+                      </span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
 
             {/* Modal Actions Footer */}
@@ -980,23 +947,10 @@ export default function MenusPage() {
 
       {/* Create / Edit Modal Dialog */}
       {modalMode && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0, 0, 0, 0.65)',
-            backdropFilter: 'blur(8px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '1.5rem',
-            zIndex: 100,
-          }}
-        >
+        <div className="modal-backdrop">
           <div
-            className="glass-panel"
+            className="modal-dialog glass-panel"
             style={{
-              width: '100%',
               maxWidth: '520px',
               padding: '2rem',
               boxShadow: 'var(--shadow-lg)',
@@ -1077,7 +1031,7 @@ export default function MenusPage() {
                   <label
                     style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}
                   >
-                    System Code <span style={{ fontSize: '0.72rem', fontWeight: 500, color: 'var(--text-muted)' }}>(Auto-generated)</span>
+                    System Code <span style={{ fontSize: '0.72rem', fontWeight: 500, color: 'var(--text-muted)' }}>(Auto-generated by API • Read-Only)</span>
                   </label>
                   <div
                     style={{
@@ -1127,8 +1081,8 @@ export default function MenusPage() {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', position: 'relative', zIndex: 25 }}>
-                <div style={{ position: 'relative', zIndex: 26 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div>
                   <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>
                     Parent Category
                   </label>
@@ -1172,7 +1126,7 @@ export default function MenusPage() {
                 </div>
               </div>
 
-              <div style={{ position: 'relative', zIndex: 20 }}>
+              <div>
                 <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>
                   Icon Identifier
                 </label>
@@ -1234,23 +1188,10 @@ export default function MenusPage() {
 
       {/* Delete Confirmation Modal Dialog */}
       {deleteCandidate && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0, 0, 0, 0.65)',
-            backdropFilter: 'blur(8px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '1.5rem',
-            zIndex: 100,
-          }}
-        >
+        <div className="modal-backdrop">
           <div
-            className="glass-panel"
+            className="modal-dialog glass-panel"
             style={{
-              width: '100%',
               maxWidth: '440px',
               padding: '2rem',
               boxShadow: 'var(--shadow-lg)',

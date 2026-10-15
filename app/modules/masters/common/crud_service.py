@@ -101,7 +101,7 @@ async def update_record(
     public_id: UUID,
     data: dict[str, Any],
 ) -> Any:
-    record = await get_record(db, model, public_id)
+    record = await get_record(db, model, public_id, include_inactive=True)
 
     for field, value in data.items():
         setattr(record, field, value)

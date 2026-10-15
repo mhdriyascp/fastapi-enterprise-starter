@@ -121,8 +121,13 @@ async def get_me(
         User,
         Depends(get_current_user),
     ],
+    db: Annotated[
+        AsyncSession,
+        Depends(get_db_session),
+    ],
 ) -> UserResponse:
-    return current_user
+    service = UserService(db)
+    return await service.build_user_response(current_user)
 
 
 @router.post(

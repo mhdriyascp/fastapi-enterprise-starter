@@ -47,13 +47,79 @@ async def seed_menus(db: AsyncSession) -> None:
                 },
             ],
         },
+        # Master Data Governance Root
+        {
+            "code": "master_data_root",
+            "title": "Master Data",
+            "path": "/masters",
+            "icon": "database",
+            "sort_order": 3,
+            "roles": [],
+            "permissions": ["masters:read"],
+            "children": [
+                {
+                    "code": "masters_countries",
+                    "title": "Countries",
+                    "path": "/masters?tab=countries",
+                    "icon": "globe",
+                    "sort_order": 1,
+                    "roles": [],
+                    "permissions": ["masters:read"],
+                },
+                {
+                    "code": "masters_states",
+                    "title": "States & Provinces",
+                    "path": "/masters?tab=states",
+                    "icon": "map-pin",
+                    "sort_order": 2,
+                    "roles": [],
+                    "permissions": ["masters:read"],
+                },
+                {
+                    "code": "masters_cities",
+                    "title": "Cities",
+                    "path": "/masters?tab=cities",
+                    "icon": "building",
+                    "sort_order": 3,
+                    "roles": [],
+                    "permissions": ["masters:read"],
+                },
+                {
+                    "code": "masters_currencies",
+                    "title": "Currencies",
+                    "path": "/masters?tab=currencies",
+                    "icon": "coins",
+                    "sort_order": 4,
+                    "roles": [],
+                    "permissions": ["masters:read"],
+                },
+                {
+                    "code": "masters_timezones",
+                    "title": "Time Zones",
+                    "path": "/masters?tab=time-zones",
+                    "icon": "clock",
+                    "sort_order": 5,
+                    "roles": [],
+                    "permissions": ["masters:read"],
+                },
+                {
+                    "code": "masters_taxonomies",
+                    "title": "Taxonomies & Types",
+                    "path": "/masters?tab=industries",
+                    "icon": "layers",
+                    "sort_order": 6,
+                    "roles": [],
+                    "permissions": ["masters:read"],
+                },
+            ],
+        },
         # Access Control & RBAC
         {
             "code": "access_control_root",
             "title": "Access Control",
             "path": "/rbac",
             "icon": "shield-check",
-            "sort_order": 3,
+            "sort_order": 4,
             "roles": [],
             "permissions": ["role.read"],
             "children": [
@@ -95,16 +161,44 @@ async def seed_menus(db: AsyncSession) -> None:
                 },
             ],
         },
-        # System Menus Management
+        # System Settings & Administration Root
         {
-            "code": "settings_menus",
-            "title": "Menu Management",
-            "path": "/menus",
-            "icon": "menu",
-            "sort_order": 4,
-            "roles": [],
-            "permissions": ["menu.read"],
-            "children": [],
+            "code": "system_settings_root",
+            "title": "System Settings",
+            "path": "/notifications",
+            "icon": "settings",
+            "sort_order": 5,
+            "roles": ["super_admin", "admin", "sales_manager"],
+            "permissions": [],
+            "children": [
+                {
+                    "code": "settings_notifications",
+                    "title": "Notifications & Alerts",
+                    "path": "/notifications",
+                    "icon": "bell",
+                    "sort_order": 1,
+                    "roles": ["super_admin", "admin", "sales_manager"],
+                    "permissions": [],
+                },
+                {
+                    "code": "settings_menus",
+                    "title": "Menu Architecture",
+                    "path": "/menus",
+                    "icon": "menu",
+                    "sort_order": 2,
+                    "roles": [],
+                    "permissions": ["menu.read"],
+                },
+                {
+                    "code": "settings_profile",
+                    "title": "Account & Security",
+                    "path": "/profile",
+                    "icon": "user",
+                    "sort_order": 3,
+                    "roles": ["super_admin", "admin", "sales_manager"],
+                    "permissions": [],
+                },
+            ],
         },
     ]
 
@@ -142,6 +236,10 @@ async def seed_menus(db: AsyncSession) -> None:
                         )
                     )
         else:
+            parent.title = item["title"]
+            parent.path = item["path"]
+            parent.icon = item["icon"]
+            parent.sort_order = item["sort_order"]
             existing += 1
 
         # Process children
@@ -175,6 +273,12 @@ async def seed_menus(db: AsyncSession) -> None:
                             )
                         )
             else:
+                child.parent_id = parent.id
+                child.title = child_item["title"]
+                child.path = child_item["path"]
+                child.icon = child_item["icon"]
+                child.sort_order = child_item["sort_order"]
                 existing += 1
 
+        await db.flush()
     print(f"Menus: {created} created, {existing} already existed.")

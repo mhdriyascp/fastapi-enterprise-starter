@@ -8,9 +8,11 @@
   --bg-card: rgba(18, 24, 38, 0.75);
   --bg-card-hover: rgba(26, 34, 52, 0.85);
   --bg-card-solid: #111827;
+  --bg-surface: #0f172a;
   --bg-input: rgba(15, 21, 33, 0.8);
   --theme-toggle-bg: rgba(255, 255, 255, 0.04);
   
+  --border-color: rgba(255, 255, 255, 0.12);
   --border-subtle: rgba(255, 255, 255, 0.07);
   --border-glow: rgba(99, 102, 241, 0.35);
   --border-card: rgba(255, 255, 255, 0.09);
@@ -54,9 +56,11 @@
   --bg-card: rgba(255, 255, 255, 0.9);
   --bg-card-hover: rgba(248, 250, 252, 0.95);
   --bg-card-solid: #ffffff;
+  --bg-surface: #ffffff;
   --bg-input: #ffffff;
   --theme-toggle-bg: rgba(0, 0, 0, 0.04);
   
+  --border-color: rgba(0, 0, 0, 0.12);
   --border-subtle: rgba(0, 0, 0, 0.08);
   --border-glow: rgba(99, 102, 241, 0.25);
   --border-card: rgba(0, 0, 0, 0.08);
@@ -234,27 +238,53 @@ select option {
   color: #0f172a;
 }
 
-/* Select2-Style Searchable Select & Stacking Context Fixes */
+/* Select2-Style Searchable Select (Rendered via React Portal on document.body) */
 .searchable-select-container {
   position: relative;
   width: 100%;
 }
 
-.searchable-select-container.is-open {
-  z-index: 1050 !important;
-}
-
 .searchable-select-popover {
-  z-index: 9999 !important;
+  position: fixed !important;
+  z-index: 999999 !important;
+  background-color: #0f172a !important;
+  background: #0f172a !important;
+  color: var(--text-primary);
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: 0 24px 48px -4px rgba(0, 0, 0, 0.75), 0 8px 18px rgba(0, 0, 0, 0.45) !important;
+  overflow: hidden;
+  opacity: 1 !important;
+  isolation: isolate !important;
 }
 
-/* Modal Backdrop & Overlay Utilities */
+[data-theme="dark"] .searchable-select-popover {
+  background-color: #0f172a !important;
+  background: #0f172a !important;
+  color: #f8fafc !important;
+  border-color: rgba(255, 255, 255, 0.18) !important;
+}
+
+[data-theme="light"] .searchable-select-popover {
+  background-color: #ffffff !important;
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border-color: rgba(0, 0, 0, 0.18) !important;
+  box-shadow: 0 24px 48px -4px rgba(0, 0, 0, 0.18), 0 8px 18px rgba(0, 0, 0, 0.1) !important;
+}
+
+.searchable-select-popover ul {
+  background-color: inherit !important;
+  background: inherit !important;
+}
+
+/* Modal Backdrop, Dialog & Stacking Architecture */
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -262,6 +292,94 @@ select option {
   z-index: 2000;
   overflow-y: auto;
   animation: fadeIn 0.15s ease-out forwards;
+}
+
+.modal-dialog {
+  position: relative;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  z-index: 2010;
+  border-radius: var(--radius-xl);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+  animation: modalScaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes modalScaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+
+/* Enterprise Specification / Detail Modal Tables */
+.detail-spec-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  margin-bottom: 1rem;
+}
+
+.detail-spec-table th,
+.detail-spec-table td {
+  padding: 0.65rem 0.95rem;
+  font-size: 0.8125rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.detail-spec-table tr:last-child th,
+.detail-spec-table tr:last-child td {
+  border-bottom: none;
+}
+
+.detail-spec-table th {
+  width: 36%;
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text-muted);
+  font-weight: 600;
+  text-align: left;
+  border-right: 1px solid var(--border-subtle);
+  vertical-align: top;
+}
+
+[data-theme="light"] .detail-spec-table th {
+  background: rgba(0, 0, 0, 0.025);
+  color: #64748b;
+}
+
+.detail-spec-table td {
+  color: var(--text-primary);
+  background: var(--bg-card);
+  vertical-align: middle;
+}
+
+[data-theme="light"] .detail-spec-table td {
+  background: #ffffff;
+}
+
+.detail-table-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 0.45rem;
+  margin-top: 0.85rem;
+}
+
+.detail-table-section-title:first-child {
+  margin-top: 0;
 }
 
 
@@ -518,7 +636,7 @@ select option {
   position: sticky;
   top: 0;
   height: 100vh;
-  z-index: 40;
+  z-index: 900;
 }
 
 .sidebar-backdrop {
@@ -564,7 +682,7 @@ select option {
   backdrop-filter: blur(12px);
   position: sticky;
   top: 0;
-  z-index: 30;
+  z-index: 1000;
 }
 
 [data-theme="light"] .top-header {
@@ -656,7 +774,7 @@ select option {
     inset: 0;
     background: rgba(0, 0, 0, 0.65);
     backdrop-filter: blur(4px);
-    z-index: 45;
+    z-index: 1450;
   }
 
   .sidebar {
@@ -665,7 +783,7 @@ select option {
     left: 0;
     bottom: 0;
     height: 100vh;
-    z-index: 50;
+    z-index: 1500;
     box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.4);
     transform: translateX(-100%);
     transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);

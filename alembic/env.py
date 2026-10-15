@@ -44,6 +44,7 @@ from app.infrastructure.database.models.organization import (
     ProfitCenter,
     Team,
 )
+from app.infrastructure.database.models.system import Notification
 
 # Masters models
 from app.modules.identity.models import AuthSession

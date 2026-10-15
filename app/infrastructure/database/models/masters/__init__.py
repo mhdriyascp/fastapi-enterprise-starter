@@ -1,4 +1,5 @@
 from app.infrastructure.database.models.masters.address_type import AddressType
+from app.infrastructure.database.models.masters.brand import Brand
 from app.infrastructure.database.models.masters.city import City
 from app.infrastructure.database.models.masters.communication_type import (
     CommunicationType,
@@ -12,6 +13,7 @@ from app.infrastructure.database.models.masters.identification_type import (
 from app.infrastructure.database.models.masters.industry import Industry
 from app.infrastructure.database.models.masters.language import Language
 from app.infrastructure.database.models.masters.state import State
+from app.infrastructure.database.models.masters.tax import Tax
 from app.infrastructure.database.models.masters.time_zone import TimeZone
 from app.infrastructure.database.models.masters.unit_of_measure import UnitOfMeasure
 
@@ -26,6 +28,8 @@ __all__ = [
     "Industry",
     "Language",
     "State",
+    "Tax",
     "TimeZone",
     "UnitOfMeasure",
+    "Brand",
 ]

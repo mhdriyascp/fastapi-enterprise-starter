@@ -19,7 +19,7 @@ The RBAC module provides centralized authorization management, decoupling permis
 | Method | Endpoint | Required Permission | Description |
 |---|---|---|---|
 | `POST` | `/api/v1/roles` | `role.create` | Create a new business role. |
-| `GET` | `/api/v1/roles` | `role.read` | Paginated listing of roles. |
+| `GET` | `/api/v1/roles` | `role.read` | Paginated listing of roles prioritized hierarchically (`super_admin` first, then `admin`, followed by other system roles, and custom roles). |
 | `GET` | `/api/v1/roles/{role_id}` | `role.read` | Fetch role by UUID. |
 | `PUT` | `/api/v1/roles/{role_id}` | `role.update` | Update role name or description. |
 | `DELETE`| `/api/v1/roles/{role_id}` | `role.delete` | Delete role (system roles cannot be deleted). |
@@ -41,10 +41,62 @@ The RBAC module provides centralized authorization management, decoupling permis
 
 ---
 
-## System vs Custom Roles
+## Role Governance & Hierarchical Permission Flow
 
-- **`is_system = True`**: Hardcoded core roles (e.g., `SUPER_ADMIN`, `ADMIN`). Protected from deletion to prevent administrative lockout.
-- **`is_system = False`**: Tenant-defined custom roles (e.g., `REGIONAL_SALES_MANAGER`, `INVENTORY_AUDITOR`).
+- **`super_admin` (Root Governance Role)**:
+  - Universal root access across all modules (`*.*`).
+  - Protected from permission modification or deletion in both backend services and frontend matrix.
+  - Automatically satisfies all permission dependencies via `require_permission`.
+- **`admin` (System Administrator Role)**:
+  - Granted broad operational and administrative permissions across all standard modules:
+    - Users: `user.read`, `user.create`, `user.update`, `user.delete`
+    - Organizations: `organization.read`, `organization.create`, `organization.update`, `organization.delete`
+    - Master Data: `masters:read`, `masters:create`, `masters:update`, `masters:delete`
+    - Menus: `menu.read`, `menu.create`, `menu.update`, `menu.delete`
+    - Notifications: `notification.read`, `notification.create`, `notification.update`, `notification.delete`
+    - Roles & Permissions: `role.read`, `role.create`, `role.update`, `permission.read`
+  - Fully customizable via the Access Control Matrix by Super Administrators.
+- **Operational Roles (`sales_manager`, `sales_rep`, `support_agent`)**:
+  - Modular permissions mapped dynamically based on functional domain requirements.
+- **`is_system = True`**:
+  - Protected from role deletion (`delete_role`), while permitting non-`super_admin` system roles (such as `admin`) to have granular permissions adjusted via the matrix.
+
+---
+
+## Complete Permission Catalog by Domain
+
+| Module | Permission Code | Description |
+|---|---|---|
+| **Users** | `user.read` | View users list and profiles |
+| | `user.create` | Register/create new users |
+| | `user.update` | Update user details and toggle status |
+| | `user.delete` | Delete user records |
+| **Organizations** | `organization.read` | View organizations |
+| | `organization.create` | Create organizations |
+| | `organization.update` | Edit organization details |
+| | `organization.delete` | Delete organizations |
+| **Master Data** | `masters:read` | View master records |
+| | `masters:create` | Create master records |
+| | `masters:update` | Update master records |
+| | `masters:delete` | Delete master records |
+| **Menus** | `menu.read` | View navigation menus |
+| | `menu.create` | Create navigation menu items |
+| | `menu.update` | Update navigation menu items |
+| | `menu.delete` | Delete navigation menu items |
+| **Notifications** | `notification.read` | View notifications |
+| | `notification.create` | Create system notifications |
+| | `notification.update` | Update notification states |
+| | `notification.delete` | Delete notifications |
+| **RBAC Roles** | `role.read` | View RBAC roles |
+| | `role.create` | Create roles |
+| | `role.update` | Update role details |
+| | `role.delete` | Delete custom roles |
+| | `role.assign_permission` | Assign permission to role |
+| | `role.revoke_permission` | Revoke permission from role |
+| **RBAC Permissions** | `permission.read` | View permissions catalog |
+| | `permission.create` | Create permissions |
+| | `permission.update` | Edit permissions |
+| | `permission.delete` | Delete permissions |
 
 ---
 
@@ -55,4 +107,5 @@ The RBAC module provides centralized authorization management, decoupling permis
   - Full CRUD operations on custom and system roles with deletion guards.
   - Resource-grouped system permissions catalog.
   - Interactive role-permission matrix with real-time assignment/revocation toggles.
+  - Protected root governance indicator for `super_admin` role.
 

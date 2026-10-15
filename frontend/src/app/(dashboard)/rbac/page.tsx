@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useMemo, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { apiFetch } from '@/lib/api-client';
 import { useToast } from '@/lib/toast-context';
 import {
@@ -30,18 +30,25 @@ import {
   Check,
   AlertCircle,
   Eye,
-  Copy,
 } from 'lucide-react';
 
 /**
  * Inner component reading URL search parameters.
  */
 function RbacWorkspace() {
+  const router = useRouter();
   const searchParams = useSearchParams();
-  const urlTab = searchParams.get('tab') as 'roles' | 'permissions' | 'matrix' | null;
-  const [userTab, setUserTab] = useState<'roles' | 'permissions' | 'matrix' | null>(null);
-  const activeTab = userTab || (urlTab && ['roles', 'permissions', 'matrix'].includes(urlTab) ? urlTab : 'roles');
-  const setActiveTab = (tab: 'roles' | 'permissions' | 'matrix') => setUserTab(tab);
+  const rawTab = searchParams ? searchParams.get('tab') : null;
+  const activeTab: 'roles' | 'permissions' | 'matrix' =
+    rawTab && ['roles', 'permissions', 'matrix'].includes(rawTab)
+      ? (rawTab as 'roles' | 'permissions' | 'matrix')
+      : 'roles';
+
+  const setActiveTab = (tab: 'roles' | 'permissions' | 'matrix') => {
+    const params = new URLSearchParams(searchParams ? searchParams.toString() : '');
+    params.set('tab', tab);
+    router.replace(`/rbac?${params.toString()}`, { scroll: false });
+  };
 
   const [roles, setRoles] = useState<Role[]>([]);
   const [permissions, setPermissions] = useState<Permission[]>([]);
@@ -57,7 +64,6 @@ function RbacWorkspace() {
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
   const [viewingRole, setViewingRole] = useState<Role | null>(null);
   const [deleteRoleCandidate, setDeleteRoleCandidate] = useState<Role | null>(null);
-  const [copiedId, setCopiedId] = useState<boolean>(false);
   const [roleFormData, setRoleFormData] = useState<RoleCreateInput & { is_active?: boolean }>({
     name: '',
     code: '',
@@ -91,15 +97,6 @@ function RbacWorkspace() {
   const [permTouched, setPermTouched] = useState<Record<string, boolean>>({});
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-  const handleCopyId = (id: string, label: string = 'ID') => {
-    if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      navigator.clipboard.writeText(id);
-      setCopiedId(true);
-      setTimeout(() => setCopiedId(false), 2000);
-      toast.info(`${label} copied to clipboard`);
-    }
-  };
-
   // Load roles and permissions
   async function loadRbacData() {
     setIsLoading(true);
@@ -113,9 +110,7 @@ function RbacWorkspace() {
         const fetchedRoles = rolesRes.value.items || [];
         setRoles(fetchedRoles);
         if (fetchedRoles.length > 0 && !matrixRole) {
-          // Default matrix role to first custom role if possible, else first role
-          const preferredRole = fetchedRoles.find((r) => !r.is_system) || fetchedRoles[0];
-          setMatrixRole(preferredRole);
+          setMatrixRole(fetchedRoles[0]);
         }
       }
 
@@ -147,8 +142,7 @@ function RbacWorkspace() {
           const fetchedRoles = rolesRes.value.items || [];
           setRoles(fetchedRoles);
           if (fetchedRoles.length > 0) {
-            const preferredRole = fetchedRoles.find((r) => !r.is_system) || fetchedRoles[0];
-            setMatrixRole(preferredRole);
+            setMatrixRole(fetchedRoles[0]);
           }
         }
 
@@ -600,8 +594,8 @@ function RbacWorkspace() {
   async function toggleMatrixPermission(permissionId: string) {
     if (!matrixRole) return;
 
-    if (matrixRole.is_system) {
-      toast.error(`Role "${matrixRole.name}" is a protected system role. Select a custom role to customize privileges.`);
+    if (matrixRole.code === 'super_admin' || matrixRole.code === 'superadmin') {
+      toast.error('The Super Administrator role possesses permanent full system governance privileges across all modules.');
       return;
     }
 
@@ -643,9 +637,9 @@ function RbacWorkspace() {
         }}
       >
         <div>
-          <h2 style={{ fontSize: '1.75rem', fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--text-primary)' }}>
+          <h1 style={{ fontSize: '1.75rem', fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--text-primary)', margin: 0 }}>
             Access Control & RBAC
-          </h2>
+          </h1>
           <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
             Enterprise Role-Based Access Control: Manage business roles, system permissions, and dynamic privilege matrices.
           </p>
@@ -702,9 +696,12 @@ function RbacWorkspace() {
           gap: '1rem',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+        <div role="tablist" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
           <button
             type="button"
+            id="rbac-tab-roles"
+            role="tab"
+            aria-selected={activeTab === 'roles'}
             onClick={() => setActiveTab('roles')}
             style={{
               display: 'flex',
@@ -727,6 +724,9 @@ function RbacWorkspace() {
 
           <button
             type="button"
+            id="rbac-tab-permissions"
+            role="tab"
+            aria-selected={activeTab === 'permissions'}
             onClick={() => setActiveTab('permissions')}
             style={{
               display: 'flex',
@@ -749,6 +749,9 @@ function RbacWorkspace() {
 
           <button
             type="button"
+            id="rbac-tab-matrix"
+            role="tab"
+            aria-selected={activeTab === 'matrix'}
             onClick={() => setActiveTab('matrix')}
             style={{
               display: 'flex',
@@ -864,7 +867,6 @@ function RbacWorkspace() {
                           >
                             {role.name}
                           </div>
-                          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>ID: {role.id.substring(0, 8)}...</div>
                         </button>
                       </div>
                     </td>
@@ -1095,14 +1097,13 @@ function RbacWorkspace() {
               flexWrap: 'wrap',
               gap: '1rem',
               position: 'relative',
-              zIndex: 35,
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', position: 'relative', zIndex: 40 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
               <label htmlFor="rbac-matrix-role-select" style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                 Configuring Privileges for Role:
               </label>
-              <div style={{ width: '320px', minWidth: '260px', position: 'relative', zIndex: 45 }}>
+              <div style={{ width: '320px', minWidth: '260px' }}>
                 <SearchableSelect
                   id="rbac-matrix-role-select"
                   options={roles.map((r): SelectOption => ({
@@ -1137,7 +1138,7 @@ function RbacWorkspace() {
           </div>
 
           {/* System Role Explanatory Banner */}
-          {matrixRole?.is_system && (
+          {(matrixRole?.code === 'super_admin' || matrixRole?.code === 'superadmin') && (
             <div
               style={{
                 padding: '0.85rem 1.25rem',
@@ -1153,7 +1154,7 @@ function RbacWorkspace() {
             >
               <Shield size={18} color="var(--accent-primary)" style={{ flexShrink: 0 }} />
               <div>
-                <strong>Protected System Role:</strong> &ldquo;{matrixRole.name}&rdquo; is an immutable core system role. Its permissions are hardcoded for operational stability. To dynamically grant or revoke permissions, select a custom role from the selector above or create a new custom role in the Roles tab.
+                <strong>Root Governance Role:</strong> &ldquo;{matrixRole.name}&rdquo; possesses universal system governance permissions across all modules. To configure fine-grained module privileges, select Administrator or any operational role from the selector above.
               </div>
             </div>
           )}
@@ -1204,9 +1205,9 @@ function RbacWorkspace() {
                             borderRadius: 'var(--radius-md)',
                             background: isGranted ? 'rgba(99, 102, 241, 0.12)' : 'var(--bg-input)',
                             border: isGranted ? '1px solid rgba(99, 102, 241, 0.35)' : '1px solid var(--border-subtle)',
-                            cursor: matrixRole?.is_system ? 'not-allowed' : 'pointer',
+                            cursor: (matrixRole?.code === 'super_admin' || matrixRole?.code === 'superadmin') ? 'not-allowed' : 'pointer',
                             transition: 'var(--transition)',
-                            opacity: matrixRole?.is_system ? 0.8 : 1,
+                            opacity: (matrixRole?.code === 'super_admin' || matrixRole?.code === 'superadmin') ? 0.8 : 1,
                           }}
                         >
                           <div>
@@ -1246,28 +1247,16 @@ function RbacWorkspace() {
       {/* Individual Role View Modal */}
       {viewingRole && (
         <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0, 0, 0, 0.65)',
-            backdropFilter: 'blur(8px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '1.5rem',
-            zIndex: 100,
-          }}
+          className="modal-backdrop"
           onClick={(e) => {
             if (e.target === e.currentTarget) setViewingRole(null);
           }}
         >
           <div
-            className="glass-panel"
+            className="modal-dialog glass-panel"
             style={{
-              width: '100%',
-              maxWidth: '600px',
+              maxWidth: '680px',
               padding: '2rem',
-              boxShadow: 'var(--shadow-lg)',
               borderRadius: 'var(--radius-xl)',
               maxHeight: '90vh',
               overflowY: 'auto',
@@ -1331,54 +1320,67 @@ function RbacWorkspace() {
               </button>
             </div>
 
-            {/* Structured Details Sections */}
+            {/* Formatted Key-Value Tables */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-              {/* Role Scope & Properties */}
-              <div
-                style={{
-                  background: 'var(--bg-tertiary)',
-                  padding: '1.2rem',
-                  borderRadius: 'var(--radius-lg)',
-                  border: '1px solid var(--border-color)',
-                }}
-              >
-                <div style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
-                  Role Scope & Description
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  <div>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>Description</span>
-                    <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', margin: '0.25rem 0 0', lineHeight: 1.5 }}>
-                      {viewingRole.description || 'No detailed description configured for this role.'}
-                    </p>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginTop: '0.5rem' }}>
-                    <div>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>Role Category</span>
-                      <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginTop: '0.2rem', display: 'block' }}>
-                        {viewingRole.is_system ? 'Built-in System Definition' : 'Custom Tenant Definition'}
-                      </span>
-                    </div>
-                    <div>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>Role Identifier UUID</span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.2rem' }}>
-                        <code style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                          {viewingRole.id}
-                        </code>
-                        <button
-                          type="button"
-                          onClick={() => handleCopyId(viewingRole.id, 'Role ID')}
-                          className="btn btn-secondary"
-                          style={{ padding: '0.2rem 0.4rem', height: '22px' }}
-                          title="Copy UUID"
-                        >
-                          {copiedId ? <Check size={11} color="#22c55e" /> : <Copy size={11} />}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+              {/* Section 1: Role Specifications */}
+              <div className="detail-table-section-title">
+                <Shield size={14} color="var(--accent-primary)" />
+                <span>Role Specifications &amp; Scope</span>
               </div>
+              <table className="detail-spec-table">
+                <tbody>
+                  <tr>
+                    <th>Role Title</th>
+                    <td style={{ fontWeight: 600 }}>{viewingRole.name}</td>
+                  </tr>
+                  <tr>
+                    <th>System Identifier Code</th>
+                    <td>
+                      <span className="badge badge-neutral" style={{ fontFamily: 'monospace' }}>
+                        {viewingRole.code}
+                      </span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <th>Operational Status</th>
+                    <td>
+                      <span style={{ fontWeight: 600, color: viewingRole.is_active ? '#22c55e' : '#ef4444', fontSize: '0.825rem' }}>
+                        {viewingRole.is_active ? 'Active Role' : 'Suspended / Inactive'}
+                      </span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <th>Role Category</th>
+                    <td style={{ fontWeight: 600, color: viewingRole.is_system ? 'var(--accent-primary)' : 'var(--text-primary)' }}>
+                      {viewingRole.is_system ? 'Built-in System Definition (Protected)' : 'Custom Tenant Definition'}
+                    </td>
+                  </tr>
+                  <tr>
+                    <th>Detailed Description</th>
+                    <td style={{ lineHeight: 1.5 }}>
+                      {viewingRole.description || <span style={{ color: 'var(--text-muted)' }}>No detailed description configured for this role.</span>}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+
+              {/* Section 2: Security & Identifier Audit */}
+              <div className="detail-table-section-title">
+                <Lock size={14} color="var(--accent-primary)" />
+                <span>Security &amp; Identifier Audit</span>
+              </div>
+              <table className="detail-spec-table">
+                <tbody>
+                  <tr>
+                    <th>Privileges Scope</th>
+                    <td>
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                        Configured via the Permission Matrix tab.
+                      </span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
 
             {/* Modal Actions Footer */}
@@ -1435,28 +1437,16 @@ function RbacWorkspace() {
       {/* Individual Permission View Modal */}
       {viewingPermission && (
         <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0, 0, 0, 0.65)',
-            backdropFilter: 'blur(8px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '1.5rem',
-            zIndex: 100,
-          }}
+          className="modal-backdrop"
           onClick={(e) => {
             if (e.target === e.currentTarget) setViewingPermission(null);
           }}
         >
           <div
-            className="glass-panel"
+            className="modal-dialog glass-panel"
             style={{
-              width: '100%',
-              maxWidth: '560px',
+              maxWidth: '640px',
               padding: '2rem',
-              boxShadow: 'var(--shadow-lg)',
               borderRadius: 'var(--radius-xl)',
               maxHeight: '90vh',
               overflowY: 'auto',
@@ -1520,59 +1510,67 @@ function RbacWorkspace() {
               </button>
             </div>
 
-            {/* Details */}
+            {/* Formatted Key-Value Tables */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-              <div
-                style={{
-                  background: 'var(--bg-tertiary)',
-                  padding: '1.2rem',
-                  borderRadius: 'var(--radius-lg)',
-                  border: '1px solid var(--border-color)',
-                }}
-              >
-                <div style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
-                  Permission Contract
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
-                  <div>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>System Identifier</span>
-                    <span className="badge badge-neutral" style={{ fontFamily: 'monospace', marginTop: '0.25rem' }}>
-                      {viewingPermission.code}
-                    </span>
-                  </div>
-                  <div>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>Action Operation</span>
-                    <span style={{ fontWeight: 600, color: 'var(--accent-primary)', fontSize: '0.85rem', display: 'block', marginTop: '0.25rem' }}>
-                      {viewingPermission.action}
-                    </span>
-                  </div>
-                  <div>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>Permission UUID</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.2rem' }}>
-                      <code style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                        {viewingPermission.id}
-                      </code>
-                      <button
-                        type="button"
-                        onClick={() => handleCopyId(viewingPermission.id, 'Permission ID')}
-                        className="btn btn-secondary"
-                        style={{ padding: '0.2rem 0.4rem', height: '22px' }}
-                        title="Copy UUID"
-                      >
-                        {copiedId ? <Check size={11} color="#22c55e" /> : <Copy size={11} />}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-                {viewingPermission.description && (
-                  <div style={{ marginTop: '1rem', borderTop: '1px solid var(--border-subtle)', paddingTop: '0.75rem' }}>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>Description</span>
-                    <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: '0.25rem 0 0', lineHeight: 1.5 }}>
-                      {viewingPermission.description}
-                    </p>
-                  </div>
-                )}
+              {/* Section 1: Permission Specification */}
+              <div className="detail-table-section-title">
+                <Key size={14} color="var(--accent-primary)" />
+                <span>Permission Specification</span>
               </div>
+              <table className="detail-spec-table">
+                <tbody>
+                  <tr>
+                    <th>Permission Name</th>
+                    <td style={{ fontWeight: 600 }}>{viewingPermission.name}</td>
+                  </tr>
+                  <tr>
+                    <th>Target Resource</th>
+                    <td>
+                      <code style={{ fontSize: '0.85rem', color: 'var(--accent-primary)' }}>
+                        {viewingPermission.resource}
+                      </code>
+                    </td>
+                  </tr>
+                  <tr>
+                    <th>Action Operation</th>
+                    <td>
+                      <span className="badge badge-primary" style={{ fontWeight: 600 }}>
+                        {viewingPermission.action}
+                      </span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <th>Protection Policy</th>
+                    <td style={{ fontWeight: 600, color: viewingPermission.is_system ? 'var(--accent-primary)' : 'var(--text-primary)' }}>
+                      {viewingPermission.is_system ? 'System Protected (Immutable)' : 'Custom Tenant Definition'}
+                    </td>
+                  </tr>
+                  <tr>
+                    <th>Detailed Description</th>
+                    <td style={{ lineHeight: 1.5 }}>
+                      {viewingPermission.description || <span style={{ color: 'var(--text-muted)' }}>No detailed description configured for this permission.</span>}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+
+              {/* Section 2: System Identifiers & Audit */}
+              <div className="detail-table-section-title">
+                <Shield size={14} color="var(--accent-primary)" />
+                <span>System Identifiers &amp; Audit</span>
+              </div>
+              <table className="detail-spec-table">
+                <tbody>
+                  <tr>
+                    <th>System Identifier Code</th>
+                    <td>
+                      <span className="badge badge-neutral" style={{ fontFamily: 'monospace' }}>
+                        {viewingPermission.code}
+                      </span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
 
             {/* Modal Actions Footer */}
@@ -1683,7 +1681,7 @@ function RbacWorkspace() {
                 <label
                   style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}
                 >
-                  System Identifier Code <span style={{ fontSize: '0.72rem', fontWeight: 500, color: 'var(--text-muted)' }}>(Auto-generated)</span>
+                  System Identifier Code <span style={{ fontSize: '0.72rem', fontWeight: 500, color: 'var(--text-muted)' }}>(Auto-generated by API • Read-Only)</span>
                 </label>
                 <div
                   style={{
@@ -1880,7 +1878,7 @@ function RbacWorkspace() {
 
                   <div>
                     <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>
-                      Computed Security Code
+                      Computed Security Code <span style={{ fontSize: '0.72rem', fontWeight: 500, color: 'var(--text-muted)' }}>(Auto-generated by API • Read-Only)</span>
                     </label>
                     <input
                       type="text"

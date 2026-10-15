@@ -24,11 +24,24 @@ class OrganizationService:
         if data.code and data.code.strip():
             clean_code = data.code.strip().upper()
         else:
-            clean_code = re.sub(
-                r"[^A-Za-z0-9_]+", "_", data.name.strip().upper()
-            ).strip("_")[:30]
-            if len(clean_code) < 2:
-                clean_code = f"{clean_code}_ORG"[:30]
+            base_code = re.sub(r"[^A-Za-z0-9_]+", "_", data.name.strip().upper()).strip(
+                "_"
+            )[:30]
+            if len(base_code) < 2:
+                base_code = f"{base_code}_ORG"[:30]
+
+            candidate = base_code
+            counter = 1
+            while True:
+                exists_stmt = select(Organization.id).where(
+                    Organization.code == candidate
+                )
+                exists = (await self.db.execute(exists_stmt)).scalar_one_or_none()
+                if not exists:
+                    clean_code = candidate
+                    break
+                candidate = f"{base_code[:25]}_{counter}"
+                counter += 1
 
         organization = Organization(
             code=clean_code,

@@ -19,9 +19,9 @@ import {
   Loader2,
   Power,
   Eye,
-  Copy,
-  Check,
   ExternalLink,
+  Shield,
+  CheckCircle2,
 } from 'lucide-react';
 import { useToast } from '@/lib/toast-context';
 import { generateOrganizationCode } from '@/lib/code-generator';
@@ -47,7 +47,6 @@ export default function OrganizationsPage() {
   const [modalMode, setModalMode] = useState<'create' | 'edit' | null>(null);
   const [selectedOrg, setSelectedOrg] = useState<Organization | null>(null);
   const [viewingOrg, setViewingOrg] = useState<Organization | null>(null);
-  const [copiedId, setCopiedId] = useState<boolean>(false);
   const [deleteCandidate, setDeleteCandidate] = useState<Organization | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -90,15 +89,6 @@ export default function OrganizationsPage() {
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
-    }
-  };
-
-  const handleCopyId = (id: string | number) => {
-    if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      navigator.clipboard.writeText(String(id));
-      setCopiedId(true);
-      setTimeout(() => setCopiedId(false), 2000);
-      toast.info('Organization ID copied to clipboard');
     }
   };
 
@@ -431,9 +421,9 @@ export default function OrganizationsPage() {
         }}
       >
         <div>
-          <h2 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.03em' }}>
+          <h1 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.03em', margin: 0 }}>
             Organizations & Accounts
-          </h2>
+          </h1>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: '0.2rem' }}>
             Multi-tenant master organizations, billing profiles, and corporate legal entities.
           </p>
@@ -637,9 +627,9 @@ export default function OrganizationsPage() {
                   <td>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                       {org.tax_registration_number ? (
-                        <div>Tax ID: <strong style={{ color: 'var(--text-primary)' }}>{org.tax_registration_number}</strong></div>
+                        <div>Tax No: <strong style={{ color: 'var(--text-primary)' }}>{org.tax_registration_number}</strong></div>
                       ) : (
-                        <span style={{ color: 'var(--text-muted)' }}>No Tax ID</span>
+                        <span style={{ color: 'var(--text-muted)' }}>No Tax Reg</span>
                       )}
                       {org.registration_number && (
                         <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Reg: {org.registration_number}</div>
@@ -761,31 +751,16 @@ export default function OrganizationsPage() {
       {/* Individual Organization View Modal */}
       {viewingOrg && (
         <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0, 0, 0, 0.65)',
-            backdropFilter: 'blur(8px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '1.5rem',
-            zIndex: 100,
-          }}
+          className="modal-backdrop"
           onClick={(e) => {
             if (e.target === e.currentTarget) setViewingOrg(null);
           }}
         >
           <div
-            className="glass-panel"
+            className="modal-dialog glass-panel"
             style={{
-              width: '100%',
               maxWidth: '680px',
               padding: '2rem',
-              boxShadow: 'var(--shadow-lg)',
-              borderRadius: 'var(--radius-xl)',
-              maxHeight: '90vh',
-              overflowY: 'auto',
               border: '1px solid var(--border-color)',
             }}
           >
@@ -795,7 +770,7 @@ export default function OrganizationsPage() {
                 display: 'flex',
                 alignItems: 'flex-start',
                 justifyContent: 'space-between',
-                marginBottom: '1.5rem',
+                marginBottom: '1.25rem',
                 borderBottom: '1px solid var(--border-color)',
                 paddingBottom: '1rem',
               }}
@@ -845,177 +820,148 @@ export default function OrganizationsPage() {
               </button>
             </div>
 
-            {/* Structured Details Sections */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-              {/* General & System Identifiers */}
-              <div
-                style={{
-                  background: 'var(--bg-tertiary)',
-                  padding: '1.2rem',
-                  borderRadius: 'var(--radius-lg)',
-                  border: '1px solid var(--border-color)',
-                }}
-              >
-                <div style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
-                  General & System Identifiers
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                  <div>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>System Code</span>
-                    <span className="badge badge-neutral" style={{ fontFamily: 'monospace', marginTop: '0.25rem' }}>
-                      {viewingOrg.code}
-                    </span>
-                  </div>
-                  <div>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>Operational Status</span>
-                    <span style={{ fontWeight: 600, color: viewingOrg.is_active ? '#22c55e' : '#ef4444', fontSize: '0.85rem' }}>
-                      {viewingOrg.is_active ? 'Active Tenant' : 'Suspended / Inactive'}
-                    </span>
-                  </div>
-                  <div>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>Organization ID</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.2rem' }}>
-                      <code style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                        {viewingOrg.id}
-                      </code>
-                      <button
-                        type="button"
-                        onClick={() => handleCopyId(viewingOrg.id)}
-                        className="btn btn-secondary"
-                        style={{ padding: '0.2rem 0.4rem', height: '22px' }}
-                        title="Copy UUID"
-                      >
-                        {copiedId ? <Check size={11} color="#22c55e" /> : <Copy size={11} />}
-                      </button>
-                    </div>
-                  </div>
-                </div>
+            {/* Table-Formatted Specification Sections */}
+            <div>
+              {/* Section 1: General Identifiers */}
+              <div className="detail-table-section-title">
+                <Building2 size={14} color="var(--accent-primary)" />
+                <span>General &amp; Operational Identifiers</span>
               </div>
-
-              {/* Corporate & Tax Registry */}
-              <div
-                style={{
-                  background: 'var(--bg-tertiary)',
-                  padding: '1.2rem',
-                  borderRadius: 'var(--radius-lg)',
-                  border: '1px solid var(--border-color)',
-                }}
-              >
-                <div style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
-                  Corporate & Tax Registry
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                  <div>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>Tax Registration / VAT ID</span>
-                    <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.85rem' }}>
-                      {viewingOrg.tax_registration_number || <span style={{ color: 'var(--text-muted)' }}>Not configured</span>}
-                    </span>
-                  </div>
-                  <div>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>Business Registration Number</span>
-                    <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.85rem' }}>
-                      {viewingOrg.registration_number || <span style={{ color: 'var(--text-muted)' }}>Not configured</span>}
-                    </span>
-                  </div>
-                  <div>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>Public Reference ID</span>
-                    <span style={{ fontSize: '0.82rem', fontFamily: 'monospace', color: 'var(--text-secondary)' }}>
-                      {viewingOrg.public_id || `#${viewingOrg.id}`}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Contact & Digital Channels */}
-              <div
-                style={{
-                  background: 'var(--bg-tertiary)',
-                  padding: '1.2rem',
-                  borderRadius: 'var(--radius-lg)',
-                  border: '1px solid var(--border-color)',
-                }}
-              >
-                <div style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
-                  Contact & Digital Channels
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                  <div>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>Corporate Email</span>
-                    {viewingOrg.email ? (
-                      <a
-                        href={`mailto:${viewingOrg.email}`}
-                        style={{ color: 'var(--accent-primary)', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.2rem', textDecoration: 'none' }}
-                      >
-                        <Mail size={13} />
-                        <span>{viewingOrg.email}</span>
-                      </a>
-                    ) : (
-                      <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Not configured</span>
-                    )}
-                  </div>
-                  <div>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>Official Phone</span>
-                    {viewingOrg.phone ? (
-                      <a
-                        href={`tel:${viewingOrg.phone}`}
-                        style={{ color: 'var(--text-primary)', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.2rem', textDecoration: 'none' }}
-                      >
-                        <Phone size={13} />
-                        <span>{viewingOrg.phone}</span>
-                      </a>
-                    ) : (
-                      <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Not configured</span>
-                    )}
-                  </div>
-                  <div>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>Web Presence</span>
-                    {viewingOrg.website ? (
-                      <a
-                        href={viewingOrg.website.startsWith('http') ? viewingOrg.website : `https://${viewingOrg.website}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ color: 'var(--accent-primary)', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.2rem', textDecoration: 'none' }}
-                      >
-                        <Globe size={13} />
-                        <span>Visit Website</span>
-                        <ExternalLink size={12} />
-                      </a>
-                    ) : (
-                      <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Not configured</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Audit Trail & Timestamps */}
-              <div
-                style={{
-                  background: 'var(--bg-tertiary)',
-                  padding: '1.2rem',
-                  borderRadius: 'var(--radius-lg)',
-                  border: '1px solid var(--border-color)',
-                }}
-              >
-                <div style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
-                  Audit Trail & Records
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                  <div>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>Created At</span>
-                    <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-                      {new Date(viewingOrg.created_at).toLocaleString()}
-                    </span>
-                  </div>
-                  {viewingOrg.updated_at && (
-                    <div>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>Last Updated</span>
-                      <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-                        {new Date(viewingOrg.updated_at).toLocaleString()}
+              <table className="detail-spec-table">
+                <tbody>
+                  <tr>
+                    <th>Organization Name</th>
+                    <td style={{ fontWeight: 600 }}>{viewingOrg.name}</td>
+                  </tr>
+                  <tr>
+                    <th>System Identifier Code</th>
+                    <td>
+                      <span className="badge badge-neutral" style={{ fontFamily: 'monospace' }}>
+                        {viewingOrg.code}
                       </span>
-                    </div>
-                  )}
-                </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <th>Operational Status</th>
+                    <td>
+                      <span style={{ fontWeight: 600, color: viewingOrg.is_active ? '#22c55e' : '#ef4444', fontSize: '0.825rem' }}>
+                        {viewingOrg.is_active ? 'Active Tenant Account' : 'Suspended / Inactive'}
+                      </span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+
+              {/* Section 2: Corporate & Tax Registry */}
+              <div className="detail-table-section-title">
+                <Shield size={14} color="var(--accent-primary)" />
+                <span>Corporate &amp; Tax Registry</span>
               </div>
+              <table className="detail-spec-table">
+                <tbody>
+                  <tr>
+                    <th>Formal Legal Name</th>
+                    <td>{viewingOrg.legal_name || <span style={{ color: 'var(--text-muted)' }}>Not configured</span>}</td>
+                  </tr>
+                  <tr>
+                    <th>Tax Registration / VAT ID</th>
+                    <td style={{ fontWeight: 600 }}>
+                      {viewingOrg.tax_registration_number || <span style={{ color: 'var(--text-muted)' }}>Not configured</span>}
+                    </td>
+                  </tr>
+                  <tr>
+                    <th>Commercial Registration Number</th>
+                    <td style={{ fontWeight: 600 }}>
+                      {viewingOrg.registration_number || <span style={{ color: 'var(--text-muted)' }}>Not configured</span>}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+
+              {/* Section 3: Digital Channels & Communication */}
+              <div className="detail-table-section-title">
+                <Globe size={14} color="var(--accent-primary)" />
+                <span>Contact &amp; Digital Channels</span>
+              </div>
+              <table className="detail-spec-table">
+                <tbody>
+                  <tr>
+                    <th>Corporate Email</th>
+                    <td>
+                      {viewingOrg.email ? (
+                        <a
+                          href={`mailto:${viewingOrg.email}`}
+                          style={{ color: 'var(--accent-primary)', fontSize: '0.825rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', textDecoration: 'none' }}
+                        >
+                          <Mail size={13} />
+                          <span>{viewingOrg.email}</span>
+                        </a>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)' }}>Not configured</span>
+                      )}
+                    </td>
+                  </tr>
+                  <tr>
+                    <th>Official Phone</th>
+                    <td>
+                      {viewingOrg.phone ? (
+                        <a
+                          href={`tel:${viewingOrg.phone}`}
+                          style={{ color: 'var(--text-primary)', fontSize: '0.825rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', textDecoration: 'none' }}
+                        >
+                          <Phone size={13} />
+                          <span>{viewingOrg.phone}</span>
+                        </a>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)' }}>Not configured</span>
+                      )}
+                    </td>
+                  </tr>
+                  <tr>
+                    <th>Corporate Web Presence</th>
+                    <td>
+                      {viewingOrg.website ? (
+                        <a
+                          href={viewingOrg.website.startsWith('http') ? viewingOrg.website : `https://${viewingOrg.website}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ color: 'var(--accent-primary)', fontSize: '0.825rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', textDecoration: 'none' }}
+                        >
+                          <Globe size={13} />
+                          <span>{viewingOrg.website}</span>
+                          <ExternalLink size={11} />
+                        </a>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)' }}>Not configured</span>
+                      )}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+
+              {/* Section 4: Audit Trail */}
+              <div className="detail-table-section-title">
+                <CheckCircle2 size={14} color="var(--accent-primary)" />
+                <span>Audit Trail &amp; Records</span>
+              </div>
+              <table className="detail-spec-table">
+                <tbody>
+                  <tr>
+                    <th>Created Timestamp</th>
+                    <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                      {new Date(viewingOrg.created_at).toLocaleString()}
+                    </td>
+                  </tr>
+                  {viewingOrg.updated_at && (
+                    <tr>
+                      <th>Last Modified</th>
+                      <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                        {new Date(viewingOrg.updated_at).toLocaleString()}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
 
             {/* Modal Actions Footer */}
@@ -1024,7 +970,7 @@ export default function OrganizationsPage() {
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
-                marginTop: '1.75rem',
+                marginTop: '1.25rem',
                 paddingTop: '1rem',
                 borderTop: '1px solid var(--border-color)',
               }}
@@ -1034,9 +980,8 @@ export default function OrganizationsPage() {
                 onClick={() => setViewingOrg(null)}
                 className="btn btn-secondary"
               >
-                Close
+                Close Inspector
               </button>
-
               <div style={{ display: 'flex', gap: '0.75rem' }}>
                 <button
                   type="button"
@@ -1046,6 +991,7 @@ export default function OrganizationsPage() {
                     openEditModal(orgToEdit);
                   }}
                   className="btn btn-primary"
+                  style={{ gap: '0.4rem' }}
                 >
                   <Edit2 size={14} />
                   <span>Edit Organization</span>
@@ -1059,27 +1005,13 @@ export default function OrganizationsPage() {
       {/* Create / Edit Organization Modal */}
       {modalMode && (
         <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0, 0, 0, 0.65)',
-            backdropFilter: 'blur(8px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '1.5rem',
-            zIndex: 100,
-          }}
+          className="modal-backdrop"
         >
           <div
-            className="glass-panel"
+            className="modal-dialog glass-panel"
             style={{
-              width: '100%',
               maxWidth: '560px',
               padding: '2rem',
-              boxShadow: 'var(--shadow-lg)',
-              maxHeight: '90vh',
-              overflowY: 'auto',
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
@@ -1161,7 +1093,7 @@ export default function OrganizationsPage() {
                   <label
                     style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}
                   >
-                    System Code <span style={{ fontSize: '0.72rem', fontWeight: 500, color: 'var(--text-muted)' }}>(Auto-generated)</span>
+                    System Code <span style={{ fontSize: '0.72rem', fontWeight: 500, color: 'var(--text-muted)' }}>(Auto-generated by API • Read-Only)</span>
                   </label>
                   <div
                     style={{
@@ -1389,25 +1321,13 @@ export default function OrganizationsPage() {
       {/* Delete Confirmation Modal */}
       {deleteCandidate && (
         <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0, 0, 0, 0.65)',
-            backdropFilter: 'blur(8px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '1.5rem',
-            zIndex: 100,
-          }}
+          className="modal-backdrop"
         >
           <div
-            className="glass-panel"
+            className="modal-dialog glass-panel"
             style={{
-              width: '100%',
               maxWidth: '460px',
               padding: '2rem',
-              boxShadow: 'var(--shadow-lg)',
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>

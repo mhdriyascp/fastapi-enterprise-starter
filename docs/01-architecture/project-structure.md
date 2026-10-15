@@ -708,7 +708,28 @@ Permissions:
 
 ⸻
 
-14. Database Seeding
+14. Notifications Module
+
+Directory:
+
+app/modules/notifications/
+
+The notifications module manages real-time system alerts, activity streams, and operational dispatch for enterprise operators and tenant administrators.
+
+Its router is registered under:
+
+/api/v1/notifications
+
+Key capabilities:
+* Targeted user activity streams and broadcast alerts (`/api/v1/notifications`).
+* Live unread counter query (`/api/v1/notifications/unread-count`).
+* Individual read/unread toggle (`PATCH /api/v1/notifications/{id}/read`).
+* Bulk read marking (`POST /api/v1/notifications/mark-all-read`).
+* Dismissal and clear all operations (`DELETE /api/v1/notifications/{id}`, `DELETE /api/v1/notifications/clear-all`).
+
+⸻
+
+15. Database Seeding
 
 Directory:
 

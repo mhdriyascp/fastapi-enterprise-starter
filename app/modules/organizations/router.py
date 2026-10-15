@@ -127,7 +127,7 @@ async def update_organization_status(
 @router.delete(
     "/{organization_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require_permission("organization.update"))],
+    dependencies=[Depends(require_permission("organization.delete"))],
 )
 async def delete_organization(
     organization_id: int,

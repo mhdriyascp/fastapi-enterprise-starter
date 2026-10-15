@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.database.models.masters import (
@@ -11,10 +13,12 @@ from app.infrastructure.database.models.masters import (
     Industry,
     Language,
     State,
+    Tax,
     TimeZone,
     UnitOfMeasure,
 )
 from app.seeds.helpers import get_or_create
+from app.seeds.masters.brands import seed_brands
 
 
 async def seed_reference_data(db: AsyncSession) -> None:
@@ -538,3 +542,89 @@ async def seed_reference_data(db: AsyncSession) -> None:
                 "is_active": True,
             },
         )
+    # ---------------------------------------------------------
+    # 13. TAXES
+    # ---------------------------------------------------------
+    taxes = [
+        {
+            "country_code": "IN",
+            "name": "Goods and Services Tax",
+            "code": "GST",
+            "rate": "18.0000",
+            "tax_type": "percentage",
+        },
+        {
+            "country_code": "US",
+            "name": "Sales Tax",
+            "code": "SALES_TAX",
+            "rate": "0.0000",
+            "tax_type": "percentage",
+        },
+        {
+            "country_code": "GB",
+            "name": "Value Added Tax",
+            "code": "VAT",
+            "rate": "20.0000",
+            "tax_type": "percentage",
+        },
+        {
+            "country_code": "AE",
+            "name": "Value Added Tax",
+            "code": "VAT",
+            "rate": "5.0000",
+            "tax_type": "percentage",
+        },
+        {
+            "country_code": "SA",
+            "name": "Value Added Tax",
+            "code": "VAT",
+            "rate": "15.0000",
+            "tax_type": "percentage",
+        },
+        {
+            "country_code": "BH",
+            "name": "Value Added Tax",
+            "code": "VAT",
+            "rate": "10.0000",
+            "tax_type": "percentage",
+        },
+        {
+            "country_code": "OM",
+            "name": "Value Added Tax",
+            "code": "VAT",
+            "rate": "5.0000",
+            "tax_type": "percentage",
+        },
+    ]
+
+    for item in taxes:
+        country_code = item["country_code"]
+        country_id = country_ids.get(country_code)
+
+        if country_id is None:
+            raise ValueError(
+                f"Cannot seed tax {item['code']}: "
+                f"country {country_code} was not seeded."
+            )
+
+        await get_or_create(
+            db,
+            Tax,
+            lookup={
+                "country_id": country_id,
+                "code": item["code"],
+            },
+            defaults={
+                "public_id": str(uuid4()),
+                "country_id": country_id,
+                "name": item["name"],
+                "code": item["code"],
+                "rate": item["rate"],
+                "tax_type": item["tax_type"],
+                "is_active": True,
+            },
+        )
+        
+        
+    # Seed brands
+    await seed_brands(db)

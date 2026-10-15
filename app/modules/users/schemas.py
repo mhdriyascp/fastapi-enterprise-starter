@@ -35,10 +35,14 @@ class UserResponse(BaseModel):
     last_name: str | None
     display_name: str | None
     email: EmailStr
+    phone: str | None = None
     status: str
     email_verified_at: datetime | None
     created_at: datetime
     updated_at: datetime | None
+    roles: list[str] = Field(default_factory=list)
+    is_super_admin: bool = False
+    permissions: list[str] = Field(default_factory=list)
 
 
 class ChangePasswordRequest(BaseModel):
@@ -57,3 +61,5 @@ class UserUpdate(BaseModel):
     last_name: str | None = Field(default=None, max_length=100)
     display_name: str | None = Field(default=None, max_length=150)
     phone: str | None = Field(default=None, max_length=30)
+    status: str | None = Field(default=None, max_length=20)
+    role_codes: list[str] | None = None

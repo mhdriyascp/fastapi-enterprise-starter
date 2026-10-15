@@ -1,8 +1,18 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useId, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useId, useMemo, useSyncExternalStore } from 'react';
+import { createPortal } from 'react-dom';
 import { Search, ChevronDown, Check, X } from 'lucide-react';
 import { Badge, BadgeVariant } from './badge';
+
+const emptySubscribe = () => () => {};
+function useMounted(): boolean {
+  return useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false
+  );
+}
 
 export interface SelectOption {
   /** Unique value identifier */
@@ -81,8 +91,49 @@ export function SearchableSelect({
   const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const listboxRef = useRef<HTMLUListElement>(null);
+
+  const isMounted = useMounted();
+  const [coords, setCoords] = useState<{ top: number; left: number; width: number; placeAbove: boolean }>({
+    top: 0,
+    left: 0,
+    width: 0,
+    placeAbove: false,
+  });
+
+  const updateCoords = () => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const placeAbove = spaceBelow < 280 && rect.top > 280;
+    const left = Math.max(8, Math.min(rect.left, window.innerWidth - rect.width - 8));
+
+    setCoords({
+      top: placeAbove ? rect.top - 4 : rect.bottom + 4,
+      left,
+      width: rect.width,
+      placeAbove,
+    });
+  };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    updateCoords();
+
+    const handleScrollOrResize = () => {
+      updateCoords();
+    };
+
+    window.addEventListener('resize', handleScrollOrResize);
+    window.addEventListener('scroll', handleScrollOrResize, true);
+
+    return () => {
+      window.removeEventListener('resize', handleScrollOrResize);
+      window.removeEventListener('scroll', handleScrollOrResize, true);
+    };
+  }, [isOpen]);
 
   // Identify currently selected option object
   const selectedOption = useMemo(() => {
@@ -107,6 +158,7 @@ export function SearchableSelect({
     setHighlightedIndex(
       selectedOption ? options.findIndex((o) => o.value === selectedOption.value) : 0
     );
+    updateCoords();
     setIsOpen(true);
   }
 
@@ -131,7 +183,13 @@ export function SearchableSelect({
     if (!isOpen) return;
 
     function handleClickOutside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(target) &&
+        popoverRef.current &&
+        !popoverRef.current.contains(target)
+      ) {
         closeDropdown();
       }
     }
@@ -339,22 +397,25 @@ export function SearchableSelect({
         </div>
       </div>
 
-      {/* Floating Select2 Popover Menu */}
-      {isOpen && (
+      {/* Floating Select2 Popover Menu via React Portal to Escape ALL Stacking Contexts */}
+      {isMounted && isOpen && typeof document !== 'undefined' && createPortal(
         <div
+          ref={popoverRef}
           className="searchable-select-popover"
           style={{
-            position: 'absolute',
-            top: 'calc(100% + 4px)',
-            left: 0,
-            right: 0,
-            zIndex: 9999,
-            background: 'var(--bg-surface)',
+            position: 'fixed',
+            top: `${coords.top}px`,
+            left: `${coords.left}px`,
+            width: `${coords.width}px`,
+            transform: coords.placeAbove ? 'translateY(-100%)' : 'none',
+            zIndex: 999999,
+            backgroundColor: 'var(--bg-surface)',
             border: '1px solid var(--border-color)',
             borderRadius: 'var(--radius-md)',
-            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.2)',
+            boxShadow: '0 20px 45px -4px rgba(0, 0, 0, 0.75), 0 8px 16px rgba(0, 0, 0, 0.45)',
             overflow: 'hidden',
-            animation: 'fadeInScale 0.15s ease-out forwards',
+            isolation: 'isolate',
+            animation: 'fadeInScale 0.12s ease-out forwards',
           }}
         >
           {/* Internal Live Search Box (Select2 Style) */}
@@ -362,7 +423,7 @@ export function SearchableSelect({
             style={{
               padding: '0.5rem',
               borderBottom: '1px solid var(--border-subtle)',
-              background: 'var(--bg-card)',
+              backgroundColor: 'var(--bg-card-solid)',
             }}
           >
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
@@ -383,6 +444,7 @@ export function SearchableSelect({
                   setSearchQuery(e.target.value);
                   setHighlightedIndex(0);
                 }}
+                onKeyDown={handleKeyDown}
                 placeholder={searchPlaceholder}
                 className="input-field"
                 style={{
@@ -430,6 +492,7 @@ export function SearchableSelect({
               padding: '0.35rem',
               maxHeight: '260px',
               overflowY: 'auto',
+              backgroundColor: 'var(--bg-surface)',
             }}
           >
             {filteredOptions.length === 0 ? (
@@ -514,7 +577,8 @@ export function SearchableSelect({
               })
             )}
           </ul>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

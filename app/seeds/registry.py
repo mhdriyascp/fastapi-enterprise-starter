@@ -9,6 +9,7 @@ from app.seeds.rbac.role_permissions import seed_role_permissions
 from app.seeds.rbac.roles import seed_roles
 from app.seeds.rbac.user_roles import seed_user_roles
 from app.seeds.rbac.users import seed_users
+from app.seeds.system.notifications import seed_notifications
 
 SeedFunction = Callable[[AsyncSession], Awaitable[None]]
 
@@ -27,4 +28,6 @@ SEED_REGISTRY: tuple[tuple[str, SeedFunction], ...] = (
     ("Reference data", seed_reference_data),
     # 7. Seed navigation menus with role & permission links.
     ("Navigation menus", seed_menus),
+    # 8. Seed enterprise system notifications.
+    ("System notifications", seed_notifications),
 )
