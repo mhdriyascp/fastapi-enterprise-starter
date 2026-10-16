@@ -20,7 +20,8 @@ class NotificationUpdate(BaseModel):
 class NotificationResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: uuid.UUID
+    id: int
+    public_id: uuid.UUID
     user_id: uuid.UUID | None = None
     title: str
     message: str

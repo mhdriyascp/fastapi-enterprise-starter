@@ -64,6 +64,27 @@ Migrations in this project are decoupled into **domain-based modular migration f
 5. **`20261014071532_create_menus_schema.py`**:
    - `revision = "20261014071532"`, `down_revision = "20261014120004"`
    - Defines navigation hierarchy and access control links: `menus`, `menu_roles`, `menu_permissions`.
+6. **`20261015054331_create_addresses_table.py`**:
+   - `revision = "20261015054331"`, `down_revision = "20261014071532"`
+   - Creates centralized `addresses` table linked to organizations, branches, address types, countries, states, and cities.
+7. **`20261015085540_add_taxes_master.py`**:
+   - `revision = "20261015085540"`, `down_revision = "20261015054331"`
+   - Adds fiscal taxes master registry (`taxes`).
+8. **`20261015090109_add_brands_master.py`**:
+   - `revision = "20261015090109"`, `down_revision = "20261015085540"`
+   - Adds commercial product brands master registry (`brands`).
+9. **`20261016055340_db_optimization_and_integrity.py`**:
+   - `revision = "20261016055340"`, `down_revision = "20261015090109"`
+   - Phase 2 Optimization: Adds `UniqueConstraint("organization_id", "code")` on `branches`, `departments`, `teams`, `cost_centers`, converts `user_roles` and `role_permissions` to composite primary keys, and declares ORM `relationship()` bindings between `Organization` and `Address`.
+10. **`20261016084523_add_audit_and_soft_delete_to_organizations_and_addresses.py`**:
+    - `revision = "20261016084523"`, `down_revision = "20261016055340"`
+    - Phase B Migration: Inherits `AuditEntityBase` across all organizational hierarchy tables (`organizations`, `branches`, `departments`, `teams`, `cost_centers`, `legal_entities`, `business_units`, `profit_centers`, `fiscal_years`, `fiscal_periods`, `holidays`, `business_hours`, `document_sequences`, `job_titles`) and `addresses`. Adds indexed `is_deleted` (default `false`), `deleted_at`, `created_by_id`, and `updated_by_id`.
+11. **`20261016095142_standardize_model_ids_and_fk_indexes.py`**:
+    - `revision = "20261016095142"`, `down_revision = "20261016084523"`
+    - Model Standardization: Enforces the Dual Identifier Strategy across all relational and master models. Standardizes primary keys and relational foreign keys to 64-bit `BigInteger`, adds mandatory `index=True` on all PostgreSQL foreign keys (`parent_id`, `branch_id`, `business_unit_id`, `department_id`), converts external `public_id` to native binary `Uuid(as_uuid=True)` with sequential RFC 9562 `uuid.uuid7` defaults, and adds reverse lookup indexes on RBAC junction tables (`user_roles.role_id`, `role_permissions.permission_id`).
+12. **`20261016101951_standardize_menus_and_notifications_.py`**:
+    - `revision = "20261016101951"`, `down_revision = "20261016095142"`
+    - Menus & Notifications Standardization: Enforces the Dual Identifier Strategy on `Menu` and `Notification` models. Converts `menus.id` and `menus.parent_id` to 64-bit `BigInteger`, adds sequential RFC 9562 `public_id: UUID` (with `uuid.uuid7` default) to `notifications`, converts `notifications.id` to 64-bit `BigInteger`, and refactors `menu_roles` and `menu_permissions` to composite primary keys `(menu_id, role_id)` and `(menu_id, permission_id)` with reverse FK indexing.
 
 ---
 

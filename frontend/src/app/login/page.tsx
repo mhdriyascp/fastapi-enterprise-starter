@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
-import { Sparkles, ArrowRight, ShieldCheck, Lock, Mail, AlertCircle, Loader2 } from 'lucide-react';
+import { Sparkles, ArrowRight, Lock, Mail, AlertCircle, Loader2 } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { useToast } from '@/lib/toast-context';
 
@@ -43,12 +43,6 @@ export default function LoginPage() {
     } finally {
       setIsSubmitting(false);
     }
-  }
-
-  function handleQuickFill(demoEmail: string, demoPass: string) {
-    setEmail(demoEmail);
-    setPassword(demoPass);
-    setError(null);
   }
 
   return (
@@ -189,47 +183,6 @@ export default function LoginPage() {
               )}
             </button>
           </form>
-
-          {/* Seeded Demo Accounts Quick-Select */}
-          <div style={{ marginTop: '1.75rem', paddingTop: '1.25rem', borderTop: '1px solid var(--border-subtle)' }}>
-            <div
-              style={{
-                fontSize: '0.75rem',
-                fontWeight: 600,
-                color: 'var(--text-muted)',
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-                marginBottom: '0.75rem',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.4rem',
-              }}
-            >
-              <ShieldCheck size={14} color="var(--accent-primary)" />
-              <span>Quick Test Accounts (Seeded Roles)</span>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.65rem' }}>
-              <button
-                type="button"
-                onClick={() => handleQuickFill('superadmin@gmail.com', 'SuperAdmin@1994')}
-                className="btn btn-secondary"
-                style={{ padding: '0.6rem 0.5rem', fontSize: '0.78rem', flexDirection: 'column', gap: '0.2rem' }}
-              >
-                <span style={{ fontWeight: 600, color: '#818cf8' }}>Super Admin</span>
-                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>superadmin@gmail.com</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickFill('admin@gmail.com', 'Admin@1994')}
-                className="btn btn-secondary"
-                style={{ padding: '0.6rem 0.5rem', fontSize: '0.78rem', flexDirection: 'column', gap: '0.2rem' }}
-              >
-                <span style={{ fontWeight: 600, color: '#34d399' }}>Administrator</span>
-                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>admin@gmail.com</span>
-              </button>
-            </div>
-
-          </div>
         </div>
       </div>
     </div>

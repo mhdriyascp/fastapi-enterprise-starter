@@ -1,18 +1,25 @@
 from datetime import date
-from uuid import UUID, uuid4
+from uuid import UUID, uuid7
 
-from sqlalchemy import Boolean, Date, ForeignKey, String
+from sqlalchemy import BigInteger, Boolean, Date, ForeignKey, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.infrastructure.database.models.base_entity import EntityBase
+from app.infrastructure.database.models.base_entity import AuditEntityBase
 
 
-class FiscalYear(EntityBase):
+class FiscalYear(AuditEntityBase):
     __tablename__ = "fiscal_years"
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    public_id: Mapped[UUID] = mapped_column(unique=True, nullable=False, default=uuid4)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    public_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        unique=True,
+        index=True,
+        nullable=False,
+        default=uuid7,
+    )
     organization_id: Mapped[int] = mapped_column(
+        BigInteger,
         ForeignKey("organizations.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,

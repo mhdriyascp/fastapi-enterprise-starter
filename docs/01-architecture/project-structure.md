@@ -59,6 +59,8 @@ crm-platform/
 │   ├── core/
 │   │   ├── config.py
 │   │   ├── lifecycle.py
+│   │   ├── middleware.py
+│   │   ├── request_context.py
 │   │   ├── security.py
 │   │   └── timezone.py
 │   │
@@ -557,17 +559,13 @@ Examples include:
 
 The complete set of registered master-data resources is determined by the routers registered in the application.
 
-11.1 Dedicated master routers
+11.1 Unified master routers & factory
 
-Some resources have dedicated router and service modules.
+All master data catalogs (including Countries, States, Cities, and Addresses) use the shared generic CRUD router factory (`create_master_router`) and `crud_service.py` registered in:
 
-Examples include:
+app/modules/masters/registry.py
 
-app/modules/masters/countries_router.py
-app/modules/masters/states_router.py
-app/modules/masters/cities_router.py
-
-Dedicated modules allow more specific validation and business rules when a resource needs behavior beyond generic CRUD.
+This factory standardizes pagination, lookup filtering (including parent country/state cascades), RBAC permission gates (`masters:read`, `masters:create`, `masters:update`, `masters:delete`), and soft deactivations across all master entities.
 
 11.2 Schemas
 
@@ -723,9 +721,9 @@ Its router is registered under:
 Key capabilities:
 * Targeted user activity streams and broadcast alerts (`/api/v1/notifications`).
 * Live unread counter query (`/api/v1/notifications/unread-count`).
-* Individual read/unread toggle (`PATCH /api/v1/notifications/{id}/read`).
+* Individual read/unread toggle (`PATCH /api/v1/notifications/{identifier}/read` — resolves by int ID or UUID public_id).
 * Bulk read marking (`POST /api/v1/notifications/mark-all-read`).
-* Dismissal and clear all operations (`DELETE /api/v1/notifications/{id}`, `DELETE /api/v1/notifications/clear-all`).
+* Dismissal and clear all operations (`DELETE /api/v1/notifications/{identifier}`, `DELETE /api/v1/notifications/clear-all`).
 
 ⸻
 

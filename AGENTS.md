@@ -20,6 +20,7 @@ Before generating any code, every AI agent must execute this 4-step checklist:
 2. **Reuse Existing Utilities**:
    - Response envelope: [`app.shared.response.PagedResponse[T]`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/app/shared/response.py).
    - Pagination parameters: [`app.shared.pagination.PaginationParams`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/app/shared/pagination.py) via `Depends(get_pagination)`.
+   - Dynamic sorting: [`app.shared.sorting.SortParams`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/app/shared/sorting.py) via `Depends(get_sorting)`.
    - Database session: `Annotated[AsyncSession, Depends(get_db_session)]` from [`app.infrastructure.database.session`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/app/infrastructure/database/session.py).
    - Application configuration: `from app.core.config import settings`.
 3. **Verify Dependencies & Language Standards**:
@@ -71,6 +72,57 @@ Before generating any code, every AI agent must execute this 4-step checklist:
 
     query = select(Organization).options(selectinload(Organization.contacts))
     ```
+- **Enterprise API Consistency & Data Contracts (Production-Grade Standards)**:
+  - **Unified Collection Response Envelopes**:
+    - **Never** return bare JSON arrays (`list[Item]`) from collection/list endpoints.
+    - **Always** return `PagedResponse[ItemResponse]` via `PagedResponse.build(items=items, total=total, page=pagination.page, page_size=pagination.page_size)`.
+    - Every collection endpoint must consume `pagination: Annotated[PaginationParams, Depends(get_pagination)]` and `sorting: Annotated[SortParams, Depends(get_sorting)]`.
+  - **Standardized Enterprise Model Architecture (Performance + Security at Scale)**:
+    - **Dual Identifier Strategy (Relational, Master, Navigation, & System Models)**:
+      - **Internal Primary Key**: Always use 64-bit `BigInteger` with autoincrement (`id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)`). 64-bit integers occupy 8 bytes in B-Tree index pages, maximizing CPU cache line density in RAM, eliminating 32-bit overflow risk, and delivering optimal join throughput across high-volume relational tables. Applied to `organizations`, `branches`, `masters`, `addresses`, `menus`, and `notifications`.
+      - **External REST Public Identifier**: Always use native `Uuid(as_uuid=True)` with RFC 9562 time-ordered `default=uuid7` (`public_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), unique=True, index=True, nullable=False, default=uuid7)`). UUIDv7 embeds a millisecond UNIX timestamp in the most significant bits, preventing B-Tree index page-splitting and table fragmentation inherent to random UUIDv4, while shielding sequential database IDs from enumeration/scraping attacks.
+      - **Relational Foreign Keys**: Always use 64-bit `BigInteger` for foreign key columns (`organization_id`, `branch_id`, `country_id`, `state_id`, `city_id`, `parent_id`, `menu_id`, etc.).
+      - **Mandatory Foreign Key Indexing (PostgreSQL Rule)**: PostgreSQL does NOT automatically create indexes on foreign keys. AI agents **MUST** explicitly specify `index=True` on every `ForeignKey` column (e.g. `mapped_column(BigInteger, ForeignKey(...), index=True)`). Missing FK indexes trigger catastrophic full table scans and table-level locks during parent table `UPDATE` or `DELETE` cascades.
+    - **Identity & Access Management Entities**:
+      - Core security and decoupled identity root entities (`User`, `Role`, `Permission`) use direct RFC 9562 time-ordered UUID primary keys (`id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid7)`). `User` also defines `public_id: UUIDv7`.
+      - Junction tables (`UserRole`, `RolePermission`, `MenuRole`, `MenuPermission`) with composite primary keys **MUST** define `index=True` on reverse lookup foreign key columns (`role_id`, `permission_id`) to ensure O(log N) reverse permission queries and fast cascade checks.
+    - **Clean Mutation Payloads**: Never expose or accept `_public_id` foreign keys in mutation request bodies when integer IDs are available.
+    - **Option C Standard: Mandatory `{identifier}` Path Parameter & Dual-Lookup Resolution**:
+      - **Universal Path Parameter Naming (`{identifier}`)**: Single-resource endpoints (`GET /{identifier}`, `PATCH /{identifier}`, `DELETE /{identifier}`) across **ALL current and upcoming domain modules** (e.g., `/api/v1/masters/addresses/{identifier}`, `/api/v1/organizations/{identifier}`, `/api/v1/users/{identifier}`, `/api/v1/menus/{identifier}`, `/api/v1/roles/{identifier}`) MUST name the path parameter `{identifier}`. Never name path variables `{id}`, `{public_id}`, `{model}_id`, or `{domain}_id`.
+      - **Dual-Lookup Resolution Service Contract**: Every domain service must implement dual resolution (e.g. `_build_identifier_clause(identifier)`) to resolve either internal integer `id` (via primary key index) or external UUIDv7 `public_id` (via unique index), or unique `code` for system records.
+      - **Strict Input Interception**: Empty strings, `"null"`, `"undefined"`, `"none"`, or whitespace-only path parameters MUST be intercepted immediately in the router, returning a structured `400 Bad Request` error: `detail="{Entity} identifier cannot be null or empty."`.
+      - **Entity Not Found Error Envelope**: If a properly formatted identifier does not match any record, return structured `404 Not Found` with `detail="{Entity} with identifier '{identifier}' not found."`.
+  - **SQL-Injection Safe Dynamic Sorting**:
+    - Sort parameters from `get_sorting` (`sort_by`, `sort_order`) must be validated against SQLAlchemy model inspection metadata (`inspect(model).columns`).
+    - If a requested column does not exist on the model, safely fallback to `"created_at"` or `"id"`. Never interpolate raw string column names directly into SQL statements.
+  - **Standardized Structured Error Contracts**:
+    - All API error responses must adhere to the structured error envelope:
+      ```json
+      {
+        "error": {
+          "code": "RESOURCE_NOT_FOUND",
+          "message": "Human-readable description of error.",
+          "type": "invalid_request_error",
+          "param": "field_name_or_none",
+          "request_id": "req_uuid_here"
+        }
+      }
+      ```
+    - Domain exceptions must define a machine-readable `code` (e.g. `DUPLICATE_CODE`, `INVALID_STAGE_TRANSITION`).
+  - **Zero Vendor Brand Names Policy**:
+    - Never include proprietary vendor names (e.g., Stripe, Salesforce, HubSpot, Zoho) in program code, comments, docstrings, variable names, or test assertions. Reference is only permitted in architectural documentation for pattern comparisons.
+  - **Request Tracing & Observability (`X-Request-ID`)**:
+    - Every HTTP request must be traced with a unique `X-Request-ID` header.
+    - Errors, structured logs, and audit records must be correlated using this request ID.
+  - **Enterprise Audit Trail & Soft-Deletion (`AuditEntityBase`)**:
+    - High-value transactional and CRM domain records must inherit from `AuditEntityBase` with:
+      - `created_by_id: Mapped[UUID | None]`
+      - `updated_by_id: Mapped[UUID | None]`
+      - `is_deleted: Mapped[bool]` (default `False`, indexed)
+      - `deleted_at: Mapped[datetime | None]`
+    - Regular queries must filter out soft-deleted records (`where(Model.is_deleted.is_(False))`) by default.
+  - **Decoupled Identity Foundation**:
+    - Do **NOT** bind `User` models directly to `Organization` unless explicitly instructed. Keep identity and RBAC decoupled from specific CRM tenant account models.
 - **Pydantic v2 Standards**:
   - Use `model_config = ConfigDict(from_attributes=True)` instead of v1 `class Config: orm_mode = True`.
   - Use `@field_validator` and `@model_validator(mode="before"|"after")` instead of deprecated `@validator`.
@@ -97,6 +149,7 @@ Before generating any code, every AI agent must execute this 4-step checklist:
     async def list_items(
         db: Annotated[AsyncSession, Depends(get_db_session)],
         pagination: Annotated[PaginationParams, Depends(get_pagination)],
+        sorting: Annotated[SortParams, Depends(get_sorting)],
     ) -> PagedResponse[ItemResponse]:
     ```
 - **Formatting Standards**:
@@ -111,6 +164,7 @@ Before generating any code, every AI agent must execute this 4-step checklist:
 
 - **Shared Components First**:
   - Always use `app.shared.pagination.PaginationParams` via `Annotated[PaginationParams, Depends(get_pagination)]`.
+  - Always use `app.shared.sorting.SortParams` via `Annotated[SortParams, Depends(get_sorting)]`.
   - Always envelope paginated list responses with `app.shared.response.PagedResponse[T].build(...)`.
   - Always reuse auth dependencies from `app.core.security` and `app.modules.rbac`.
 - **Rule of Three**:
@@ -276,14 +330,23 @@ Before generating any code, every AI agent must execute this 4-step checklist:
   - AI generations must conclude with a self-verification checklist:
     - [ ] Type hints verified on all params & returns (Python & TypeScript)
     - [ ] Modern Async SQLAlchemy 2.0 (eager loading, no greenlet errors)
-    - [ ] Reused `PagedResponse` & `get_pagination` from `app.shared`
+    - [ ] Standardized collection endpoints: `PagedResponse[T]` envelope (never raw JSON arrays)
+    - [ ] Reused `PaginationParams`, `get_pagination`, `SortParams`, and `get_sorting` from `app.shared`
+    - [ ] Dual Identifier Strategy enforced: 64-bit BigInteger PKs/FKs with index=True on all FKs, time-ordered UUIDv7 public_id for external URL paths
+    - [ ] Identity roots (User, Role, Permission) use direct UUIDv7 primary keys; navigation/communication entities (Menu, Notification) use BigInteger PKs and UUIDv7 public_id
+    - [ ] Option C Standard enforced: universal `/{identifier}` path parameter naming for single-resource endpoints (never `{id}` or `{domain}_id`)
+    - [ ] Dual-lookup resolution supported (int ID or UUID public_id or unique code) with strict validation rejecting empty/null path parameters
+    - [ ] Standardized structured error responses formatted with code, message, and request_id (no vendor-specific terms in code)
+    - [ ] Zero vendor brand names in program code, comments, docstrings, or test assertions
+    - [ ] Request tracing enabled (X-Request-ID propagation)
+    - [ ] Decoupled identity maintained (No direct User-to-Organization link without explicit authorization)
     - [ ] Security & RBAC verified on both backend routers and frontend layouts
     - [ ] Transaction rollback & exception handling covered
     - [ ] Migrations use UTC timestamps for revision IDs and modular domain structure (no hex hashes)
-    - [ ] Frontend navigation dynamically consumed from `/api/v1/menus/my-menus`
-    - [ ] Documentation updated in `docs/` (`docs/03-modules/`, `docs/01-architecture/`, `docs/04-database/`, etc.)
-    - [ ] Backend passes `ruff check .` and `pytest`
-    - [ ] Frontend passes `npm run lint` and `npm run build` with 0 errors
+    - [ ] Frontend navigation dynamically consumed from /api/v1/menus/my-menus
+    - [ ] Documentation updated in docs/ (docs/03-modules/, docs/01-architecture/, docs/04-database/, etc.)
+    - [ ] Backend passes ruff check . and pytest
+    - [ ] Frontend passes npm run lint and npm run build with 0 errors
 
 
 

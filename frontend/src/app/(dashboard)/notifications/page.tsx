@@ -21,6 +21,7 @@ import {
 import { apiFetch } from '@/lib/api-client';
 import { NotificationItem, PagedResponse } from '@/lib/types';
 import { useToast } from '@/lib/toast-context';
+import { useAuth } from '@/lib/auth-context';
 
 function formatDateTime(isoString: string): string {
   try {
@@ -57,6 +58,8 @@ function formatRelativeTime(dateStr: string): string {
 
 export default function NotificationsPage() {
   const { toast } = useToast();
+  const { hasPermission } = useAuth();
+  const canDelete = hasPermission('notification.delete');
 
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -117,6 +120,10 @@ export default function NotificationsPage() {
   };
 
   const handleClearAll = async () => {
+    if (!canDelete) {
+      toast.error('You do not have permission to delete notifications.');
+      return;
+    }
     if (!confirm('Are you sure you want to dismiss all visible notifications?')) return;
     try {
       await apiFetch<{ deleted: number }>('/notifications/clear-all', {
@@ -126,6 +133,26 @@ export default function NotificationsPage() {
       toast.success('All notifications cleared successfully');
     } catch {
       toast.error('Failed to clear notifications');
+    }
+  };
+
+  const handleDeleteSingle = async (id: number | string) => {
+    if (!canDelete) {
+      toast.error('You do not have permission to delete notifications.');
+      return;
+    }
+    if (!confirm('Are you sure you want to dismiss this notification?')) return;
+    try {
+      await apiFetch(`/notifications/${id}`, {
+        method: 'DELETE',
+      });
+      setNotifications((prev) => prev.filter((n) => n.id !== id));
+      if (viewingNotification && viewingNotification.id === id) {
+        setViewingNotification(null);
+      }
+      toast.success('Notification dismissed');
+    } catch {
+      toast.error('Failed to dismiss notification');
     }
   };
 
@@ -246,7 +273,7 @@ export default function NotificationsPage() {
               <span>Mark All Read</span>
             </button>
           )}
-          {notifications.length > 0 && (
+          {notifications.length > 0 && canDelete && (
             <button
               type="button"
               onClick={handleClearAll}
@@ -540,21 +567,37 @@ export default function NotificationsPage() {
                     </span>
                   </td>
 
-                  {/* View Action */}
+                  {/* Actions */}
                   <td style={{ textAlign: 'right' }}>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setViewingNotification(n);
-                      }}
-                      className="btn btn-secondary"
-                      style={{ padding: '0.35rem 0.65rem', fontSize: '0.75rem', gap: '0.35rem' }}
-                      title="View Detailed Specification"
-                    >
-                      <Eye size={13} />
-                      <span>View</span>
-                    </button>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setViewingNotification(n);
+                        }}
+                        className="btn btn-secondary"
+                        style={{ padding: '0.35rem 0.65rem', fontSize: '0.75rem', gap: '0.35rem' }}
+                        title="View Detailed Specification"
+                      >
+                        <Eye size={13} />
+                        <span>View</span>
+                      </button>
+                      {canDelete && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteSingle(n.id);
+                          }}
+                          className="btn btn-secondary"
+                          style={{ padding: '0.35rem 0.55rem', fontSize: '0.75rem', color: '#f43f5e' }}
+                          title="Dismiss notification"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))
@@ -733,7 +776,20 @@ export default function NotificationsPage() {
             </div>
 
             {/* Modal Actions */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingTop: '0.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '0.5rem' }}>
+              <div>
+                {canDelete && (
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteSingle(viewingNotification.id)}
+                    className="btn btn-danger"
+                    style={{ fontSize: '0.8125rem', gap: '0.35rem' }}
+                  >
+                    <Trash2 size={14} />
+                    <span>Dismiss Notification</span>
+                  </button>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={() => setViewingNotification(null)}

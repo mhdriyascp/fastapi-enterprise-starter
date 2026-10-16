@@ -1,6 +1,6 @@
-from uuid import UUID, uuid4
+from uuid import UUID, uuid7
 
-from sqlalchemy import Boolean, String, Text, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, String, Text, UniqueConstraint, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.infrastructure.database.models.base_entity import EntityBase
@@ -9,16 +9,20 @@ from app.infrastructure.database.models.base_entity import EntityBase
 class Brand(EntityBase):
     __tablename__ = "brands"
 
-    __table_args__ = (
-        UniqueConstraint("code", name="uq_brands_code"),
+    __table_args__ = (UniqueConstraint("code", name="uq_brands_code"),)
+
+    id: Mapped[int] = mapped_column(
+        BigInteger,
+        primary_key=True,
+        autoincrement=True,
     )
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-
     public_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
         unique=True,
+        index=True,
         nullable=False,
-        default=uuid4,
+        default=uuid7,
     )
 
     code: Mapped[str] = mapped_column(

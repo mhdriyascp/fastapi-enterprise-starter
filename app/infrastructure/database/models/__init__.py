@@ -1,4 +1,4 @@
-from app.infrastructure.database.models.addresses.address import Address as Address
+from app.infrastructure.database.models.masters.address import Address as Address
 from app.infrastructure.database.models.organization import (
     Branch as Branch,
 )

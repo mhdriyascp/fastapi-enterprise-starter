@@ -1,7 +1,6 @@
 from typing import Annotated
-from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies.permissions import require_permission
@@ -90,28 +89,40 @@ async def create_notification(
 
 
 @router.patch(
-    "/{notification_id}/read",
+    "/{identifier}/read",
     response_model=NotificationResponse,
     status_code=status.HTTP_200_OK,
     summary="Mark notification as read or unread",
     description="Updates the read flag for a notification owned by or visible to the user.",
 )
 async def toggle_read(
-    notification_id: UUID,
+    identifier: Annotated[
+        str,
+        Path(
+            description="Unique identifier of the notification (internal ID or public UUIDv7)",
+            examples=["1", "018f3a2b-c4d5-7e8f-9a0b-1c2d3e4f5a6b"],
+        ),
+    ],
     data: NotificationUpdate,
     db: Annotated[AsyncSession, Depends(get_db_session)],
     current_user: Annotated[User, Depends(require_permission("notification.update"))],
 ) -> NotificationResponse:
+    str_val = identifier.strip() if identifier else ""
+    if not str_val or str_val.lower() in ("null", "undefined", "none"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Notification identifier cannot be null or empty.",
+        )
     service = NotificationService(db)
     notification = await service.mark_as_read(
-        notification_id,
+        str_val,
         current_user.id,
         is_read=data.is_read,
     )
     if not notification:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Notification not found.",
+            detail=f"Notification with identifier '{str_val}' not found.",
         )
     return NotificationResponse.model_validate(notification)
 
@@ -132,22 +143,34 @@ async def mark_all_read(
 
 
 @router.delete(
-    "/{notification_id}",
+    "/{identifier}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a notification",
     description="Deletes a notification visible to the user.",
 )
 async def delete_notification(
-    notification_id: UUID,
+    identifier: Annotated[
+        str,
+        Path(
+            description="Unique identifier of the notification (internal ID or public UUIDv7)",
+            examples=["1", "018f3a2b-c4d5-7e8f-9a0b-1c2d3e4f5a6b"],
+        ),
+    ],
     db: Annotated[AsyncSession, Depends(get_db_session)],
     current_user: Annotated[User, Depends(require_permission("notification.delete"))],
 ) -> None:
+    str_val = identifier.strip() if identifier else ""
+    if not str_val or str_val.lower() in ("null", "undefined", "none"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Notification identifier cannot be null or empty.",
+        )
     service = NotificationService(db)
-    deleted = await service.delete_notification(notification_id, current_user.id)
+    deleted = await service.delete_notification(str_val, current_user.id)
     if not deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Notification not found.",
+            detail=f"Notification with identifier '{str_val}' not found.",
         )
 
 

@@ -81,6 +81,7 @@ class CountryUpdate(BaseModel):
 class CountryResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
+    id: int
     public_id: UUID
     code: str
     iso3_code: str | None

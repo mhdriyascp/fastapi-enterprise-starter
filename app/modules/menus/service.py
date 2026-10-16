@@ -68,15 +68,35 @@ class MenuService:
             updated_at=menu.updated_at,
         )
 
-    async def get_menu_by_id(self, menu_id: UUID) -> Menu | None:
-        """Fetches a menu by its primary UUID with eager loaded roles and permissions."""
+    def _build_identifier_clause(self, identifier: int | UUID | str):
+        """Constructs an SQL expression matching either internal integer ID or public UUIDv7."""
+        if isinstance(identifier, int):
+            return Menu.id == identifier
+        if isinstance(identifier, UUID):
+            return Menu.public_id == identifier
+
+        str_val = str(identifier).strip()
+        if str_val.isdigit():
+            return Menu.id == int(str_val)
+        try:
+            parsed_uuid = UUID(str_val)
+            return Menu.public_id == parsed_uuid
+        except ValueError, TypeError:
+            return None
+
+    async def get_menu_by_id(self, identifier: int | UUID | str) -> Menu | None:
+        """Fetches a menu by either its internal integer ID or public UUIDv7."""
+        clause = self._build_identifier_clause(identifier)
+        if clause is None:
+            return None
+
         stmt = (
             select(Menu)
             .options(
                 selectinload(Menu.roles),
                 selectinload(Menu.permissions),
             )
-            .where(Menu.id == menu_id)
+            .where(clause)
         )
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
@@ -120,10 +140,12 @@ class MenuService:
                 candidate = f"{base_code[:44]}_{counter}"
                 counter += 1
 
-        if data.parent_id:
+        resolved_parent_id: int | None = None
+        if data.parent_id is not None:
             parent = await self.get_menu_by_id(data.parent_id)
             if not parent:
                 raise MenuParentNotFoundError("Parent menu does not exist.")
+            resolved_parent_id = parent.id
 
         menu = Menu(
             title=data.title.strip(),
@@ -131,7 +153,7 @@ class MenuService:
             path=data.path.strip() if data.path else None,
             icon=data.icon.strip() if data.icon else None,
             sort_order=data.sort_order,
-            parent_id=data.parent_id,
+            parent_id=resolved_parent_id,
             is_active=data.is_active,
         )
         self.db.add(menu)
@@ -164,7 +186,7 @@ class MenuService:
     async def list_menus(
         self,
         pagination: PaginationParams,
-        parent_id: UUID | None = None,
+        parent_id: int | UUID | str | None = None,
         is_active: bool | None = None,
     ) -> tuple[list[Menu], int]:
         """Lists menus with pagination and filtering."""
@@ -172,17 +194,16 @@ class MenuService:
             selectinload(Menu.roles),
             selectinload(Menu.permissions),
         )
+        count_stmt = select(func.count(Menu.id))
 
         if parent_id is not None:
-            query = query.where(Menu.parent_id == parent_id)
+            parent = await self.get_menu_by_id(parent_id)
+            resolved_parent_id = parent.id if parent else -1
+            query = query.where(Menu.parent_id == resolved_parent_id)
+            count_stmt = count_stmt.where(Menu.parent_id == resolved_parent_id)
+
         if is_active is not None:
             query = query.where(Menu.is_active == is_active)
-
-        # Count total
-        count_stmt = select(func.count(Menu.id))
-        if parent_id is not None:
-            count_stmt = count_stmt.where(Menu.parent_id == parent_id)
-        if is_active is not None:
             count_stmt = count_stmt.where(Menu.is_active == is_active)
 
         total = (await self.db.execute(count_stmt)).scalar_one()
@@ -209,20 +230,20 @@ class MenuService:
                 menu.code = clean_code
 
         if data.parent_id is not None:
-            if data.parent_id == menu.id:
+            parent = await self.get_menu_by_id(data.parent_id)
+            if not parent:
+                raise MenuParentNotFoundError("Parent menu does not exist.")
+            if parent.id == menu.id:
                 raise MenuCycleError("A menu cannot be its own parent.")
 
             # Check if target parent is a descendant of current menu
             descendant_ids = await self._get_all_descendant_ids(menu.id)
-            if data.parent_id in descendant_ids:
+            if parent.id in descendant_ids:
                 raise MenuCycleError(
                     "Cannot set parent to a descendant menu item (circular hierarchy)."
                 )
 
-            parent = await self.get_menu_by_id(data.parent_id)
-            if not parent:
-                raise MenuParentNotFoundError("Parent menu does not exist.")
-            menu.parent_id = data.parent_id
+            menu.parent_id = parent.id
 
         if data.title is not None:
             menu.title = data.title.strip()
@@ -255,18 +276,20 @@ class MenuService:
             raise MenuNotFoundError("Failed to retrieve updated menu.")
         return loaded
 
-    async def delete_menu(self, menu_id: UUID) -> None:
+    async def delete_menu(self, identifier: int | UUID | str) -> None:
         """Deletes a menu item and its cascaded children and assignments."""
-        menu = await self.get_menu_by_id(menu_id)
+        menu = await self.get_menu_by_id(identifier)
         if not menu:
             raise MenuNotFoundError("Menu not found.")
 
         await self.db.delete(menu)
         await self.db.commit()
 
-    async def set_menu_roles(self, menu_id: UUID, role_ids: list[UUID]) -> Menu:
+    async def set_menu_roles(
+        self, identifier: int | UUID | str, role_ids: list[UUID]
+    ) -> Menu:
         """Replaces role assignments for a menu."""
-        menu = await self.get_menu_by_id(menu_id)
+        menu = await self.get_menu_by_id(identifier)
         if not menu:
             raise MenuNotFoundError("Menu not found.")
 
@@ -277,14 +300,14 @@ class MenuService:
         await self.db.commit()
         loaded = await self.get_menu_by_id(menu.id)
         if not loaded:
-            raise MenuNotFoundError("Menu not found.")
+            raise MenuNotFoundError("Failed to retrieve updated menu.")
         return loaded
 
     async def set_menu_permissions(
-        self, menu_id: UUID, permission_ids: list[UUID]
+        self, identifier: int | UUID | str, permission_ids: list[UUID]
     ) -> Menu:
         """Replaces permission assignments for a menu."""
-        menu = await self.get_menu_by_id(menu_id)
+        menu = await self.get_menu_by_id(identifier)
         if not menu:
             raise MenuNotFoundError("Menu not found.")
 
@@ -297,7 +320,7 @@ class MenuService:
         await self.db.commit()
         loaded = await self.get_menu_by_id(menu.id)
         if not loaded:
-            raise MenuNotFoundError("Menu not found.")
+            raise MenuNotFoundError("Failed to retrieve updated menu.")
         return loaded
 
     async def get_full_tree(self, is_active_only: bool = False) -> list[MenuTreeNode]:
@@ -374,10 +397,10 @@ class MenuService:
         active_menus_res = await self.db.execute(all_active_menus_stmt)
         all_active_menus = list(active_menus_res.scalars().all())
 
-        menu_by_id: dict[UUID, Menu] = {m.id: m for m in all_active_menus}
+        menu_by_id: dict[int, Menu] = {m.id: m for m in all_active_menus}
 
         # 4. Find directly accessible menu IDs
-        directly_visible_ids: set[UUID] = set()
+        directly_visible_ids: set[int] = set()
         for menu in all_active_menus:
             menu_role_ids = {r.id for r in (menu.roles or [])}
             menu_perm_ids = {p.id for p in (menu.permissions or [])}
@@ -389,7 +412,7 @@ class MenuService:
                 directly_visible_ids.add(menu.id)
 
         # 5. Include ancestor menus so the tree structure is maintained
-        all_visible_ids: set[UUID] = set(directly_visible_ids)
+        all_visible_ids: set[int] = set(directly_visible_ids)
         for menu_id in directly_visible_ids:
             curr = menu_by_id.get(menu_id)
             while curr and curr.parent_id:
@@ -404,9 +427,9 @@ class MenuService:
         visible_menus = [m for m in all_active_menus if m.id in all_visible_ids]
         return self._build_tree(visible_menus)
 
-    async def _get_all_descendant_ids(self, menu_id: UUID) -> set[UUID]:
+    async def _get_all_descendant_ids(self, menu_id: int) -> set[int]:
         """Recursively retrieves all descendant menu IDs for cycle detection."""
-        descendants: set[UUID] = set()
+        descendants: set[int] = set()
         stmt = select(Menu.id).where(Menu.parent_id == menu_id)
         res = await self.db.execute(stmt)
         child_ids = list(res.scalars().all())
@@ -420,7 +443,7 @@ class MenuService:
 
     def _build_tree(self, menus: list[Menu]) -> list[MenuTreeNode]:
         """Builds a hierarchical tree from a flat list of menus, sorted by sort_order."""
-        nodes: dict[UUID, MenuTreeNode] = {}
+        nodes: dict[int, MenuTreeNode] = {}
         for m in menus:
             nodes[m.id] = MenuTreeNode(
                 id=m.id,

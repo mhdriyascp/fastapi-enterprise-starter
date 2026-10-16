@@ -119,3 +119,23 @@ async def test_users_api_endpoints() -> None:
         me_data = me_res.json()
         assert me_data["is_super_admin"] is True
         assert "super_admin" in me_data["roles"]
+
+        # 3. GET /api/v1/users/{identifier} dual lookup (by UUID id and public_id)
+        user_uuid = first_user["id"]
+        user_public_id = first_user["public_id"]
+
+        # by id
+        res_by_id = await client.get(f"/api/v1/users/{user_uuid}", headers=headers)
+        assert res_by_id.status_code == 200
+        assert res_by_id.json()["id"] == user_uuid
+
+        # by public_id
+        res_by_pub = await client.get(
+            f"/api/v1/users/{user_public_id}", headers=headers
+        )
+        assert res_by_pub.status_code == 200
+        assert res_by_pub.json()["public_id"] == user_public_id
+
+        # null rejection
+        res_bad = await client.get("/api/v1/users/null", headers=headers)
+        assert res_bad.status_code == 400

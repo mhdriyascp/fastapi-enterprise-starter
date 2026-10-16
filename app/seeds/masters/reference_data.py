@@ -624,7 +624,6 @@ async def seed_reference_data(db: AsyncSession) -> None:
                 "is_active": True,
             },
         )
-        
-        
+
     # Seed brands
     await seed_brands(db)

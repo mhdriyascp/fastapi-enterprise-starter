@@ -87,16 +87,31 @@ class NotificationService:
         await self.db.refresh(notification)
         return notification
 
+    def _build_identifier_clause(self, identifier: int | uuid.UUID | str):
+        if isinstance(identifier, int):
+            return Notification.id == identifier
+        if isinstance(identifier, uuid.UUID):
+            return Notification.public_id == identifier
+        str_val = str(identifier).strip()
+        if str_val.isdigit():
+            return Notification.id == int(str_val)
+        try:
+            val_uuid = uuid.UUID(str_val)
+            return Notification.public_id == val_uuid
+        except ValueError:
+            return Notification.id == -1
+
     async def mark_as_read(
         self,
-        notification_id: uuid.UUID,
+        notification_id: int | uuid.UUID | str,
         user_id: uuid.UUID,
         *,
         is_read: bool = True,
     ) -> Notification | None:
-        """Toggles the read status of a specific notification."""
+        """Toggles the read status of a specific notification by int ID or public UUID."""
+        id_clause = self._build_identifier_clause(notification_id)
         stmt = select(Notification).where(
-            Notification.id == notification_id,
+            id_clause,
             or_(
                 Notification.user_id == user_id,
                 Notification.user_id.is_(None),
@@ -135,12 +150,13 @@ class NotificationService:
 
     async def delete_notification(
         self,
-        notification_id: uuid.UUID,
+        notification_id: int | uuid.UUID | str,
         user_id: uuid.UUID,
     ) -> bool:
-        """Deletes a specific notification."""
+        """Deletes a specific notification by int ID or public UUID."""
+        id_clause = self._build_identifier_clause(notification_id)
         stmt = select(Notification).where(
-            Notification.id == notification_id,
+            id_clause,
             or_(
                 Notification.user_id == user_id,
                 Notification.user_id.is_(None),

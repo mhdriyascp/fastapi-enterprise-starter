@@ -1,14 +1,22 @@
+import logging
 from typing import Any
 
-from fastapi import FastAPI, status
+from fastapi import FastAPI, HTTPException, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from scalar_fastapi import get_scalar_api_reference
+from starlette.requests import Request
 
 from app.api.v1.router import router as v1_router
 from app.api.v2.router import router as v2_router
 from app.core.config import settings
 from app.core.lifecycle import lifespan
+from app.core.middleware import RequestIDMiddleware, SecurityHeadersMiddleware
+from app.core.request_context import get_request_id
+from app.shared.error_response import ErrorDetail, ErrorResponse
+
+logger = logging.getLogger(__name__)
 
 # Tags from shared general domains to include in dedicated v2 documentation.
 V2_SHARED_TAGS = {
@@ -30,6 +38,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Request ID tracing middleware for distributed request correlation
+app.add_middleware(RequestIDMiddleware)
+# Security headers middleware for response hardening
+app.add_middleware(SecurityHeadersMiddleware)
+
 # Configure Cross-Origin Resource Sharing (CORS) for frontend clients.
 app.add_middleware(
     CORSMiddleware,
@@ -39,6 +52,140 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def _get_error_type(status_code: int) -> str:
+    if status_code in (401, 403):
+        return "authentication_error"
+    if status_code == 404:
+        return "not_found_error"
+    if status_code == 409:
+        return "conflict_error"
+    if status_code in (400, 422):
+        return "invalid_request_error"
+    if status_code >= 500:
+        return "api_error"
+    return "invalid_request_error"
+
+
+def _get_default_code(status_code: int) -> str:
+    codes = {
+        400: "BAD_REQUEST",
+        401: "UNAUTHORIZED",
+        403: "FORBIDDEN",
+        404: "NOT_FOUND",
+        409: "CONFLICT",
+        422: "UNPROCESSABLE_ENTITY",
+        500: "INTERNAL_SERVER_ERROR",
+    }
+    return codes.get(status_code, "ERROR")
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+    request_id = get_request_id()
+    msg = str(exc.detail)
+    status_code = exc.status_code
+    error_type = _get_error_type(status_code)
+    code = getattr(exc, "code", _get_default_code(status_code))
+
+    error_response = ErrorResponse(
+        error=ErrorDetail(
+            code=code,
+            message=msg,
+            type=error_type,
+            param=getattr(exc, "param", None),
+            request_id=request_id,
+        ),
+        detail=msg,
+    )
+    headers = dict(getattr(exc, "headers", None) or {})
+    headers["X-Request-ID"] = request_id
+    return JSONResponse(
+        status_code=status_code,
+        content=error_response.model_dump(),
+        headers=headers,
+    )
+
+
+def _format_validation_error(err: dict[str, Any]) -> str:
+    loc = err.get("loc", [])
+    field_name = str(loc[-1]) if loc else "field"
+    err_type = str(err.get("type", ""))
+    err_msg = str(err.get("msg", "Validation error"))
+    inp = err.get("input")
+
+    if err_type == "missing":
+        return f"Field '{field_name}' is required."
+    if inp is None:
+        return f"Field '{field_name}' cannot be null."
+    if isinstance(inp, str) and (
+        inp.lower() in ("null", "undefined") or not inp.strip()
+    ):
+        return f"Parameter '{field_name}' cannot be empty or null."
+    if "uuid" in err_type:
+        return f"Parameter '{field_name}' must be a valid UUID."
+    if "int" in err_type:
+        return f"Field '{field_name}' must be a valid integer."
+    if "string" in err_type:
+        return f"Field '{field_name}' must be a valid string."
+    return f"Field '{field_name}': {err_msg}."
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    request_id = get_request_id()
+    errors = exc.errors()
+    first_error = errors[0] if errors else {}
+    loc = first_error.get("loc", [])
+    param = str(loc[-1]) if loc else None
+
+    formatted_messages = [_format_validation_error(e) for e in errors]
+    first_msg = (
+        formatted_messages[0]
+        if formatted_messages
+        else str(first_error.get("msg", "Validation error."))
+    )
+    full_message = " ".join(formatted_messages) if formatted_messages else first_msg
+
+    error_response = ErrorResponse(
+        error=ErrorDetail(
+            code="VALIDATION_ERROR",
+            message=first_msg,
+            type="invalid_request_error",
+            param=param,
+            request_id=request_id,
+        ),
+        detail=full_message,
+    )
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        content=error_response.model_dump(),
+        headers={"X-Request-ID": request_id},
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    request_id = get_request_id()
+    logger.exception("Unhandled server error: %s [Request-ID: %s]", exc, request_id)
+    error_response = ErrorResponse(
+        error=ErrorDetail(
+            code="INTERNAL_SERVER_ERROR",
+            message="An unexpected internal server error occurred. Please contact system support.",
+            type="api_error",
+            param=None,
+            request_id=request_id,
+        ),
+        detail="An unexpected internal server error occurred.",
+    )
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content=error_response.model_dump(),
+        headers={"X-Request-ID": request_id},
+    )
 
 
 # Register API v1 routes.

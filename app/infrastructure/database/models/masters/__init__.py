@@ -1,3 +1,4 @@
+from app.infrastructure.database.models.masters.address import Address
 from app.infrastructure.database.models.masters.address_type import AddressType
 from app.infrastructure.database.models.masters.brand import Brand
 from app.infrastructure.database.models.masters.city import City
@@ -18,6 +19,7 @@ from app.infrastructure.database.models.masters.time_zone import TimeZone
 from app.infrastructure.database.models.masters.unit_of_measure import UnitOfMeasure
 
 __all__ = [
+    "Address",
     "AddressType",
     "City",
     "CommunicationType",

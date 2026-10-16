@@ -4,8 +4,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class CityCreate(BaseModel):
-    country_public_id: UUID
-    state_public_id: UUID | None = None
+    model_config = ConfigDict(extra="ignore")
+
+    country_id: int
+    state_id: int | None = None
     name: str = Field(min_length=1, max_length=100)
 
     @field_validator("name")
@@ -18,8 +20,10 @@ class CityCreate(BaseModel):
 
 
 class CityUpdate(BaseModel):
-    country_public_id: UUID | None = None
-    state_public_id: UUID | None = None
+    model_config = ConfigDict(extra="ignore")
+
+    country_id: int | None = None
+    state_id: int | None = None
     name: str | None = Field(default=None, min_length=1, max_length=100)
     is_active: bool | None = None
 
@@ -38,6 +42,7 @@ class CityUpdate(BaseModel):
 class CityResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
+    id: int
     public_id: UUID
     country_id: int
     state_id: int | None

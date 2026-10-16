@@ -35,7 +35,7 @@ interface DashboardMetrics {
 }
 
 /**
- * Enterprise Production CRM Dashboard inspired by Salesforce and Zoho Books.
+ * Enterprise Production CRM Dashboard.
  * Provides executive financial KPIs (ARR, Receivables, Pipeline), opportunity funnel stages,
  * live organization client accounts, registered contacts, and real-time business audit feeds.
  */
@@ -59,7 +59,7 @@ export default function DashboardOverviewPage() {
     async function initData() {
       try {
         const [orgsData, usersData, healthData] = await Promise.allSettled([
-          apiFetch<Organization[]>('/organizations?limit=6'),
+          apiFetch<PagedResponse<Organization> | Organization[]>('/organizations?limit=6'),
           apiFetch<PagedResponse<User>>('/users?page=1&page_size=6'),
           apiFetch<{ status: string; database: number }>('/health'),
         ]);
@@ -70,8 +70,11 @@ export default function DashboardOverviewPage() {
         let usersCount = 0;
 
         if (orgsData.status === 'fulfilled') {
-          setRecentOrgs(orgsData.value);
-          orgsCount = orgsData.value.length;
+          const val = orgsData.value;
+          const items = Array.isArray(val) ? val : (val?.items || []);
+          const total = Array.isArray(val) ? val.length : (val?.total ?? items.length);
+          setRecentOrgs(items);
+          orgsCount = total;
         }
 
         if (usersData.status === 'fulfilled') {
@@ -111,12 +114,15 @@ export default function DashboardOverviewPage() {
     setIsRefreshing(true);
     try {
       const [orgsData, usersData] = await Promise.allSettled([
-        apiFetch<Organization[]>('/organizations?limit=6'),
+        apiFetch<PagedResponse<Organization> | Organization[]>('/organizations?limit=6'),
         apiFetch<PagedResponse<User>>('/users?page=1&page_size=6'),
       ]);
       if (orgsData.status === 'fulfilled') {
-        setRecentOrgs(orgsData.value);
-        setStats((prev) => ({ ...prev, orgsCount: orgsData.value.length }));
+        const val = orgsData.value;
+        const items = Array.isArray(val) ? val : (val?.items || []);
+        const total = Array.isArray(val) ? val.length : (val?.total ?? items.length);
+        setRecentOrgs(items);
+        setStats((prev) => ({ ...prev, orgsCount: total }));
       }
       if (usersData.status === 'fulfilled') {
         setRecentUsers(usersData.value.items || []);
@@ -127,7 +133,7 @@ export default function DashboardOverviewPage() {
     }
   };
 
-  // Salesforce pipeline stages mock data (production CRM model)
+  // Pipeline stages mock data (production CRM model)
   const pipelineStages = [
     { name: '1. Discovery & Inbound', count: 24, value: '$180,000', percentage: 20, color: '#6366f1' },
     { name: '2. Needs Analysis & Demo', count: 16, value: '$265,000', percentage: 40, color: '#38bdf8' },
@@ -136,7 +142,7 @@ export default function DashboardOverviewPage() {
     { name: '5. Closed Won (This Quarter)', count: 19, value: '$685,000', percentage: 100, color: '#10b981' },
   ];
 
-  // Zoho Books cash flow & receivables breakdown
+  // Cash flow & receivables breakdown
   const receivablesData = [
     { label: 'Current & Unbilled', amount: '$184,500', status: 'Healthy', color: '#10b981' },
     { label: 'Due in 1-15 Days', amount: '$42,200', status: 'Upcoming', color: '#6366f1' },
@@ -184,7 +190,7 @@ export default function DashboardOverviewPage() {
           </p>
         </div>
 
-        {/* Action Controls & Date Period Selector (Zoho Books & Salesforce style) */}
+        {/* Action Controls & Date Period Selector */}
         <div className="dashboard-toolbar-actions">
           <div style={{ width: '230px', minWidth: '190px' }}>
             <SearchableSelect
@@ -220,7 +226,7 @@ export default function DashboardOverviewPage() {
         </div>
       </div>
 
-      {/* KPI Financial & Operational Metrics Grid (Zoho & Salesforce High-Impact Cards) */}
+      {/* KPI Financial & Operational Metrics Grid (Executive High-Impact Cards) */}
       <div className="kpi-metrics-grid">
         <StatCard
           title="ANNUAL RECURRING REVENUE (ARR)"
@@ -283,9 +289,9 @@ export default function DashboardOverviewPage() {
         />
       </div>
 
-      {/* Main Analytics Row: Salesforce Opportunity Funnel + Zoho Books Cash Flow */}
+      {/* Main Analytics Row: Opportunity Funnel + Working Capital Cash Flow */}
       <div className="dashboard-grid-2col">
-        {/* Salesforce Opportunity Pipeline Funnel Widget */}
+        {/* Opportunity Pipeline Funnel Widget */}
         <Card padding="1.75rem">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
             <div>
@@ -296,7 +302,7 @@ export default function DashboardOverviewPage() {
                 </h3>
               </div>
               <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
-                Salesforce-modeled deal velocity across 5 pipeline conversion gates.
+                Deal velocity tracking across 5 pipeline conversion gates.
               </p>
             </div>
             <span className="badge badge-success" style={{ fontWeight: 700 }}>
@@ -357,7 +363,7 @@ export default function DashboardOverviewPage() {
           </div>
         </Card>
 
-        {/* Zoho Books Cash Flow & Receivables Summary Widget */}
+        {/* Cash Flow & Receivables Summary Widget */}
         <Card padding="1.75rem">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
             <div>
@@ -368,7 +374,7 @@ export default function DashboardOverviewPage() {
                 </h3>
               </div>
               <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
-                Zoho Books-style billing aging and collection efficiency breakdown.
+                Billing aging schedule and collection efficiency breakdown.
               </p>
             </div>
             <span className="badge badge-primary" style={{ fontWeight: 700 }}>
@@ -612,7 +618,7 @@ export default function DashboardOverviewPage() {
         </Card>
       </div>
 
-      {/* Enterprise Audit & Activity Stream (Salesforce Feed / Zoho Audit style) */}
+      {/* Enterprise Audit & Activity Stream */}
       <Card padding="1.75rem">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
           <div>

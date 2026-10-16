@@ -5,7 +5,6 @@ from sqlalchemy import (
     ForeignKey,
     String,
     Text,
-    UniqueConstraint,
     text,
 )
 from sqlalchemy.dialects.postgresql import UUID
@@ -104,19 +103,13 @@ class Permission(EntityBase):
 class UserRole(Base):
     __tablename__ = "user_roles"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        primary_key=True,
-        default=uuid.uuid7,
-    )
-
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey(
             "users.id",
             ondelete="CASCADE",
         ),
-        nullable=False,
+        primary_key=True,
     )
 
     role_id: Mapped[uuid.UUID] = mapped_column(
@@ -125,26 +118,13 @@ class UserRole(Base):
             "roles.id",
             ondelete="RESTRICT",
         ),
-        nullable=False,
-    )
-
-    __table_args__ = (
-        UniqueConstraint(
-            "user_id",
-            "role_id",
-            name="uq_user_roles_user_role",
-        ),
+        primary_key=True,
+        index=True,
     )
 
 
 class RolePermission(Base):
     __tablename__ = "role_permissions"
-
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        primary_key=True,
-        default=uuid.uuid7,
-    )
 
     role_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -152,7 +132,7 @@ class RolePermission(Base):
             "roles.id",
             ondelete="CASCADE",
         ),
-        nullable=False,
+        primary_key=True,
     )
 
     permission_id: Mapped[uuid.UUID] = mapped_column(
@@ -161,13 +141,6 @@ class RolePermission(Base):
             "permissions.id",
             ondelete="RESTRICT",
         ),
-        nullable=False,
-    )
-
-    __table_args__ = (
-        UniqueConstraint(
-            "role_id",
-            "permission_id",
-            name="uq_role_permissions_role_permission",
-        ),
+        primary_key=True,
+        index=True,
     )

@@ -1,4 +1,4 @@
-from uuid import UUID, uuid4
+from uuid import UUID, uuid7
 
 from sqlalchemy import (
     BigInteger,
@@ -7,13 +7,14 @@ from sqlalchemy import (
     Integer,
     String,
     UniqueConstraint,
+    Uuid,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.infrastructure.database.models.base_entity import EntityBase
+from app.infrastructure.database.models.base_entity import AuditEntityBase
 
 
-class DocumentSequence(EntityBase):
+class DocumentSequence(AuditEntityBase):
     __tablename__ = "document_sequences"
 
     __table_args__ = (
@@ -25,16 +26,25 @@ class DocumentSequence(EntityBase):
         ),
     )
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    public_id: Mapped[UUID] = mapped_column(unique=True, nullable=False, default=uuid4)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    public_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        unique=True,
+        index=True,
+        nullable=False,
+        default=uuid7,
+    )
     organization_id: Mapped[int] = mapped_column(
+        BigInteger,
         ForeignKey("organizations.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
     branch_id: Mapped[int | None] = mapped_column(
+        BigInteger,
         ForeignKey("branches.id", ondelete="RESTRICT"),
         nullable=True,
+        index=True,
     )
     document_type: Mapped[str] = mapped_column(String(50), nullable=False)
     prefix: Mapped[str] = mapped_column(String(30), nullable=False, default="")

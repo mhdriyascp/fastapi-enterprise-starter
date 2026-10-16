@@ -1,8 +1,9 @@
 import uuid
 from datetime import datetime
+from uuid import UUID, uuid7
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, String, Uuid
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.infrastructure.database.models.base_entity import EntityBase
@@ -17,14 +18,22 @@ class Notification(EntityBase):
 
     __tablename__ = "notifications"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+    id: Mapped[int] = mapped_column(
+        BigInteger,
         primary_key=True,
-        default=uuid.uuid7,
+        autoincrement=True,
+    )
+
+    public_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        unique=True,
+        index=True,
+        nullable=False,
+        default=uuid7,
     )
 
     user_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
+        PG_UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=True,
         index=True,

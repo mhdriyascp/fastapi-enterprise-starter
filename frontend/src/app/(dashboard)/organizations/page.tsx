@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { apiFetch } from '@/lib/api-client';
-import { Organization, OrganizationCreateInput, OrganizationUpdateInput } from '@/lib/types';
+import { PagedResponse, Organization, OrganizationCreateInput, OrganizationUpdateInput } from '@/lib/types';
 import {
   Building2,
   Search,
@@ -81,8 +81,9 @@ export default function OrganizationsPage() {
   const loadOrganizations = async () => {
     setIsRefreshing(true);
     try {
-      const res = await apiFetch<Organization[]>('/organizations');
-      setOrganizations(res || []);
+      const res = await apiFetch<PagedResponse<Organization> | Organization[]>('/organizations');
+      const items = Array.isArray(res) ? res : (res?.items || []);
+      setOrganizations(items);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to retrieve organizations.';
       toast.error(msg);
@@ -97,9 +98,10 @@ export default function OrganizationsPage() {
 
     async function init() {
       try {
-        const res = await apiFetch<Organization[]>('/organizations');
+        const res = await apiFetch<PagedResponse<Organization> | Organization[]>('/organizations');
         if (isMounted) {
-          setOrganizations(res || []);
+          const items = Array.isArray(res) ? res : (res?.items || []);
+          setOrganizations(items);
         }
       } catch (err: unknown) {
         if (isMounted) {

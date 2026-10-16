@@ -4,7 +4,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class StateCreate(BaseModel):
-    country_public_id: UUID
+    model_config = ConfigDict(extra="ignore")
+
+    country_id: int
     code: str | None = Field(default=None, max_length=20)
     name: str = Field(min_length=1, max_length=100)
 
@@ -23,7 +25,9 @@ class StateCreate(BaseModel):
 
 
 class StateUpdate(BaseModel):
-    country_public_id: UUID | None = None
+    model_config = ConfigDict(extra="ignore")
+
+    country_id: int | None = None
     code: str | None = Field(default=None, max_length=20)
     name: str | None = Field(default=None, min_length=1, max_length=100)
     is_active: bool | None = None
@@ -45,6 +49,7 @@ class StateUpdate(BaseModel):
 class StateResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
+    id: int
     public_id: UUID
     country_id: int
     code: str | None

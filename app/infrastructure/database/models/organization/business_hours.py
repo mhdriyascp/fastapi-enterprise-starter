@@ -1,12 +1,21 @@
-from uuid import UUID, uuid4
+from uuid import UUID, uuid7
 
-from sqlalchemy import Boolean, ForeignKey, Integer, String, Time, UniqueConstraint
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    ForeignKey,
+    Integer,
+    String,
+    Time,
+    UniqueConstraint,
+    Uuid,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.infrastructure.database.models.base_entity import EntityBase
+from app.infrastructure.database.models.base_entity import AuditEntityBase
 
 
-class BusinessHours(EntityBase):
+class BusinessHours(AuditEntityBase):
     __tablename__ = "business_hours"
 
     __table_args__ = (
@@ -18,16 +27,25 @@ class BusinessHours(EntityBase):
         ),
     )
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    public_id: Mapped[UUID] = mapped_column(unique=True, nullable=False, default=uuid4)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    public_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        unique=True,
+        index=True,
+        nullable=False,
+        default=uuid7,
+    )
     organization_id: Mapped[int] = mapped_column(
+        BigInteger,
         ForeignKey("organizations.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
     branch_id: Mapped[int | None] = mapped_column(
+        BigInteger,
         ForeignKey("branches.id", ondelete="RESTRICT"),
         nullable=True,
+        index=True,
     )
     day_of_week: Mapped[int] = mapped_column(Integer, nullable=False)
     opens_at: Mapped[object | None] = mapped_column(Time, nullable=True)

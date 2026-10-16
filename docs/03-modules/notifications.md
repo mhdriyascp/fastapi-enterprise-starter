@@ -19,7 +19,8 @@ The **Notifications** domain module provides real-time event alerts, activity st
    ┌────────────────────────────────────────────────────────┐
    │                      Notification                      │
    ├────────────────────────────────────────────────────────┤
-   │ id: UUID (PK, default=uuid4)                           │
+   │ id: BigInteger (PK, autoincrement)                     │
+   │ public_id: UUID (Unique, Index, default=uuid7)         │
    │ user_id: UUID (FK -> users.id, Nullable, Index)        │
    │ title: String(150, Not Null)                           │
    │ message: Text (Not Null)                               │
@@ -47,9 +48,9 @@ All endpoints are registered under `/api/v1/notifications` and require fine-grai
 | `GET` | `/api/v1/notifications` | `notification.read` | List user notifications | `PagedResponse[NotificationResponse]` | Fetches paginated activity stream for current user (supports `unread_only=true`). |
 | `GET` | `/api/v1/notifications/unread-count` | `notification.read` | Get unread count | `UnreadCountResponse` | Returns number of unread notifications visible to current user. |
 | `POST` | `/api/v1/notifications` | `notification.create` | Dispatch notification | `NotificationResponse` (201) | Creates a new notification (defaults target to `current_user.id`). |
-| `PATCH` | `/api/v1/notifications/{id}/read` | `notification.update` | Mark read / unread | `NotificationResponse` | Toggles read status and sets `read_at` timestamp. |
+| `PATCH` | `/api/v1/notifications/{identifier}/read` | `notification.update` | Mark read / unread | `NotificationResponse` | Toggles read status (dual-lookup: int ID or UUID public_id) and sets `read_at` timestamp. |
 | `POST` | `/api/v1/notifications/mark-all-read` | `notification.update` | Mark all read | `{"updated": int}` | Batch marks all unread notifications visible to user as read. |
-| `DELETE` | `/api/v1/notifications/{id}` | `notification.delete` | Dismiss notification | 204 No Content | Deletes single notification visible to user. |
+| `DELETE` | `/api/v1/notifications/{identifier}` | `notification.delete` | Dismiss notification | 204 No Content | Deletes single notification (dual-lookup: int ID or UUID public_id) visible to user. |
 | `DELETE` | `/api/v1/notifications/clear-all` | `notification.delete` | Clear all | `{"deleted": int}` | Deletes all notifications visible to user. |
 
 ---

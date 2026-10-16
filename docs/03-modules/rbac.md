@@ -16,28 +16,28 @@ The RBAC module provides centralized authorization management, decoupling permis
 ## API Endpoints
 
 ### 1. Roles Management (`/api/v1/roles`)
-| Method | Endpoint | Required Permission | Description |
-|---|---|---|---|
-| `POST` | `/api/v1/roles` | `role.create` | Create a new business role. |
-| `GET` | `/api/v1/roles` | `role.read` | Paginated listing of roles prioritized hierarchically (`super_admin` first, then `admin`, followed by other system roles, and custom roles). |
-| `GET` | `/api/v1/roles/{role_id}` | `role.read` | Fetch role by UUID. |
-| `PUT` | `/api/v1/roles/{role_id}` | `role.update` | Update role name or description. |
-| `DELETE`| `/api/v1/roles/{role_id}` | `role.delete` | Delete role (system roles cannot be deleted). |
+| Method | Endpoint | Required Permission | Response Model | Description |
+|---|---|---|---|---|
+| `POST` | `/api/v1/roles` | `role.create` | `RoleResponse` | Create a new business role. |
+| `GET` | `/api/v1/roles` | `role.read` | `PagedResponse[RoleResponse]` | Standardized paginated listing of roles prioritized hierarchically (`super_admin` first, then `admin`, followed by other system roles, and custom roles). |
+| `GET` | `/api/v1/roles/{identifier}` | `role.read` | `RoleResponse` | Fetch role by UUID or unique code (dual-lookup). |
+| `PATCH` | `/api/v1/roles/{identifier}` | `role.update` | `RoleResponse` | Update role name, description, or active status (dual-lookup). |
+| `DELETE`| `/api/v1/roles/{identifier}` | `role.delete` | None (`204`) | Delete role (dual-lookup; system roles cannot be deleted). |
 
 ### 2. Permissions Catalog (`/api/v1/permissions`)
-| Method | Endpoint | Required Permission | Description |
-|---|---|---|---|
-| `POST` | `/api/v1/permissions` | `permission.create` | Register a new custom permission. |
-| `GET` | `/api/v1/permissions` | `permission.read` | List all registered system and custom permissions. |
-| `GET` | `/api/v1/permissions/{id}` | `permission.read` | Get permission details. |
-| `PATCH`| `/api/v1/permissions/{id}` | `permission.update` | Update permission name, description, and active status. |
-| `DELETE`| `/api/v1/permissions/{id}`| `permission.delete` | Delete custom permission (system permissions are protected). |
+| Method | Endpoint | Required Permission | Response Model | Description |
+|---|---|---|---|---|
+| `POST` | `/api/v1/permissions` | `permission.create` | `PermissionResponse` | Register a new custom permission. |
+| `GET` | `/api/v1/permissions` | `permission.read` | `PagedResponse[PermissionResponse]` | Standardized paginated list of all registered system and custom permissions. |
+| `GET` | `/api/v1/permissions/{identifier}` | `permission.read` | `PermissionResponse` | Get permission details (dual-lookup: UUID or unique code). |
+| `PATCH`| `/api/v1/permissions/{identifier}` | `permission.update` | `PermissionResponse` | Update permission name, description, and active status (dual-lookup). |
+| `DELETE`| `/api/v1/permissions/{identifier}`| `permission.delete` | None (`204`) | Delete custom permission (dual-lookup; system permissions are protected). |
 
-### 3. Role-Permission Mappings (`/api/v1/roles/{role_id}/permissions`)
+### 3. Role-Permission Mappings (`/api/v1/roles/{identifier}/permissions`)
 | Method | Endpoint | Required Permission | Description |
 |---|---|---|---|
-| `POST` | `/api/v1/roles/{role_id}/permissions` | `role.assign_permission` | Assign permission to a role. |
-| `DELETE`| `/api/v1/roles/{role_id}/permissions/{permission_id}` | `role.revoke_permission` | Revoke permission from a role. |
+| `POST` | `/api/v1/roles/{identifier}/permissions` | `role.assign_permission` | Assign permission to a role. |
+| `DELETE`| `/api/v1/roles/{identifier}/permissions/{permission_id}` | `role.revoke_permission` | Revoke permission from a role. |
 
 ---
 
@@ -47,6 +47,7 @@ The RBAC module provides centralized authorization management, decoupling permis
   - Universal root access across all modules (`*.*`).
   - Protected from permission modification or deletion in both backend services and frontend matrix.
   - Automatically satisfies all permission dependencies via `require_permission`.
+  - **Exclusive Permissions**: Root-governance permissions (`role.delete`, `permission.create`, `permission.update`, `permission.delete`) are strictly reserved for `super_admin` and cannot be assigned to any other role (enforced via `SystemRoleError` in backend and disabled matrix controls in frontend).
 - **`admin` (System Administrator Role)**:
   - Granted broad operational and administrative permissions across all standard modules:
     - Users: `user.read`, `user.create`, `user.update`, `user.delete`

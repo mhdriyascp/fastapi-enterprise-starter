@@ -1,11 +1,14 @@
+from __future__ import annotations
+
 import uuid
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     ForeignKey,
     Integer,
     String,
-    UniqueConstraint,
+    Uuid,
     text,
 )
 from sqlalchemy.dialects.postgresql import UUID
@@ -20,21 +23,22 @@ class Menu(EntityBase):
 
     __tablename__ = "menus"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+    id: Mapped[int] = mapped_column(
+        BigInteger,
         primary_key=True,
-        default=uuid.uuid7,
+        autoincrement=True,
     )
 
     public_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+        Uuid(as_uuid=True),
         unique=True,
         index=True,
+        nullable=False,
         default=uuid.uuid7,
     )
 
-    parent_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
+    parent_id: Mapped[int | None] = mapped_column(
+        BigInteger,
         ForeignKey("menus.id", ondelete="CASCADE"),
         nullable=True,
         index=True,
@@ -109,32 +113,17 @@ class MenuRole(Base):
 
     __tablename__ = "menu_roles"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        primary_key=True,
-        default=uuid.uuid7,
-    )
-
-    menu_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+    menu_id: Mapped[int] = mapped_column(
+        BigInteger,
         ForeignKey("menus.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
+        primary_key=True,
     )
 
     role_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("roles.id", ondelete="CASCADE"),
-        nullable=False,
+        primary_key=True,
         index=True,
-    )
-
-    __table_args__ = (
-        UniqueConstraint(
-            "menu_id",
-            "role_id",
-            name="uq_menu_roles_menu_role",
-        ),
     )
 
 
@@ -143,30 +132,15 @@ class MenuPermission(Base):
 
     __tablename__ = "menu_permissions"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        primary_key=True,
-        default=uuid.uuid7,
-    )
-
-    menu_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+    menu_id: Mapped[int] = mapped_column(
+        BigInteger,
         ForeignKey("menus.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
+        primary_key=True,
     )
 
     permission_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("permissions.id", ondelete="CASCADE"),
-        nullable=False,
+        primary_key=True,
         index=True,
-    )
-
-    __table_args__ = (
-        UniqueConstraint(
-            "menu_id",
-            "permission_id",
-            name="uq_menu_permissions_menu_permission",
-        ),
     )

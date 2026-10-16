@@ -13,7 +13,9 @@ from app.infrastructure.database.base import Base
 
 # General master models
 from app.infrastructure.database.models.masters import (
+    Address,
     AddressType,
+    Brand,
     City,
     CommunicationType,
     Country,
@@ -23,6 +25,7 @@ from app.infrastructure.database.models.masters import (
     Industry,
     Language,
     State,
+    Tax,
     TimeZone,
     UnitOfMeasure,
 )

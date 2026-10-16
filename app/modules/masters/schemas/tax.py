@@ -1,4 +1,5 @@
 from decimal import Decimal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -34,4 +35,4 @@ class TaxResponse(TaxBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    public_id: str
+    public_id: UUID

@@ -203,6 +203,9 @@ async def test_menus_full_api_endpoints() -> None:
         menu_data = response.json()
         assert menu_data["code"] == menu_code
         menu_id = menu_data["id"]
+        public_id = menu_data["public_id"]
+        assert isinstance(menu_id, int)
+        assert isinstance(public_id, str)
 
         # 2. Duplicate Menu Creation -> 409
         dup_resp = await client.post(
@@ -220,10 +223,19 @@ async def test_menus_full_api_endpoints() -> None:
         assert "total" in paged
         assert paged["page"] == 1
 
-        # 4. Get Menu details via GET /api/v1/menus/{menu_id}
+        # 4. Get Menu details via GET /api/v1/menus/{menu_id} (internal integer ID)
         detail_resp = await client.get(f"/api/v1/menus/{menu_id}", headers=headers)
         assert detail_resp.status_code == 200
         assert detail_resp.json()["id"] == menu_id
+
+        # 4b. Get Menu details via GET /api/v1/menus/{public_id} (public UUIDv7)
+        public_resp = await client.get(f"/api/v1/menus/{public_id}", headers=headers)
+        assert public_resp.status_code == 200
+        assert public_resp.json()["public_id"] == public_id
+
+        # 4c. Reject null or empty identifier with 400 Bad Request
+        bad_resp = await client.get("/api/v1/menus/null", headers=headers)
+        assert bad_resp.status_code == 400
 
         # 5. Update Menu via PATCH /api/v1/menus/{menu_id}
         patch_resp = await client.patch(

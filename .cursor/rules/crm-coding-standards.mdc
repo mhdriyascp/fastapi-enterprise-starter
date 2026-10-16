@@ -26,6 +26,19 @@ Before generating or refactoring ANY code (backend or frontend), strictly follow
    - For pagination query params, use `Annotated[PaginationParams, Depends(get_pagination)]` from `app.shared.pagination`.
    - For DB sessions, use `Annotated[AsyncSession, Depends(get_db_session)]`.
 
+4. **Enterprise Model Standards & Dual Identifier Strategy (Performance + Security)**:
+   - **Internal Relational PKs/FKs**: Always use 64-bit `BigInteger` (`id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)`).
+   - **Mandatory Foreign Key Indexing (PostgreSQL)**: Every `ForeignKey` column MUST declare `index=True` (e.g. `mapped_column(BigInteger, ForeignKey(...), index=True)`) to eliminate full table scans and table-level locks.
+   - **External REST Identifiers**: Expose sequential RFC 9562 `uuid7` via `public_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), unique=True, index=True, nullable=False, default=uuid7)`.
+   - **Identity Root Models**: Core IAM entities (`User`, `Role`, `Permission`) use direct UUIDv7 primary keys. Navigation and communication entities (`Menu`, `Notification`) use BigInteger PKs and UUIDv7 public_id.
+   - **Reverse Junction Indexes**: Junction tables with composite keys (`user_roles`, `role_permissions`, `menu_roles`, `menu_permissions`) must set `index=True` on secondary FKs.
+   - **Option C Standard: Universal `{identifier}` & Dual-Lookup Resolution**:
+     - Single-resource endpoints (`GET /{identifier}`, `PATCH /{identifier}`, `DELETE /{identifier}`) across ALL current and upcoming domain modules (e.g. `/api/v1/masters/addresses/{identifier}`, `/api/v1/organizations/{identifier}`, `/api/v1/users/{identifier}`, `/api/v1/menus/{identifier}`) MUST name the path parameter `{identifier}`. Never use `{id}`, `{public_id}`, `{model}_id`, or `{domain}_id`.
+     - Domain services must implement dual resolution resolving by sequential integer `id` (PK) or UUIDv7 `public_id`, or unique `code` for system records.
+     - Strict input interception: empty strings, `"null"`, `"undefined"`, `"none"`, or whitespace-only inputs must immediately return `400 Bad Request` (`detail="{Entity} identifier cannot be null or empty."`).
+     - Missing entities must return `404 Not Found` (`detail="{Entity} with identifier '{identifier}' not found."`).
+   - **Zero Vendor Brand Names**: Never include proprietary vendor names in program code, docstrings, comments, or test assertions.
+
 ## Mandatory Frontend Architecture Rules (Next.js 15)
 1. **Strict Layered Structure (`frontend/src/`)**:
    - `lib/types.ts`: TypeScript contracts mirroring backend Pydantic schemas.

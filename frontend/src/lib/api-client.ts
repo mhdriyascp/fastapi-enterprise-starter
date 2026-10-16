@@ -183,7 +183,9 @@ export async function apiFetch<T>(
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
     const message =
-      errorData.detail || `HTTP Error ${response.status}: ${response.statusText}`;
+      errorData.error?.message ||
+      errorData.detail ||
+      `HTTP Error ${response.status}: ${response.statusText}`;
     throw new ApiError(response.status, message, errorData);
   }
 

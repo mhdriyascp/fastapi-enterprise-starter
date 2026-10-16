@@ -100,10 +100,13 @@ async def test_notifications_api_endpoints() -> None:
         assert create_resp.status_code == 201
         created_data = create_resp.json()
         notif_id = created_data["id"]
+        public_id = created_data["public_id"]
+        assert isinstance(notif_id, int)
+        assert isinstance(public_id, str)
         assert created_data["title"] == unique_title
         assert created_data["is_read"] is False
 
-        # 4. Mark notification as read via PATCH
+        # 4a. Mark notification as read via PATCH using internal integer ID
         read_resp = await client.patch(
             f"/api/v1/notifications/{notif_id}/read",
             json={"is_read": True},
@@ -111,6 +114,23 @@ async def test_notifications_api_endpoints() -> None:
         )
         assert read_resp.status_code == 200
         assert read_resp.json()["is_read"] is True
+
+        # 4b. Toggle notification via PATCH using external UUID public_id
+        toggle_resp = await client.patch(
+            f"/api/v1/notifications/{public_id}/read",
+            json={"is_read": False},
+            headers=headers,
+        )
+        assert toggle_resp.status_code == 200
+        assert toggle_resp.json()["is_read"] is False
+
+        # 4c. Reject null or empty identifier with 400 Bad Request
+        bad_resp = await client.patch(
+            "/api/v1/notifications/null/read",
+            json={"is_read": True},
+            headers=headers,
+        )
+        assert bad_resp.status_code == 400
 
         # 5. Mark all as read
         mark_all_resp = await client.post(

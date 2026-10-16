@@ -1,5 +1,4 @@
-"""
-Shared pagination utilities.
+"""Shared pagination utilities.
 
 Provides validated pagination parameters for list endpoints and
 SQLAlchemy queries.
@@ -12,8 +11,7 @@ from fastapi import Query
 
 @dataclass(frozen=True, slots=True)
 class PaginationParams:
-    """
-    Validated pagination parameters.
+    """Validated pagination parameters.
 
     Attributes:
         page: Current page number, starting at 1.
@@ -21,11 +19,6 @@ class PaginationParams:
 
     The offset property converts page-based pagination into the
     zero-based offset required by SQLAlchemy.
-
-    Example:
-        page=2, page_size=20
-
-        offset = (2 - 1) * 20 = 20
     """
 
     page: int
@@ -51,16 +44,29 @@ def get_pagination(
         description="Number of items per page. Minimum 1, maximum 100.",
         examples=[10, 20, 50],
     ),
+    limit: int | None = Query(
+        default=None,
+        ge=1,
+        le=100,
+        description="Optional alias for page_size.",
+    ),
+    offset: int | None = Query(
+        default=None,
+        ge=0,
+        description="Optional zero-based record offset.",
+    ),
 ) -> PaginationParams:
-    """
-    Resolve and validate pagination query parameters.
+    """Resolve and validate pagination query parameters.
 
-    Inject this dependency into list endpoints using Depends(get_pagination).
-
-    Returns:
-        PaginationParams: Validated page, page size, and computed offset.
+    Supports both standard enterprise page/page_size pagination and
+    legacy offset/limit queries seamlessly.
     """
+    effective_page_size = limit if limit is not None else page_size
+    effective_page = page
+    if offset is not None and limit is not None:
+        effective_page = (offset // effective_page_size) + 1
+
     return PaginationParams(
-        page=page,
-        page_size=page_size,
+        page=effective_page,
+        page_size=effective_page_size,
     )

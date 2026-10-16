@@ -71,7 +71,7 @@ const SYSTEM_ROUTES: RouteSuggestion[] = [
     description: 'Executive KPIs, Sales Funnel, Receivables & Pipeline Overview',
     path: '/',
     category: 'Dashboard',
-    keywords: ['home', 'kpi', 'revenue', 'arr', 'stats', 'analytics', 'funnel', 'salesforce', 'zoho'],
+    keywords: ['home', 'kpi', 'revenue', 'arr', 'stats', 'analytics', 'funnel', 'pipeline', 'crm'],
   },
   {
     id: 'r-orgs',
@@ -150,7 +150,8 @@ const SYSTEM_ROUTES: RouteSuggestion[] = [
  */
 export function Header({ onToggleMobileSidebar }: HeaderProps) {
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user, logout, hasPermission } = useAuth();
+  const canDeleteNotifications = hasPermission('notification.delete');
 
   // Search State
   const [searchQuery, setSearchQuery] = useState('');
@@ -211,10 +212,16 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
     if (!user) return;
     try {
       setIsLoadingNotifications(true);
-      const res = await apiFetch<PagedResponse<NotificationItem>>('/notifications?page=1&page_size=25');
-      setNotifications(res.items);
-      const unread = res.items.filter((n) => !n.is_read).length;
-      setUnreadCount(unread);
+      const [notifRes, countRes] = await Promise.allSettled([
+        apiFetch<PagedResponse<NotificationItem>>('/notifications?page=1&page_size=25'),
+        apiFetch<UnreadCountResponse>('/notifications/unread-count'),
+      ]);
+      if (notifRes.status === 'fulfilled') {
+        setNotifications(notifRes.value.items);
+      }
+      if (countRes.status === 'fulfilled') {
+        setUnreadCount(countRes.value.unread_count);
+      }
     } catch {
       // Retain existing notifications on network failure
     } finally {
@@ -286,7 +293,7 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
     }
   };
 
-  const handleToggleRead = async (id: string, currentIsRead: boolean, link?: string | null) => {
+  const handleToggleRead = async (id: number | string, currentIsRead: boolean, link?: string | null) => {
     const nextStatus = !currentIsRead;
     // Optimistic update
     setNotifications((prev) =>
@@ -324,7 +331,7 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
     }
   };
 
-  const handleDeleteNotification = async (e: React.MouseEvent, id: string) => {
+  const handleDeleteNotification = async (e: React.MouseEvent, id: number | string) => {
     e.stopPropagation();
     const item = notifications.find((n) => n.id === id);
     setNotifications((prev) => prev.filter((n) => n.id !== id));
@@ -889,24 +896,26 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
                             }}
                           />
                         )}
-                        <button
-                          type="button"
-                          onClick={(e) => handleDeleteNotification(e, n.id)}
-                          title="Dismiss notification"
-                          style={{
-                            background: 'transparent',
-                            border: 'none',
-                            color: 'var(--text-muted)',
-                            cursor: 'pointer',
-                            padding: '2px',
-                            display: 'flex',
-                            alignItems: 'center',
-                          }}
-                          onMouseEnter={(e) => (e.currentTarget.style.color = '#f43f5e')}
-                          onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
-                        >
-                          <Trash2 size={13} />
-                        </button>
+                        {canDeleteNotifications && (
+                          <button
+                            type="button"
+                            onClick={(e) => handleDeleteNotification(e, n.id)}
+                            title="Dismiss notification"
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              color: 'var(--text-muted)',
+                              cursor: 'pointer',
+                              padding: '2px',
+                              display: 'flex',
+                              alignItems: 'center',
+                            }}
+                            onMouseEnter={(e) => (e.currentTarget.style.color = '#f43f5e')}
+                            onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))
@@ -929,20 +938,26 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
                   fontSize: '0.75rem',
                 }}
               >
-                <button
-                  type="button"
-                  onClick={handleClearNotifications}
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    color: 'var(--text-muted)',
-                    cursor: 'pointer',
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.color = '#f43f5e')}
-                  onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
-                >
-                  Clear all
-                </button>
+                {canDeleteNotifications ? (
+                  <button
+                    type="button"
+                    onClick={handleClearNotifications}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: 'var(--text-muted)',
+                      cursor: 'pointer',
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = '#f43f5e')}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
+                  >
+                    Clear all
+                  </button>
+                ) : (
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>
+                    Activity Stream
+                  </span>
+                )}
                 <Link
                   href="/notifications"
                   onClick={() => setShowNotifications(false)}

@@ -1,7 +1,6 @@
 from typing import Annotated
-from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies.auth import get_current_user
@@ -106,8 +105,8 @@ async def list_menus(
     db: Annotated[AsyncSession, Depends(get_db_session)],
     pagination: Annotated[PaginationParams, Depends(get_pagination)],
     parent_id: Annotated[
-        UUID | None,
-        Query(description="Filter by parent menu UUID"),
+        str | None,
+        Query(description="Filter by parent menu ID or public UUIDv7"),
     ] = None,
     is_active: Annotated[
         bool | None,
@@ -130,29 +129,42 @@ async def list_menus(
 
 
 @router.get(
-    "/{menu_id}",
+    "/{identifier}",
     response_model=MenuResponse,
     status_code=status.HTTP_200_OK,
     summary="Get menu item details",
-    description="Fetches detailed information for a specific menu item by its UUID.",
+    description="Fetches detailed information for a specific menu item by its integer ID or public UUIDv7.",
     dependencies=[Depends(require_permission("menu.read"))],
 )
 async def get_menu(
-    menu_id: UUID,
+    identifier: Annotated[
+        str,
+        Path(
+            description="Unique identifier of the menu item (internal ID or public UUIDv7)",
+            examples=["1", "018f3a2b-c4d5-7e8f-9a0b-1c2d3e4f5a6b"],
+        ),
+    ],
     db: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> MenuResponse:
+    str_val = identifier.strip() if identifier else ""
+    if not str_val or str_val.lower() in ("null", "undefined", "none"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Menu identifier cannot be null or empty.",
+        )
+
     service = MenuService(db)
-    menu = await service.get_menu_by_id(menu_id)
+    menu = await service.get_menu_by_id(str_val)
     if not menu:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Menu not found.",
+            detail=f"Menu with identifier '{str_val}' not found.",
         )
     return service.to_response(menu)
 
 
 @router.patch(
-    "/{menu_id}",
+    "/{identifier}",
     response_model=MenuResponse,
     status_code=status.HTTP_200_OK,
     summary="Update menu item",
@@ -160,16 +172,29 @@ async def get_menu(
     dependencies=[Depends(require_permission("menu.update"))],
 )
 async def update_menu(
-    menu_id: UUID,
+    identifier: Annotated[
+        str,
+        Path(
+            description="Unique identifier of the menu item (internal ID or public UUIDv7)",
+            examples=["1", "018f3a2b-c4d5-7e8f-9a0b-1c2d3e4f5a6b"],
+        ),
+    ],
     data: MenuUpdate,
     db: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> MenuResponse:
+    str_val = identifier.strip() if identifier else ""
+    if not str_val or str_val.lower() in ("null", "undefined", "none"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Menu identifier cannot be null or empty.",
+        )
+
     service = MenuService(db)
-    menu = await service.get_menu_by_id(menu_id)
+    menu = await service.get_menu_by_id(str_val)
     if not menu:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Menu not found.",
+            detail=f"Menu with identifier '{str_val}' not found.",
         )
 
     try:
@@ -193,19 +218,32 @@ async def update_menu(
 
 
 @router.delete(
-    "/{menu_id}",
+    "/{identifier}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete menu item",
     description="Deletes a menu item, cascading to child items and access assignments.",
     dependencies=[Depends(require_permission("menu.delete"))],
 )
 async def delete_menu(
-    menu_id: UUID,
+    identifier: Annotated[
+        str,
+        Path(
+            description="Unique identifier of the menu item (internal ID or public UUIDv7)",
+            examples=["1", "018f3a2b-c4d5-7e8f-9a0b-1c2d3e4f5a6b"],
+        ),
+    ],
     db: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> None:
+    str_val = identifier.strip() if identifier else ""
+    if not str_val or str_val.lower() in ("null", "undefined", "none"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Menu identifier cannot be null or empty.",
+        )
+
     service = MenuService(db)
     try:
-        await service.delete_menu(menu_id)
+        await service.delete_menu(str_val)
     except MenuNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -214,7 +252,7 @@ async def delete_menu(
 
 
 @router.put(
-    "/{menu_id}/roles",
+    "/{identifier}/roles",
     response_model=MenuResponse,
     status_code=status.HTTP_200_OK,
     summary="Assign roles to menu item",
@@ -222,13 +260,26 @@ async def delete_menu(
     dependencies=[Depends(require_permission("menu.update"))],
 )
 async def set_menu_roles(
-    menu_id: UUID,
+    identifier: Annotated[
+        str,
+        Path(
+            description="Unique identifier of the menu item (internal ID or public UUIDv7)",
+            examples=["1", "018f3a2b-c4d5-7e8f-9a0b-1c2d3e4f5a6b"],
+        ),
+    ],
     data: MenuRoleAssignment,
     db: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> MenuResponse:
+    str_val = identifier.strip() if identifier else ""
+    if not str_val or str_val.lower() in ("null", "undefined", "none"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Menu identifier cannot be null or empty.",
+        )
+
     service = MenuService(db)
     try:
-        updated = await service.set_menu_roles(menu_id, data.role_ids)
+        updated = await service.set_menu_roles(str_val, data.role_ids)
         return service.to_response(updated)
     except MenuNotFoundError as exc:
         raise HTTPException(
@@ -238,7 +289,7 @@ async def set_menu_roles(
 
 
 @router.put(
-    "/{menu_id}/permissions",
+    "/{identifier}/permissions",
     response_model=MenuResponse,
     status_code=status.HTTP_200_OK,
     summary="Assign permissions to menu item",
@@ -246,13 +297,26 @@ async def set_menu_roles(
     dependencies=[Depends(require_permission("menu.update"))],
 )
 async def set_menu_permissions(
-    menu_id: UUID,
+    identifier: Annotated[
+        str,
+        Path(
+            description="Unique identifier of the menu item (internal ID or public UUIDv7)",
+            examples=["1", "018f3a2b-c4d5-7e8f-9a0b-1c2d3e4f5a6b"],
+        ),
+    ],
     data: MenuPermissionAssignment,
     db: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> MenuResponse:
+    str_val = identifier.strip() if identifier else ""
+    if not str_val or str_val.lower() in ("null", "undefined", "none"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Menu identifier cannot be null or empty.",
+        )
+
     service = MenuService(db)
     try:
-        updated = await service.set_menu_permissions(menu_id, data.permission_ids)
+        updated = await service.set_menu_permissions(str_val, data.permission_ids)
         return service.to_response(updated)
     except MenuNotFoundError as exc:
         raise HTTPException(

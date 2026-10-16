@@ -1,20 +1,26 @@
-from uuid import UUID, uuid4
+from typing import TYPE_CHECKING
+from uuid import UUID, uuid7
 
-from sqlalchemy import Boolean, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import BigInteger, Boolean, String, Uuid
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.infrastructure.database.models.base_entity import EntityBase
+from app.infrastructure.database.models.base_entity import AuditEntityBase
+
+if TYPE_CHECKING:
+    from app.infrastructure.database.models.masters.address import Address
 
 
-class Organization(EntityBase):
+class Organization(AuditEntityBase):
     __tablename__ = "organizations"
 
-    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
 
     public_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
         unique=True,
+        index=True,
         nullable=False,
-        default=uuid4,
+        default=uuid7,
     )
 
     code: Mapped[str] = mapped_column(
@@ -64,4 +70,11 @@ class Organization(EntityBase):
         nullable=False,
         default=True,
         server_default="true",
+    )
+
+    addresses: Mapped[list[Address]] = relationship(
+        "Address",
+        back_populates="organization",
+        cascade="all, delete-orphan",
+        lazy="selectin",
     )

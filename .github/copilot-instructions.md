@@ -18,4 +18,15 @@ Key Standards Checklist:
 8. **Traceable**: Structured logging with standard library `logging` (never `print()`).
 9. **Controlled**: Human-governed verification, non-destructive database actions only.
    - **Modular Timestamped Migrations**: Alembic migrations must strictly use UTC timestamp revision IDs (`YYYYMMDDHHMMSS`, e.g. `20261014120001`) and descriptive slugs. Random hex hashes are prohibited. Migrations must be modularized by domain with valid FK dependency sequencing (`down_revision`).
+10. **Enterprise Model Standards & Dual Identifier Strategy**:
+   - 64-bit `BigInteger` for internal PKs and relational FKs.
+   - Mandatory `index=True` on every `ForeignKey` column for PostgreSQL.
+   - External public identifiers use native `Uuid(as_uuid=True)` with sequential RFC 9562 `default=uuid7`.
+   - Core IAM root entities (`User`, `Role`, `Permission`) use direct UUIDv7 primary keys with index on secondary composite FKs. Navigation and communication entities (`Menu`, `Notification`) use BigInteger PKs and UUIDv7 public_id.
+   - **Option C Standard: Universal `{identifier}` & Dual-Lookup Resolution**:
+     - Single-resource endpoints (`GET /{identifier}`, `PATCH /{identifier}`, `DELETE /{identifier}`) across ALL current and upcoming modules (e.g., `/api/v1/masters/addresses/{identifier}`, `/api/v1/organizations/{identifier}`, `/api/v1/users/{identifier}`, `/api/v1/menus/{identifier}`) MUST name the path parameter `{identifier}`. Never use `{id}`, `{public_id}`, or `{domain}_id`.
+     - Services must implement dual lookup resolving by internal integer `id` (PK) or UUIDv7 `public_id`, or unique `code`.
+     - Strict input interception: empty strings, `"null"`, `"undefined"`, `"none"`, or whitespace-only inputs must immediately return structured `400 Bad Request`.
+     - Missing entities must return structured `404 Not Found`.
+   - Zero proprietary vendor names in program code, comments, or docstrings.
 

@@ -230,14 +230,14 @@ export default function MenusPage() {
     });
   };
 
-  function openCreateModal(parentId: string = '') {
+  function openCreateModal(parentId: number | string = '') {
     setFormData({
       title: '',
       code: '',
       path: '',
       icon: 'layers',
       sort_order: 10,
-      parent_id: parentId,
+      parent_id: parentId ? String(parentId) : '',
       is_active: true,
     });
     setFormError(null);
@@ -254,7 +254,7 @@ export default function MenusPage() {
       path: menu.path || menu.route || '',
       icon: menu.icon || 'layers',
       sort_order: menu.sort_order ?? menu.order_no ?? 10,
-      parent_id: menu.parent_id || '',
+      parent_id: menu.parent_id !== null && menu.parent_id !== undefined ? String(menu.parent_id) : '',
       is_active: menu.is_active,
     });
     setFormError(null);
@@ -1097,12 +1097,12 @@ export default function MenusPage() {
                       ...flatList
                         .filter((item) => (modalMode === 'edit' && selectedMenu ? item.id !== selectedMenu.id : true))
                         .map((item): SelectOption => ({
-                          value: item.id,
+                          value: String(item.id),
                           label: item.title,
                           sublabel: `(${item.code})`,
                           icon: <FolderTree size={15} />,
                           badge: item.is_active ? 'Active' : 'Disabled',
-                          badgeVariant: item.is_active ? 'success' : 'neutral',
+                          badgeVariant: item.is_active ? 'success' : 'danger',
                         })),
                     ]}
                     value={formData.parent_id}

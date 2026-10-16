@@ -1,4 +1,5 @@
 import re
+from typing import Final
 from uuid import UUID
 
 from sqlalchemy import case, delete, func, select
@@ -17,6 +18,13 @@ from app.modules.rbac.schemas import (
     RoleCreate,
     RoleUpdate,
 )
+
+SUPER_ADMIN_EXCLUSIVE_PERMISSIONS: Final[set[str]] = {
+    "role.delete",
+    "permission.create",
+    "permission.update",
+    "permission.delete",
+}
 
 # ============================================================
 # Role exceptions
@@ -141,6 +149,8 @@ class RoleService:
 
     async def list_roles(
         self,
+        offset: int | None = None,
+        limit: int | None = None,
         page: int = 1,
         page_size: int = 20,
     ) -> tuple[list[Role], int]:
@@ -154,20 +164,34 @@ class RoleService:
             else_=3,
         )
 
+        query_offset = offset if offset is not None else (page - 1) * page_size
+        query_limit = limit if limit is not None else page_size
+
         result = await self.db.execute(
             select(Role)
             .order_by(role_priority, Role.name.asc(), Role.id.asc())
-            .offset((page - 1) * page_size)
-            .limit(page_size)
+            .offset(query_offset)
+            .limit(query_limit)
         )
 
         return list(result.scalars().all()), total
 
     async def get_role(
         self,
-        role_id: UUID,
+        identifier: UUID | str,
     ) -> Role:
-        role = await self.db.get(Role, role_id)
+        if isinstance(identifier, UUID):
+            role = await self.db.get(Role, identifier)
+        else:
+            str_val = str(identifier).strip()
+            try:
+                parsed_uuid = UUID(str_val)
+                role = await self.db.get(Role, parsed_uuid)
+            except ValueError, TypeError:
+                res = await self.db.execute(
+                    select(Role).where(Role.code == str_val.lower())
+                )
+                role = res.scalar_one_or_none()
 
         if role is None:
             raise RoleNotFoundError("Role not found.")
@@ -176,10 +200,10 @@ class RoleService:
 
     async def update_role(
         self,
-        role_id: UUID,
+        identifier: UUID | str,
         data: RoleUpdate,
     ) -> Role:
-        role = await self.get_role(role_id)
+        role = await self.get_role(identifier)
 
         changes = data.model_dump(exclude_unset=True)
 
@@ -207,15 +231,15 @@ class RoleService:
 
     async def delete_role(
         self,
-        role_id: UUID,
+        identifier: UUID | str,
     ) -> None:
-        role = await self.get_role(role_id)
+        role = await self.get_role(identifier)
 
         if role.is_system:
             raise SystemRoleError("System roles cannot be deleted.")
 
         result = await self.db.execute(
-            select(UserRole.id).where(UserRole.role_id == role_id).limit(1)
+            select(UserRole.user_id).where(UserRole.role_id == role.id).limit(1)
         )
 
         if result.scalar_one_or_none() is not None:
@@ -290,13 +314,21 @@ class RoleService:
         if permission is None:
             raise PermissionNotFoundError("Permission not found.")
 
+        if permission.code in SUPER_ADMIN_EXCLUSIVE_PERMISSIONS and role.code not in (
+            "super_admin",
+            "superadmin",
+        ):
+            raise SystemRoleError(
+                f"Permission '{permission.code}' is exclusively reserved for the Super Administrator role."
+            )
+
         if not permission.is_active:
             raise InactivePermissionError(
                 "Inactive permissions cannot be assigned to a role."
             )
 
         existing_result = await self.db.execute(
-            select(RolePermission.id).where(
+            select(RolePermission.role_id).where(
                 RolePermission.role_id == role_id,
                 RolePermission.permission_id == permission_id,
             )
@@ -361,6 +393,22 @@ class RoleService:
             )
 
             permissions = list(result.scalars().all())
+
+            if len(permissions) != len(permission_ids):
+                raise PermissionNotFoundError(
+                    "One or more specified permissions were not found."
+                )
+
+            if role.code not in ("super_admin", "superadmin"):
+                exclusive_violations = [
+                    p.code
+                    for p in permissions
+                    if p.code in SUPER_ADMIN_EXCLUSIVE_PERMISSIONS
+                ]
+                if exclusive_violations:
+                    raise SystemRoleError(
+                        f"Permissions {exclusive_violations} are exclusively reserved for the Super Administrator role."
+                    )
 
             permissions_by_id = {
                 permission.id: permission for permission in permissions
@@ -503,6 +551,8 @@ class PermissionService:
 
     async def list_permissions(
         self,
+        offset: int | None = None,
+        limit: int | None = None,
         page: int = 1,
         page_size: int = 20,
     ) -> tuple[list[Permission], int]:
@@ -511,6 +561,9 @@ class PermissionService:
         )
         total = total_result.scalar_one()
 
+        query_offset = offset if offset is not None else (page - 1) * page_size
+        query_limit = limit if limit is not None else page_size
+
         result = await self.db.execute(
             select(Permission)
             .order_by(
@@ -518,20 +571,28 @@ class PermissionService:
                 Permission.action,
                 Permission.id,
             )
-            .offset((page - 1) * page_size)
-            .limit(page_size)
+            .offset(query_offset)
+            .limit(query_limit)
         )
 
         return list(result.scalars().all()), total
 
     async def get_permission(
         self,
-        permission_id: UUID,
+        identifier: UUID | str,
     ) -> Permission:
-        permission = await self.db.get(
-            Permission,
-            permission_id,
-        )
+        if isinstance(identifier, UUID):
+            permission = await self.db.get(Permission, identifier)
+        else:
+            str_val = str(identifier).strip()
+            try:
+                parsed_uuid = UUID(str_val)
+                permission = await self.db.get(Permission, parsed_uuid)
+            except ValueError, TypeError:
+                res = await self.db.execute(
+                    select(Permission).where(Permission.code == str_val.lower())
+                )
+                permission = res.scalar_one_or_none()
 
         if permission is None:
             raise PermissionNotFoundError("Permission not found.")
@@ -540,10 +601,10 @@ class PermissionService:
 
     async def update_permission(
         self,
-        permission_id: UUID,
+        identifier: UUID | str,
         data: PermissionUpdate,
     ) -> Permission:
-        permission = await self.get_permission(permission_id)
+        permission = await self.get_permission(identifier)
 
         changes = data.model_dump(exclude_unset=True)
 
@@ -575,16 +636,16 @@ class PermissionService:
 
     async def delete_permission(
         self,
-        permission_id: UUID,
+        identifier: UUID | str,
     ) -> None:
-        permission = await self.get_permission(permission_id)
+        permission = await self.get_permission(identifier)
 
         if permission.is_system:
             raise SystemPermissionError("System permissions cannot be deleted.")
 
         result = await self.db.execute(
-            select(RolePermission.id)
-            .where(RolePermission.permission_id == permission_id)
+            select(RolePermission.role_id)
+            .where(RolePermission.permission_id == permission.id)
             .limit(1)
         )
 

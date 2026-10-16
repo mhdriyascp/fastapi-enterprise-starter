@@ -42,6 +42,17 @@ export interface UserUpdatePayload {
   role_codes?: string[];
 }
 
+export interface UserCreatePayload {
+  first_name?: string | null;
+  last_name?: string | null;
+  display_name?: string | null;
+  email: string;
+  password: string;
+  phone?: string | null;
+  status?: string;
+  role_codes?: string[];
+}
+
 /**
  * JWT credentials returned upon successful authentication.
  * Mirrored from FastAPI Pydantic schema: app/modules/users/schemas.py (TokenResponse).
@@ -60,12 +71,12 @@ export interface TokenResponse {
  * Mirrored from FastAPI Pydantic schema: app/modules/menus/schemas.py (MenuItemResponse).
  */
 export interface MenuItem {
-  /** Menu item unique identifier */
-  id: string;
+  /** Menu item unique identifier (internal ID or public UUIDv7) */
+  id: number | string;
   /** Public-facing UUID */
   public_id?: string;
   /** Parent menu identifier for hierarchical nesting, or null for root items */
-  parent_id: string | null;
+  parent_id: number | string | null;
   /** Unique system identifier (e.g., 'nav_orgs') */
   code: string;
   /** User-facing title rendered in the sidebar */
@@ -164,6 +175,14 @@ export interface Organization {
   website?: string | null;
   /** Whether the organization is active */
   is_active: boolean;
+  /** UUID of operator who created this record */
+  created_by_id?: string | null;
+  /** UUID of operator who last modified this record */
+  updated_by_id?: string | null;
+  /** Soft-deletion status indicator */
+  is_deleted?: boolean;
+  /** UTC timestamp of soft-deletion */
+  deleted_at?: string | null;
   /** UTC timestamp of organization creation */
   created_at: string;
   /** UTC timestamp of last update */
@@ -262,8 +281,10 @@ export interface PermissionUpdateInput {
  * Mirrored from FastAPI Pydantic schema: app/modules/notifications/schemas.py (NotificationResponse).
  */
 export interface NotificationItem {
-  /** Internal UUID primary key */
-  id: string;
+  /** Internal BigInteger primary key or string identifier */
+  id: number | string;
+  /** Public-facing UUIDv7 identifier */
+  public_id?: string;
   /** Targeted user UUID or null for system-wide broadcast */
   user_id?: string | null;
   /** Subject/title of notification */
@@ -311,6 +332,7 @@ export interface MasterListResponse<T> {
 }
 
 export interface MasterCountry {
+  id: number;
   public_id: string;
   code: string;
   iso3_code?: string | null;
@@ -320,6 +342,7 @@ export interface MasterCountry {
 }
 
 export interface MasterState {
+  id: number;
   public_id: string;
   country_id: number;
   code?: string | null;
@@ -328,6 +351,7 @@ export interface MasterState {
 }
 
 export interface MasterCity {
+  id: number;
   public_id: string;
   country_id: number;
   state_id?: number | null;
@@ -378,6 +402,7 @@ export interface MasterUnitOfMeasure {
 }
 
 export interface MasterTypeEntity {
+  id?: number;
   public_id: string;
   code: string;
   name: string;
@@ -389,4 +414,44 @@ export type MasterAddressType = MasterTypeEntity;
 export type MasterCommunicationType = MasterTypeEntity;
 export type MasterDocumentType = MasterTypeEntity;
 export type MasterIdentificationType = MasterTypeEntity;
+
+export interface MasterBrand {
+  id?: number;
+  public_id: string;
+  code: string;
+  name: string;
+  description?: string | null;
+  is_active: boolean;
+}
+
+export interface MasterTax {
+  id?: number;
+  public_id: string;
+  code: string;
+  name: string;
+  rate: number;
+  tax_type: string;
+  country_id: number;
+  is_active: boolean;
+}
+
+export interface MasterAddress {
+  id?: number;
+  public_id: string;
+  organization_id?: number | null;
+  branch_id?: number | null;
+  address_type_id: number;
+  country_id: number;
+  state_id?: number | null;
+  city_id?: number | null;
+  address_line1: string;
+  address_line2?: string | null;
+  landmark?: string | null;
+  postal_code?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  notes?: string | null;
+  is_default: boolean;
+  is_active: boolean;
+}
 

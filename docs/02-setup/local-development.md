@@ -106,10 +106,23 @@ In a new terminal window, navigate to the `frontend/` directory and launch the N
 
 ```bash
 cd frontend
+npm install
 npm run dev
 ```
 
 The enterprise dashboard is accessible at:
 - **Dashboard UI**: [http://localhost:3000](http://localhost:3000)
 - **Login Portal**: [http://localhost:3000/login](http://localhost:3000/login)
+
+### Frontend Verification Commands
+
+```bash
+# Verify ESLint code health
+npm run lint
+
+# Compile and verify production build
+npm run build
+```
+
+For complete Next.js CLI reference, see [CLI Commands Reference](../02-setup/cli-commands.md#14-frontend--nextjs-cli-commands).
 

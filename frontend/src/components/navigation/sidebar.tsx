@@ -24,6 +24,8 @@ import {
   Clock,
   ExternalLink,
   Sparkles,
+  Percent,
+  Home,
   X,
 } from 'lucide-react';
 
@@ -54,6 +56,9 @@ function normalizeRoute(rawRoute: string | null | undefined): string {
   if (clean === '/masters/document-types' || clean === 'document-types') return '/masters?tab=document-types';
   if (clean === '/masters/identification-types' || clean === 'identification-types') return '/masters?tab=identification-types';
   if (clean === '/masters/units-of-measure' || clean === 'units-of-measure') return '/masters?tab=units-of-measure';
+  if (clean === '/masters/taxes' || clean === 'taxes') return '/masters?tab=taxes';
+  if (clean === '/masters/brands' || clean === 'brands') return '/masters?tab=brands';
+  if (clean === '/masters/addresses' || clean === 'addresses') return '/masters?tab=addresses';
   return clean;
 }
 
@@ -196,6 +201,9 @@ function getIconComponent(iconName: string | null): React.ReactNode {
   if (normalized.includes('coin') || normalized.includes('curr') || normalized.includes('money')) return <Coins size={18} />;
   if (normalized.includes('pin') || normalized.includes('map') || normalized.includes('state')) return <MapPin size={18} />;
   if (normalized.includes('time') || normalized.includes('clock')) return <Clock size={18} />;
+  if (normalized.includes('percent') || normalized.includes('tax')) return <Percent size={18} />;
+  if (normalized.includes('sparkle') || normalized.includes('brand')) return <Sparkles size={18} />;
+  if (normalized.includes('home') || normalized.includes('addr')) return <Home size={18} />;
   return <Layers size={18} />;
 }
 
@@ -292,10 +300,10 @@ function SidebarContent({ isMobileOpen = false, onCloseMobile }: SidebarProps = 
   // Deterministically sort menu tree and sub-children based on sort_order
   const sortedMenus = useMemo(() => sortMenuItemsByOrder(effectiveMenus), [effectiveMenus]);
 
-  function toggleExpand(id: string, currentlyExpanded: boolean) {
+  function toggleExpand(id: number | string, currentlyExpanded: boolean) {
     setExpandedKeys((prev) => ({
       ...prev,
-      [id]: !currentlyExpanded,
+      [String(id)]: !currentlyExpanded,
     }));
   }
 

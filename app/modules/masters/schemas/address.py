@@ -7,6 +7,8 @@ from pydantic import BaseModel, ConfigDict, Field
 class AddressCreate(BaseModel):
     """Validate data when creating an address."""
 
+    model_config = ConfigDict(extra="ignore")
+
     organization_id: int | None = None
     branch_id: int | None = None
 
@@ -30,6 +32,8 @@ class AddressCreate(BaseModel):
 
 class AddressUpdate(BaseModel):
     """Validate partial updates to an address."""
+
+    model_config = ConfigDict(extra="ignore")
 
     organization_id: int | None = None
     branch_id: int | None = None
@@ -83,6 +87,10 @@ class AddressResponse(BaseModel):
     notes: str | None
     is_default: bool
     is_active: bool
+    created_by_id: UUID | None = None
+    updated_by_id: UUID | None = None
+    is_deleted: bool = False
+    deleted_at: datetime | None = None
 
     created_at: datetime
     updated_at: datetime | None

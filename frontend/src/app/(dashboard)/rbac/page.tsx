@@ -32,6 +32,13 @@ import {
   Eye,
 } from 'lucide-react';
 
+const SUPER_ADMIN_EXCLUSIVE_PERMISSIONS = [
+  'role.delete',
+  'permission.create',
+  'permission.update',
+  'permission.delete',
+];
+
 /**
  * Inner component reading URL search parameters.
  */
@@ -596,6 +603,19 @@ function RbacWorkspace() {
 
     if (matrixRole.code === 'super_admin' || matrixRole.code === 'superadmin') {
       toast.error('The Super Administrator role possesses permanent full system governance privileges across all modules.');
+      return;
+    }
+
+    const targetPerm = permissions.find((p) => p.id === permissionId);
+    if (
+      targetPerm &&
+      SUPER_ADMIN_EXCLUSIVE_PERMISSIONS.includes(targetPerm.code) &&
+      matrixRole.code !== 'super_admin' &&
+      matrixRole.code !== 'superadmin'
+    ) {
+      toast.warning(
+        `Permission "${targetPerm.code}" is exclusively reserved for the Super Administrator role and cannot be granted to other roles.`
+      );
       return;
     }
 
@@ -1193,6 +1213,15 @@ function RbacWorkspace() {
                   >
                     {perms.map((p) => {
                       const isGranted = assignedPermissionIds.has(p.id);
+                      const isExclusiveSuperAdmin =
+                        SUPER_ADMIN_EXCLUSIVE_PERMISSIONS.includes(p.code) &&
+                        matrixRole?.code !== 'super_admin' &&
+                        matrixRole?.code !== 'superadmin';
+                      const isLocked =
+                        matrixRole?.code === 'super_admin' ||
+                        matrixRole?.code === 'superadmin' ||
+                        isExclusiveSuperAdmin;
+
                       return (
                         <div
                           key={p.id}
@@ -1205,14 +1234,26 @@ function RbacWorkspace() {
                             borderRadius: 'var(--radius-md)',
                             background: isGranted ? 'rgba(99, 102, 241, 0.12)' : 'var(--bg-input)',
                             border: isGranted ? '1px solid rgba(99, 102, 241, 0.35)' : '1px solid var(--border-subtle)',
-                            cursor: (matrixRole?.code === 'super_admin' || matrixRole?.code === 'superadmin') ? 'not-allowed' : 'pointer',
+                            cursor: isLocked ? 'not-allowed' : 'pointer',
                             transition: 'var(--transition)',
-                            opacity: (matrixRole?.code === 'super_admin' || matrixRole?.code === 'superadmin') ? 0.8 : 1,
+                            opacity: isExclusiveSuperAdmin ? 0.6 : (matrixRole?.code === 'super_admin' || matrixRole?.code === 'superadmin') ? 0.8 : 1,
                           }}
+                          title={
+                            isExclusiveSuperAdmin
+                              ? 'Exclusively reserved for Super Administrator role'
+                              : undefined
+                          }
                         >
                           <div>
-                            <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                              {p.name}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                              <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                                {p.name}
+                              </span>
+                              {isExclusiveSuperAdmin && (
+                                <span className="badge badge-warning" style={{ fontSize: '0.62rem', padding: '0.1rem 0.35rem' }}>
+                                  Super Admin Only
+                                </span>
+                              )}
                             </div>
                             <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
                               <code>{p.code}</code>

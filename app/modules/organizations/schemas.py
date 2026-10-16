@@ -45,5 +45,9 @@ class OrganizationResponse(BaseModel):
     phone: str | None
     website: str | None
     is_active: bool
+    created_by_id: UUID | None = None
+    updated_by_id: UUID | None = None
+    is_deleted: bool = False
+    deleted_at: datetime | None = None
     created_at: datetime
     updated_at: datetime | None

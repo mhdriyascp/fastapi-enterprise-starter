@@ -15,6 +15,9 @@ import {
   MasterUnitOfMeasure,
   MasterTypeEntity,
   MasterListResponse,
+  MasterBrand,
+  MasterTax,
+  MasterAddress,
 } from '@/lib/types';
 import {
   Globe,
@@ -41,6 +44,7 @@ import {
   Database,
   X,
   AlertCircle,
+  Percent,
 } from 'lucide-react';
 
 /** Master entity definition descriptor */
@@ -92,6 +96,17 @@ const MASTER_CONFIGS: MasterConfig[] = [
     hasState: true,
   },
   {
+    key: 'addresses',
+    title: 'Addresses',
+    singular: 'Address',
+    category: 'Geographic & Regional',
+    endpoint: '/masters/addresses',
+    icon: <Home size={16} />,
+    description: 'Physical postal locations, facilities, operating headquarters, and verified addresses.',
+    hasCountry: true,
+    hasState: true,
+  },
+  {
     key: 'time-zones',
     title: 'Time Zones',
     singular: 'Time Zone',
@@ -114,6 +129,17 @@ const MASTER_CONFIGS: MasterConfig[] = [
     codeLabel: 'ISO 4217 Code',
   },
   {
+    key: 'taxes',
+    title: 'Taxes & Tariffs',
+    singular: 'Tax Rate',
+    category: 'Financial & Commerce',
+    endpoint: '/masters/taxes',
+    icon: <Percent size={16} />,
+    description: 'Fiscal tax levies, VAT, GST, state duties, and jurisdiction calculation rules.',
+    codeLabel: 'Tax Code',
+    hasCountry: true,
+  },
+  {
     key: 'units-of-measure',
     title: 'Units of Measure',
     singular: 'Unit of Measure',
@@ -134,6 +160,16 @@ const MASTER_CONFIGS: MasterConfig[] = [
     icon: <Briefcase size={16} />,
     description: 'Standard industry verticals and corporate commercial classifications.',
     codeLabel: 'Industry Code',
+  },
+  {
+    key: 'brands',
+    title: 'Brands & Trademarks',
+    singular: 'Brand',
+    category: 'Classifications',
+    endpoint: '/masters/brands',
+    icon: <Sparkles size={16} />,
+    description: 'Commercial trademarks, registered brands, and company trade lines.',
+    codeLabel: 'Brand Code',
   },
   {
     key: 'languages',
@@ -198,13 +234,18 @@ type MasterRecord =
   | MasterLanguage
   | MasterIndustry
   | MasterUnitOfMeasure
-  | MasterTypeEntity;
+  | MasterTypeEntity
+  | MasterBrand
+  | MasterTax
+  | MasterAddress;
 
 function MastersWorkspace() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const rawTab = searchParams ? searchParams.get('tab') : null;
-  const activeTab = rawTab && MASTER_CONFIGS.some((c) => c.key === rawTab) ? rawTab : 'countries';
+  const activeTab = useMemo(() => {
+    return rawTab && MASTER_CONFIGS.some((c) => c.key === rawTab) ? rawTab : 'countries';
+  }, [rawTab]);
 
   const activeConfig = useMemo(() => {
     return MASTER_CONFIGS.find((c) => c.key === activeTab) || MASTER_CONFIGS[0];
@@ -234,6 +275,7 @@ function MastersWorkspace() {
   // Related lookups for dropdowns in forms
   const [countriesLookup, setCountriesLookup] = useState<MasterCountry[]>([]);
   const [statesLookup, setStatesLookup] = useState<MasterState[]>([]);
+  const [addressTypesLookup, setAddressTypesLookup] = useState<MasterTypeEntity[]>([]);
 
   // Modal States
   const [viewingRecord, setViewingRecord] = useState<MasterRecord | null>(null);
@@ -255,8 +297,16 @@ function MastersWorkspace() {
     native_name: '',
     description: '',
     category: '',
-    country_public_id: '',
-    state_public_id: '',
+    country_id: '',
+    state_id: '',
+    city_id: '',
+    rate: 0,
+    tax_type: 'percentage',
+    address_line1: '',
+    address_line2: '',
+    landmark: '',
+    postal_code: '',
+    address_type_id: 1,
     is_active: true,
   });
 
@@ -324,13 +374,23 @@ function MastersWorkspace() {
     }
   }, [activeConfig.hasCountry, countriesLookup.length]);
 
+  // Load address types lookup if needed
+  useEffect(() => {
+    if (activeConfig.key === 'addresses' && addressTypesLookup.length === 0) {
+      apiFetch<MasterListResponse<MasterTypeEntity>>('/masters/address-types?limit=100&is_active=true')
+        .then((res) => setAddressTypesLookup(res.items || []))
+        .catch(() => {});
+    }
+  }, [activeConfig.key, addressTypesLookup.length]);
+
   // Load states lookup if country selected in City form
-  const handleCountryChangeInForm = async (countryPublicId: string) => {
-    setFormData((prev) => ({ ...prev, country_public_id: countryPublicId, state_public_id: '' }));
-    if (countryPublicId) {
+  const handleCountryChangeInForm = async (countryId: number | string) => {
+    const numId = Number(countryId);
+    setFormData((prev) => ({ ...prev, country_id: numId || '', state_id: '' }));
+    if (numId) {
       try {
         const res = await apiFetch<MasterListResponse<MasterState>>(
-          `/masters/states?limit=100&country_public_id=${countryPublicId}&is_active=true`
+          `/masters/states?limit=100&country_id=${numId}&is_active=true`
         );
         setStatesLookup(res.items || []);
       } catch {
@@ -355,12 +415,20 @@ function MastersWorkspace() {
       native_name: '',
       description: '',
       category: 'Weight',
-      country_public_id: countriesLookup[0]?.public_id || '',
-      state_public_id: '',
+      country_id: countriesLookup[0]?.id || '',
+      state_id: '',
+      city_id: '',
+      rate: 0,
+      tax_type: 'percentage',
+      address_line1: '',
+      address_line2: '',
+      landmark: '',
+      postal_code: '',
+      address_type_id: addressTypesLookup[0]?.id || 1,
       is_active: true,
     });
-    if (activeConfig.hasState && countriesLookup[0]?.public_id) {
-      handleCountryChangeInForm(countriesLookup[0].public_id);
+    if (activeConfig.hasState && countriesLookup[0]?.id) {
+      handleCountryChangeInForm(countriesLookup[0].id);
     }
     setIsCreateModalOpen(true);
   };
@@ -369,7 +437,7 @@ function MastersWorkspace() {
   const openEditModal = (rec: MasterRecord) => {
     const raw = asDict(rec);
     setFormData({
-      name: raw.name || '',
+      name: raw.name || raw.address_line1 || '',
       code: raw.code || '',
       iso3_code: raw.iso3_code || '',
       phone_code: raw.phone_code || '',
@@ -380,10 +448,21 @@ function MastersWorkspace() {
       native_name: raw.native_name || '',
       description: raw.description || '',
       category: raw.category || '',
-      country_public_id: '',
-      state_public_id: '',
+      country_id: raw.country_id || '',
+      state_id: raw.state_id || '',
+      city_id: raw.city_id || '',
+      rate: raw.rate !== undefined ? Number(raw.rate) : 0,
+      tax_type: raw.tax_type || 'percentage',
+      address_line1: raw.address_line1 || '',
+      address_line2: raw.address_line2 || '',
+      landmark: raw.landmark || '',
+      postal_code: raw.postal_code || '',
+      address_type_id: raw.address_type_id || 1,
       is_active: Boolean(raw.is_active),
     });
+    if (raw.country_id) {
+      handleCountryChangeInForm(raw.country_id as number);
+    }
     setEditingRecord(rec);
   };
 
@@ -413,14 +492,33 @@ function MastersWorkspace() {
       } else if (activeConfig.key === 'units-of-measure') {
         if (formData.symbol) payload.symbol = (formData.symbol as string).trim();
         if (formData.category) payload.category = (formData.category as string).trim();
+      } else if (activeConfig.key === 'taxes') {
+        payload.name = (formData.name as string).trim();
+        payload.code = (formData.code as string).trim().toUpperCase();
+        payload.rate = Number(formData.rate) || 0;
+        payload.tax_type = (formData.tax_type as string) || 'percentage';
+        payload.country_id = Number(formData.country_id);
+      } else if (activeConfig.key === 'brands') {
+        payload.name = (formData.name as string).trim();
+        payload.code = (formData.code as string).trim().toUpperCase();
+        if (formData.description) payload.description = (formData.description as string).trim();
+      } else if (activeConfig.key === 'addresses') {
+        payload.address_line1 = (formData.address_line1 as string || formData.name as string || '').trim();
+        if (formData.address_line2) payload.address_line2 = (formData.address_line2 as string).trim();
+        if (formData.landmark) payload.landmark = (formData.landmark as string).trim();
+        if (formData.postal_code) payload.postal_code = (formData.postal_code as string).trim();
+        payload.country_id = Number(formData.country_id);
+        if (formData.state_id) payload.state_id = Number(formData.state_id);
+        if (formData.city_id) payload.city_id = Number(formData.city_id);
+        payload.address_type_id = Number(formData.address_type_id) || 1;
       } else if (['industries', 'address-types', 'communication-types', 'document-types', 'identification-types'].includes(activeConfig.key)) {
         if (formData.description) payload.description = (formData.description as string).trim();
       } else if (activeConfig.key === 'states') {
-        payload.country_public_id = formData.country_public_id;
+        payload.country_id = Number(formData.country_id);
         if (formData.code) payload.code = (formData.code as string).trim().toUpperCase();
       } else if (activeConfig.key === 'cities') {
-        payload.country_public_id = formData.country_public_id;
-        if (formData.state_public_id) payload.state_public_id = formData.state_public_id;
+        payload.country_id = Number(formData.country_id);
+        if (formData.state_id) payload.state_id = Number(formData.state_id);
       }
 
       await apiFetch(activeConfig.endpoint, {
@@ -467,6 +565,27 @@ function MastersWorkspace() {
       } else if (activeConfig.key === 'units-of-measure') {
         payload.symbol = formData.symbol ? (formData.symbol as string).trim() : null;
         payload.category = formData.category ? (formData.category as string).trim() : null;
+      } else if (activeConfig.key === 'taxes') {
+        if (formData.name) payload.name = (formData.name as string).trim();
+        if (formData.code) payload.code = (formData.code as string).trim().toUpperCase();
+        if (formData.rate !== undefined) payload.rate = Number(formData.rate);
+        if (formData.tax_type) payload.tax_type = formData.tax_type;
+        if (formData.country_id) payload.country_id = Number(formData.country_id);
+      } else if (activeConfig.key === 'brands') {
+        if (formData.name) payload.name = (formData.name as string).trim();
+        if (formData.code) payload.code = (formData.code as string).trim().toUpperCase();
+        payload.description = formData.description ? (formData.description as string).trim() : null;
+      } else if (activeConfig.key === 'addresses') {
+        if (formData.address_line1 || formData.name) {
+          payload.address_line1 = (formData.address_line1 as string || formData.name as string).trim();
+        }
+        payload.address_line2 = formData.address_line2 ? (formData.address_line2 as string).trim() : null;
+        payload.landmark = formData.landmark ? (formData.landmark as string).trim() : null;
+        payload.postal_code = formData.postal_code ? (formData.postal_code as string).trim() : null;
+        if (formData.country_id) payload.country_id = Number(formData.country_id);
+        payload.state_id = formData.state_id ? Number(formData.state_id) : null;
+        payload.city_id = formData.city_id ? Number(formData.city_id) : null;
+        if (formData.address_type_id) payload.address_type_id = Number(formData.address_type_id);
       } else if (['industries', 'address-types', 'communication-types', 'document-types', 'identification-types'].includes(activeConfig.key)) {
         payload.description = formData.description ? (formData.description as string).trim() : null;
       }
@@ -540,7 +659,10 @@ function MastersWorkspace() {
       const matchIso = String(raw.iso3_code || '').toLowerCase().includes(q);
       const matchPhone = String(raw.phone_code || '').toLowerCase().includes(q);
       const matchDesc = String(raw.description || '').toLowerCase().includes(q);
-      return matchName || matchCode || matchLabel || matchIso || matchPhone || matchDesc;
+      const matchAddress =
+        String(raw.address_line1 || '').toLowerCase().includes(q) ||
+        String(raw.postal_code || '').toLowerCase().includes(q);
+      return matchName || matchCode || matchLabel || matchIso || matchPhone || matchDesc || matchAddress;
     });
   }, [records, searchQuery]);
 
@@ -672,7 +794,7 @@ function MastersWorkspace() {
             <Sparkles size={18} color="#a855f7" />
           </div>
           <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-primary)', marginTop: '0.25rem' }}>
-            12 Catalogs
+            {MASTER_CONFIGS.length} Catalogs
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
             Standard master data
@@ -798,6 +920,11 @@ function MastersWorkspace() {
               {activeConfig.key === 'units-of-measure' && <th>Category</th>}
               {activeConfig.key === 'states' && <th>Country Code</th>}
               {activeConfig.key === 'cities' && <th>Region</th>}
+              {activeConfig.key === 'taxes' && <th>Tax Rate</th>}
+              {activeConfig.key === 'taxes' && <th>Tax Type</th>}
+              {activeConfig.key === 'taxes' && <th>Country</th>}
+              {activeConfig.key === 'addresses' && <th>Postal Code</th>}
+              {activeConfig.key === 'addresses' && <th>Country</th>}
               <th>Status</th>
               <th style={{ textAlign: 'right' }}>Actions</th>
             </tr>
@@ -843,8 +970,8 @@ function MastersWorkspace() {
             ) : (
               filteredRecords.map((rec, index) => {
                 const raw = asDict(rec);
-                const nameDisplay = String(raw.name || raw.label || 'Unnamed');
-                const codeDisplay = String(raw.code || raw.name || '—');
+                const nameDisplay = String(raw.name || raw.label || raw.address_line1 || 'Unnamed');
+                const codeDisplay = String(raw.code || (raw.postal_code ? `ZIP: ${raw.postal_code}` : '—'));
 
                 return (
                   <tr key={rec.public_id}>
@@ -949,6 +1076,42 @@ function MastersWorkspace() {
                       </td>
                     )}
 
+                    {activeConfig.key === 'taxes' && (
+                      <td>
+                        <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--accent-primary)' }}>
+                          {raw.rate !== undefined ? `${raw.rate}%` : '—'}
+                        </span>
+                      </td>
+                    )}
+
+                    {activeConfig.key === 'taxes' && (
+                      <td>
+                        <span className="badge badge-neutral" style={{ textTransform: 'uppercase' }}>
+                          {String(raw.tax_type || 'percentage')}
+                        </span>
+                      </td>
+                    )}
+
+                    {activeConfig.key === 'taxes' && (
+                      <td style={{ color: 'var(--text-secondary)' }}>
+                        {countriesLookup.find((c) => (c as unknown as { id: number }).id === raw.country_id)?.name || 'Linked Country'}
+                      </td>
+                    )}
+
+                    {activeConfig.key === 'addresses' && (
+                      <td>
+                        <span className="badge badge-neutral" style={{ fontFamily: 'monospace' }}>
+                          {String(raw.postal_code || '—')}
+                        </span>
+                      </td>
+                    )}
+
+                    {activeConfig.key === 'addresses' && (
+                      <td style={{ color: 'var(--text-secondary)' }}>
+                        {countriesLookup.find((c) => (c as unknown as { id: number }).id === raw.country_id)?.name || 'Linked Country'}
+                      </td>
+                    )}
+
                     {/* Status Column with Quick Toggle Button */}
                     <td>
                       <button
@@ -966,7 +1129,7 @@ function MastersWorkspace() {
                           gap: '0.35rem',
                         }}
                       >
-                        <span className={`badge ${rec.is_active ? 'badge-success' : 'badge-neutral'}`}>
+                        <span className={`badge ${rec.is_active ? 'badge-success' : 'badge-danger'}`}>
                           {rec.is_active ? 'Active' : 'Inactive'}
                         </span>
                       </button>
@@ -1090,7 +1253,7 @@ function MastersWorkspace() {
                   <tr>
                     <th>Lifecycle Status</th>
                     <td>
-                      <span className={`badge ${viewingRecord.is_active ? 'badge-success' : 'badge-neutral'}`}>
+                      <span className={`badge ${viewingRecord.is_active ? 'badge-success' : 'badge-danger'}`}>
                         {viewingRecord.is_active ? 'Active & Operational' : 'Inactive & Archived'}
                       </span>
                     </td>
@@ -1187,7 +1350,11 @@ function MastersWorkspace() {
               {/* Primary Name Field */}
               <div>
                 <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
-                  {activeConfig.key === 'time-zones' ? 'IANA Canonical Identifier *' : 'Display Name *'}
+                  {activeConfig.key === 'time-zones'
+                    ? 'IANA Canonical Identifier *'
+                    : activeConfig.key === 'addresses'
+                    ? 'Address Line 1 *'
+                    : 'Display Name *'}
                 </label>
                 <input
                   id="input-create-name"
@@ -1195,8 +1362,14 @@ function MastersWorkspace() {
                   required
                   className="input"
                   value={String(formData.name || '')}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
-                  placeholder={activeConfig.key === 'time-zones' ? 'e.g. America/New_York or Asia/Dubai' : `e.g. ${activeConfig.singular} Name`}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value, address_line1: e.target.value }))}
+                  placeholder={
+                    activeConfig.key === 'time-zones'
+                      ? 'e.g. America/New_York or Asia/Dubai'
+                      : activeConfig.key === 'addresses'
+                      ? 'Street address, building number, suite'
+                      : `e.g. ${activeConfig.singular} Name`
+                  }
                 />
               </div>
 
@@ -1213,7 +1386,7 @@ function MastersWorkspace() {
                     className="input"
                     value={String(formData.code || '')}
                     onChange={(e) => setFormData((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))}
-                    placeholder={`e.g. ${activeConfig.key === 'countries' ? 'US' : activeConfig.key === 'currencies' ? 'USD' : 'CODE'}`}
+                    placeholder={`e.g. ${activeConfig.key === 'countries' ? 'US' : activeConfig.key === 'currencies' ? 'USD' : activeConfig.key === 'taxes' ? 'VAT-15' : 'CODE'}`}
                     maxLength={activeConfig.key === 'countries' ? 2 : activeConfig.key === 'currencies' ? 3 : 30}
                     style={{ textTransform: 'uppercase', fontFamily: 'monospace' }}
                   />
@@ -1375,12 +1548,12 @@ function MastersWorkspace() {
                   <select
                     required
                     className="input"
-                    value={String(formData.country_public_id || '')}
+                    value={String(formData.country_id || '')}
                     onChange={(e) => handleCountryChangeInForm(e.target.value)}
                   >
                     <option value="">Select a country...</option>
                     {countriesLookup.map((c) => (
-                      <option key={c.public_id} value={c.public_id}>
+                      <option key={c.id || c.public_id} value={c.id}>
                         {c.name} ({c.code})
                       </option>
                     ))}
@@ -1396,12 +1569,12 @@ function MastersWorkspace() {
                   </label>
                   <select
                     className="input"
-                    value={String(formData.state_public_id || '')}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, state_public_id: e.target.value }))}
+                    value={String(formData.state_id || '')}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, state_id: Number(e.target.value) || '' }))}
                   >
                     <option value="">None / Federal Municipality</option>
                     {statesLookup.map((s) => (
-                      <option key={s.public_id} value={s.public_id}>
+                      <option key={s.id || s.public_id} value={s.id}>
                         {s.name} {s.code ? `(${s.code})` : ''}
                       </option>
                     ))}
@@ -1409,8 +1582,106 @@ function MastersWorkspace() {
                 </div>
               )}
 
-              {/* Description field for taxonomy types */}
-              {['industries', 'address-types', 'communication-types', 'document-types', 'identification-types'].includes(activeConfig.key) && (
+              {/* Tax specifics */}
+              {activeConfig.key === 'taxes' && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                      Tax Rate (%) *
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      required
+                      className="input"
+                      value={Number(formData.rate ?? 0)}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, rate: parseFloat(e.target.value) || 0 }))}
+                      placeholder="e.g. 5.00 or 15.00"
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                      Calculation Type *
+                    </label>
+                    <select
+                      className="input"
+                      value={String(formData.tax_type || 'percentage')}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, tax_type: e.target.value }))}
+                    >
+                      <option value="percentage">Percentage (%)</option>
+                      <option value="fixed">Fixed Levy</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* Address specifics */}
+              {activeConfig.key === 'addresses' && (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                        Address Line 2 (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        className="input"
+                        value={String(formData.address_line2 || '')}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, address_line2: e.target.value }))}
+                        placeholder="Floor, apartment, suite"
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                        Postal / ZIP Code
+                      </label>
+                      <input
+                        type="text"
+                        className="input"
+                        value={String(formData.postal_code || '')}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, postal_code: e.target.value }))}
+                        placeholder="e.g. 10001 or 90210"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                      Landmark (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      className="input"
+                      value={String(formData.landmark || '')}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, landmark: e.target.value }))}
+                      placeholder="e.g. Near Central Station"
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                      Address Type
+                    </label>
+                    <select
+                      className="input"
+                      value={String(formData.address_type_id || '1')}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, address_type_id: Number(e.target.value) || 1 }))}
+                    >
+                      {addressTypesLookup.length > 0 ? (
+                        addressTypesLookup.map((t) => (
+                          <option key={t.public_id} value={(t as unknown as { id: number }).id || 1}>
+                            {t.name} ({t.code})
+                          </option>
+                        ))
+                      ) : (
+                        <option value="1">Primary / Registered</option>
+                      )}
+                    </select>
+                  </div>
+                </>
+              )}
+
+              {/* Description field for taxonomy types and brands */}
+              {['industries', 'brands', 'address-types', 'communication-types', 'document-types', 'identification-types'].includes(activeConfig.key) && (
                 <div>
                   <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
                     Description
@@ -1475,13 +1746,29 @@ function MastersWorkspace() {
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '1rem' }}>
-              <div>
-                <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
-                  Edit {activeConfig.singular}
-                </h2>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  Update catalog attributes and operational state
-                </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <div
+                  style={{
+                    width: '42px',
+                    height: '42px',
+                    borderRadius: 'var(--radius-md)',
+                    background: 'var(--accent-glow)',
+                    color: 'var(--accent-primary)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  {activeConfig.icon}
+                </div>
+                <div>
+                  <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
+                    Edit {activeConfig.singular}
+                  </h2>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    Update catalog attributes and operational state
+                  </span>
+                </div>
               </div>
               <button
                 type="button"
@@ -1497,14 +1784,18 @@ function MastersWorkspace() {
               {/* Primary Name Field */}
               <div>
                 <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
-                  {activeConfig.key === 'time-zones' ? 'IANA Canonical Identifier' : 'Display Name'}
+                  {activeConfig.key === 'time-zones'
+                    ? 'IANA Canonical Identifier'
+                    : activeConfig.key === 'addresses'
+                    ? 'Address Line 1'
+                    : 'Display Name'}
                 </label>
                 <input
                   type="text"
                   required
                   className="input"
                   value={String(formData.name || '')}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value, address_line1: e.target.value }))}
                 />
               </div>
 
@@ -1612,6 +1903,97 @@ function MastersWorkspace() {
                 </div>
               )}
 
+              {/* Tax specifics */}
+              {activeConfig.key === 'taxes' && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                      Tax Rate (%)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      required
+                      className="input"
+                      value={Number(formData.rate ?? 0)}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, rate: parseFloat(e.target.value) || 0 }))}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                      Calculation Type
+                    </label>
+                    <select
+                      className="input"
+                      value={String(formData.tax_type || 'percentage')}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, tax_type: e.target.value }))}
+                    >
+                      <option value="percentage">Percentage (%)</option>
+                      <option value="fixed">Fixed Levy</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* Address specifics */}
+              {activeConfig.key === 'addresses' && (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                        Address Line 2 (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        className="input"
+                        value={String(formData.address_line2 || '')}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, address_line2: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                        Postal / ZIP Code
+                      </label>
+                      <input
+                        type="text"
+                        className="input"
+                        value={String(formData.postal_code || '')}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, postal_code: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                      Landmark (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      className="input"
+                      value={String(formData.landmark || '')}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, landmark: e.target.value }))}
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* Description field for taxonomy types and brands */}
+              {['industries', 'brands', 'address-types', 'communication-types', 'document-types', 'identification-types'].includes(activeConfig.key) && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                    Description
+                  </label>
+                  <textarea
+                    rows={3}
+                    className="input"
+                    value={String(formData.description || '')}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
+                    placeholder="Brief explanatory scope for this classification..."
+                    style={{ resize: 'vertical' }}
+                  />
+                </div>
+              )}
+
               {/* Status Toggle in Edit Form */}
               <div
                 style={{
@@ -1636,7 +2018,7 @@ function MastersWorkspace() {
                   type="checkbox"
                   checked={Boolean(formData.is_active)}
                   onChange={(e) => setFormData((prev) => ({ ...prev, is_active: e.target.checked }))}
-                  style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                  style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: 'var(--accent-primary)' }}
                 />
               </div>
 

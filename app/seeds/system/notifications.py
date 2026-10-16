@@ -43,7 +43,7 @@ async def seed_notifications(db: AsyncSession) -> None:
         },
         {
             "title": "Q4 Billing Batch Auto-Reconciled",
-            "message": "Zoho Books auto-settlement completed successfully for 48 accounts.",
+            "message": "Financial ledger auto-settlement completed successfully for 48 accounts.",
             "type": "deal",
             "link": "/dashboard",
             "is_read": True,

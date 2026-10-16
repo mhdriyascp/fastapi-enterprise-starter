@@ -11,7 +11,7 @@ import {
   Search,
   Clock,
   Eye,
-  Edit3,
+  Edit2,
   Trash2,
   X,
   UserCheck,
@@ -26,6 +26,7 @@ import {
   Users,
   CheckCircle2,
   XCircle,
+  Plus,
 } from 'lucide-react';
 
 interface RoleOption {
@@ -62,9 +63,24 @@ export default function UsersPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'suspended' | 'disabled' | 'pending'>('all');
 
   // Modal States
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [viewingUser, setViewingUser] = useState<User | null>(null);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [deletingUser, setDeletingUser] = useState<User | null>(null);
+
+  // Create Form State
+  const [createFormData, setCreateFormData] = useState({
+    first_name: '',
+    last_name: '',
+    display_name: '',
+    email: '',
+    password: '',
+    phone: '',
+    status: 'active',
+    role_codes: ['admin'],
+  });
+  const [createFieldErrors, setCreateFieldErrors] = useState<Record<string, string>>({});
+  const [isCreating, setIsCreating] = useState(false);
 
   // Edit Form State
   const [editFormData, setEditFormData] = useState<{
@@ -193,6 +209,89 @@ export default function UsersPage() {
       toast.error(msg);
     } finally {
       setTogglingUserId(null);
+    }
+  };
+
+  // Toggle role selection in create form
+  const toggleCreateRole = (roleCode: string) => {
+    if (roleCode === 'super_admin' && !isCurrentSuperAdmin) {
+      toast.warning('Only a Super Administrator can assign the Super Administrator role.');
+      return;
+    }
+
+    setCreateFormData((prev) => {
+      const exists = prev.role_codes.includes(roleCode);
+      if (exists) {
+        if (prev.role_codes.length === 1) {
+          toast.info('User must have at least one active assigned role.');
+          return prev;
+        }
+        return { ...prev, role_codes: prev.role_codes.filter((c) => c !== roleCode) };
+      }
+      return { ...prev, role_codes: [...prev.role_codes, roleCode] };
+    });
+  };
+
+  // Handle Create Submit
+  const handleCreateSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const errors: Record<string, string> = {};
+    if (!createFormData.email.trim()) {
+      errors.email = 'Email address is required.';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(createFormData.email.trim())) {
+      errors.email = 'Invalid email address format.';
+    }
+    if (!createFormData.password) {
+      errors.password = 'Password is required.';
+    } else if (createFormData.password.length < 8) {
+      errors.password = 'Password must be at least 8 characters long.';
+    }
+    if (createFormData.phone && createFormData.phone.length > 30) {
+      errors.phone = 'Phone number cannot exceed 30 characters.';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setCreateFieldErrors(errors);
+      return;
+    }
+
+    setIsCreating(true);
+    try {
+      const payload = {
+        first_name: createFormData.first_name.trim() || null,
+        last_name: createFormData.last_name.trim() || null,
+        display_name: createFormData.display_name.trim() || null,
+        email: createFormData.email.trim().toLowerCase(),
+        password: createFormData.password,
+        phone: createFormData.phone.trim() || null,
+        status: createFormData.status,
+        role_codes: createFormData.role_codes,
+      };
+
+      const created = await apiFetch<User>('/users', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+
+      toast.success(`User ${created.display_name || created.email} created successfully.`);
+      setIsCreateModalOpen(false);
+      setCreateFormData({
+        first_name: '',
+        last_name: '',
+        display_name: '',
+        email: '',
+        password: '',
+        phone: '',
+        status: 'active',
+        role_codes: ['admin'],
+      });
+      setCreateFieldErrors({});
+      reloadUsers();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to register user.';
+      toast.error(msg);
+    } finally {
+      setIsCreating(false);
     }
   };
 
@@ -399,6 +498,16 @@ export default function UsersPage() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => setIsCreateModalOpen(true)}
+            className="btn btn-primary"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.825rem' }}
+            id="btn-new-user"
+          >
+            <Plus size={14} />
+            <span>New User</span>
+          </button>
           <button
             type="button"
             onClick={reloadUsers}
@@ -685,9 +794,9 @@ export default function UsersPage() {
                             gap: '0.4rem',
                             padding: '0.25rem 0.6rem',
                             borderRadius: '20px',
-                            border: `1px solid ${user.status === 'active' ? 'rgba(34, 197, 94, 0.35)' : 'rgba(245, 158, 11, 0.35)'}`,
-                            background: user.status === 'active' ? 'rgba(34, 197, 94, 0.12)' : 'rgba(245, 158, 11, 0.12)',
-                            color: user.status === 'active' ? '#22c55e' : '#f59e0b',
+                            border: `1px solid ${user.status === 'active' ? 'rgba(34, 197, 94, 0.35)' : user.status === 'suspended' ? 'rgba(245, 158, 11, 0.35)' : 'rgba(239, 68, 68, 0.35)'}`,
+                            background: user.status === 'active' ? 'rgba(34, 197, 94, 0.12)' : user.status === 'suspended' ? 'rgba(245, 158, 11, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                            color: user.status === 'active' ? '#22c55e' : user.status === 'suspended' ? '#f59e0b' : '#ef4444',
                             fontSize: '0.75rem',
                             fontWeight: 600,
                             cursor: !canEditOrDelete || (isSelf && user.status === 'active') ? 'not-allowed' : 'pointer',
@@ -708,7 +817,7 @@ export default function UsersPage() {
                               width: '7px',
                               height: '7px',
                               borderRadius: '50%',
-                              backgroundColor: user.status === 'active' ? '#22c55e' : '#f59e0b',
+                              backgroundColor: user.status === 'active' ? '#22c55e' : user.status === 'suspended' ? '#f59e0b' : '#ef4444',
                             }}
                           />
                           <span>
@@ -716,7 +825,9 @@ export default function UsersPage() {
                               ? 'Updating...'
                               : user.status === 'active'
                               ? 'Active'
-                              : 'Suspended'}
+                              : user.status === 'suspended'
+                              ? 'Suspended'
+                              : 'Disabled'}
                           </span>
                         </button>
                       </div>
@@ -732,21 +843,15 @@ export default function UsersPage() {
 
                     {/* Governance Actions Column */}
                     <td style={{ textAlign: 'right', paddingRight: '1.25rem' }}>
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
                         {/* View Button */}
                         <button
                           type="button"
                           onClick={() => setViewingUser(user)}
                           className="btn btn-secondary"
-                          style={{
-                            padding: '0.3rem 0.55rem',
-                            fontSize: '0.75rem',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '0.3rem',
-                          }}
-                          title="View user details & specification"
-                          id={`view-user-${user.id}`}
+                          style={{ padding: '0.35rem 0.6rem', fontSize: '0.75rem' }}
+                          title="View user specifications"
+                          id={`btn-view-${user.id}`}
                         >
                           <Eye size={13} />
                           <span>View</span>
@@ -759,19 +864,15 @@ export default function UsersPage() {
                           disabled={!canEditOrDelete}
                           className="btn btn-secondary"
                           style={{
-                            padding: '0.3rem 0.55rem',
+                            padding: '0.35rem 0.6rem',
                             fontSize: '0.75rem',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '0.3rem',
-                            color: canEditOrDelete ? 'var(--text-primary)' : 'var(--text-muted)',
                             opacity: canEditOrDelete ? 1 : 0.45,
                             cursor: canEditOrDelete ? 'pointer' : 'not-allowed',
                           }}
                           title={canEditOrDelete ? 'Edit user profile & roles' : lockReason}
-                          id={`edit-user-${user.id}`}
+                          id={`btn-edit-${user.id}`}
                         >
-                          {canEditOrDelete ? <Edit3 size={13} /> : <Lock size={13} />}
+                          {canEditOrDelete ? <Edit2 size={13} /> : <Lock size={13} />}
                           <span>Edit</span>
                         </button>
 
@@ -782,12 +883,9 @@ export default function UsersPage() {
                           disabled={!canEditOrDelete || isSelf}
                           className="btn btn-secondary"
                           style={{
-                            padding: '0.3rem 0.55rem',
+                            padding: '0.35rem 0.6rem',
                             fontSize: '0.75rem',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '0.3rem',
-                            color: canEditOrDelete && !isSelf ? '#f43f5e' : 'var(--text-muted)',
+                            color: canEditOrDelete && !isSelf ? '#ef4444' : 'var(--text-muted)',
                             opacity: canEditOrDelete && !isSelf ? 1 : 0.45,
                             cursor: canEditOrDelete && !isSelf ? 'pointer' : 'not-allowed',
                           }}
@@ -795,13 +893,12 @@ export default function UsersPage() {
                             isSelf
                               ? 'Cannot delete your own account'
                               : canEditOrDelete
-                              ? 'Delete user account'
+                              ? 'Deactivate user account'
                               : lockReason
                           }
-                          id={`delete-user-${user.id}`}
+                          id={`btn-delete-${user.id}`}
                         >
                           <Trash2 size={13} />
-                          <span>Delete</span>
                         </button>
                       </div>
                     </td>
@@ -883,6 +980,7 @@ export default function UsersPage() {
               flexDirection: 'column',
               gap: '1.25rem',
               border: '1px solid var(--border-subtle)',
+              backgroundColor: 'var(--bg-surface)',
             }}
           >
             {/* Modal Header */}
@@ -921,8 +1019,8 @@ export default function UsersPage() {
                     <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
                       {viewingUser.display_name || `${viewingUser.first_name || ''} ${viewingUser.last_name || ''}`.trim() || 'User Profile'}
                     </h3>
-                    <span className={`badge ${viewingUser.status === 'active' ? 'badge-success' : 'badge-warning'}`}>
-                      {viewingUser.status === 'active' ? 'Active Account' : 'Suspended'}
+                    <span className={`badge ${viewingUser.status === 'active' ? 'badge-success' : viewingUser.status === 'suspended' ? 'badge-warning' : 'badge-danger'}`}>
+                      {viewingUser.status === 'active' ? 'Active Account' : viewingUser.status === 'suspended' ? 'Suspended' : 'Disabled'}
                     </span>
                     {isUserSuperAdmin(viewingUser) && (
                       <span className="badge badge-primary">
@@ -940,7 +1038,7 @@ export default function UsersPage() {
                 type="button"
                 onClick={() => setViewingUser(null)}
                 className="btn btn-secondary"
-                style={{ padding: '0.4rem', borderRadius: '50%', width: '32px', height: '32px' }}
+                style={{ padding: '0.4rem', borderRadius: '50%' }}
                 title="Close Inspector"
                 id="close-user-inspector-btn"
               >
@@ -998,8 +1096,8 @@ export default function UsersPage() {
                     <tr>
                       <th>Account Lifecycle Status</th>
                       <td>
-                        <span style={{ fontWeight: 600, color: viewingUser.status === 'active' ? '#22c55e' : '#f59e0b', fontSize: '0.825rem' }}>
-                          {viewingUser.status === 'active' ? 'Active Platform Operator' : 'Suspended / Inactive'}
+                        <span style={{ fontWeight: 600, color: viewingUser.status === 'active' ? '#22c55e' : viewingUser.status === 'suspended' ? '#f59e0b' : '#ef4444', fontSize: '0.825rem' }}>
+                          {viewingUser.status === 'active' ? 'Active Platform Operator' : viewingUser.status === 'suspended' ? 'Suspended / Inactive' : 'Disabled Account'}
                         </span>
                       </td>
                     </tr>
@@ -1115,7 +1213,7 @@ export default function UsersPage() {
                     style={{ fontSize: '0.825rem', padding: '0.45rem 0.85rem' }}
                     id="edit-from-inspector-btn"
                   >
-                    <Edit3 size={14} style={{ marginRight: '5px' }} />
+                    <Edit2 size={14} style={{ marginRight: '5px' }} />
                     <span>Edit Profile &amp; Roles</span>
                   </button>
                 )}
@@ -1135,7 +1233,309 @@ export default function UsersPage() {
       )}
 
       {/* ========================================================================= */}
-      {/* 2. Enterprise Edit User Modal                                             */}
+      {/* 2. Create New User Modal                                                  */}
+      {/* ========================================================================= */}
+      {isCreateModalOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="modal-backdrop"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isCreating) setIsCreateModalOpen(false);
+          }}
+        >
+          <div
+            className="modal-dialog card"
+            style={{
+              maxWidth: '580px',
+              padding: '2rem',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '1.25rem',
+              border: '1px solid var(--border-subtle)',
+              backgroundColor: 'var(--bg-surface)',
+            }}
+          >
+            {/* Header */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                borderBottom: '1px solid var(--border-subtle)',
+                paddingBottom: '1rem',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <div
+                  style={{
+                    width: '42px',
+                    height: '42px',
+                    borderRadius: 'var(--radius-md)',
+                    background: 'var(--accent-glow)',
+                    color: 'var(--accent-primary)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Users size={20} />
+                </div>
+                <div>
+                  <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
+                    Create New User
+                  </h2>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    Register a new platform operator with security credentials and role assignments
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCreateModalOpen(false)}
+                disabled={isCreating}
+                className="btn btn-secondary"
+                style={{ padding: '0.4rem', borderRadius: '50%' }}
+                title="Cancel"
+                id="btn-close-create-user"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Create Form */}
+            <form onSubmit={handleCreateSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {/* Email & Password */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div>
+                  <label htmlFor="create-user-email" style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                    Email Address <span style={{ color: '#f43f5e' }}>*</span>
+                  </label>
+                  <input
+                    id="create-user-email"
+                    type="email"
+                    required
+                    value={createFormData.email}
+                    onChange={(e) => setCreateFormData({ ...createFormData, email: e.target.value })}
+                    className={`input ${createFieldErrors.email ? 'has-error' : ''}`}
+                    placeholder="e.g. operator@company.com"
+                  />
+                  {createFieldErrors.email && (
+                    <div style={{ color: '#f43f5e', fontSize: '0.75rem', marginTop: '0.25rem' }}>
+                      {createFieldErrors.email}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label htmlFor="create-user-password" style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                    Initial Password <span style={{ color: '#f43f5e' }}>*</span>
+                  </label>
+                  <input
+                    id="create-user-password"
+                    type="password"
+                    required
+                    minLength={8}
+                    value={createFormData.password}
+                    onChange={(e) => setCreateFormData({ ...createFormData, password: e.target.value })}
+                    className={`input ${createFieldErrors.password ? 'has-error' : ''}`}
+                    placeholder="Min 8 characters"
+                  />
+                  {createFieldErrors.password && (
+                    <div style={{ color: '#f43f5e', fontSize: '0.75rem', marginTop: '0.25rem' }}>
+                      {createFieldErrors.password}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Names */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div>
+                  <label htmlFor="create-user-firstname" style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                    First Name
+                  </label>
+                  <input
+                    id="create-user-firstname"
+                    type="text"
+                    value={createFormData.first_name}
+                    onChange={(e) => setCreateFormData({ ...createFormData, first_name: e.target.value })}
+                    className="input"
+                    placeholder="e.g. Sarah"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="create-user-lastname" style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                    Last Name
+                  </label>
+                  <input
+                    id="create-user-lastname"
+                    type="text"
+                    value={createFormData.last_name}
+                    onChange={(e) => setCreateFormData({ ...createFormData, last_name: e.target.value })}
+                    className="input"
+                    placeholder="e.g. Connor"
+                  />
+                </div>
+              </div>
+
+              {/* Display Name */}
+              <div>
+                <label htmlFor="create-user-displayname" style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                  Display Name (Optional)
+                </label>
+                <input
+                  id="create-user-displayname"
+                  type="text"
+                  value={createFormData.display_name}
+                  onChange={(e) => setCreateFormData({ ...createFormData, display_name: e.target.value })}
+                  className="input"
+                  placeholder="Defaults to Full Name or username"
+                />
+              </div>
+
+              {/* Phone & Status */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div>
+                  <label htmlFor="create-user-phone" style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                    Phone Number
+                  </label>
+                  <input
+                    id="create-user-phone"
+                    type="text"
+                    value={createFormData.phone}
+                    onChange={(e) => setCreateFormData({ ...createFormData, phone: e.target.value })}
+                    className={`input ${createFieldErrors.phone ? 'has-error' : ''}`}
+                    placeholder="e.g. +1 555-0199"
+                  />
+                  {createFieldErrors.phone && (
+                    <div style={{ color: '#f43f5e', fontSize: '0.75rem', marginTop: '0.25rem' }}>
+                      {createFieldErrors.phone}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label htmlFor="create-user-status" style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                    Initial Lifecycle Status
+                  </label>
+                  <select
+                    id="create-user-status"
+                    value={createFormData.status}
+                    onChange={(e) => setCreateFormData({ ...createFormData, status: e.target.value })}
+                    className="input"
+                  >
+                    <option value="active">Active (Full Access)</option>
+                    <option value="suspended">Suspended (Access Paused)</option>
+                    <option value="disabled">Disabled (Deactivated)</option>
+                    <option value="pending">Pending (Awaiting Verification)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Role Selection */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                  Assigned Security Roles
+                </label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                  {AVAILABLE_ROLES.map((role) => {
+                    const isSelected = createFormData.role_codes.includes(role.code);
+                    const isRoleLocked = role.code === 'super_admin' && !isCurrentSuperAdmin;
+
+                    return (
+                      <div
+                        key={role.code}
+                        onClick={() => {
+                          if (!isRoleLocked) toggleCreateRole(role.code);
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '0.65rem 0.85rem',
+                          borderRadius: 'var(--radius-md)',
+                          background: isSelected ? 'rgba(99, 102, 241, 0.12)' : 'var(--bg-input)',
+                          border: isSelected ? '1px solid var(--accent-primary)' : '1px solid var(--border-subtle)',
+                          cursor: isRoleLocked ? 'not-allowed' : 'pointer',
+                          opacity: isRoleLocked ? 0.5 : 1,
+                          transition: 'var(--transition)',
+                        }}
+                        title={isRoleLocked ? 'Only Super Administrators can assign this role' : role.description}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            disabled={isRoleLocked}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              if (!isRoleLocked) toggleCreateRole(role.code);
+                            }}
+                            style={{
+                              width: '18px',
+                              height: '18px',
+                              cursor: isRoleLocked ? 'not-allowed' : 'pointer',
+                              accentColor: 'var(--accent-primary)',
+                            }}
+                          />
+                          <div>
+                            <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                              {role.name}
+                            </div>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                              {role.description}
+                            </div>
+                          </div>
+                        </div>
+                        {role.code === 'super_admin' && (
+                          <span className="badge badge-primary" style={{ fontSize: '0.7rem' }}>
+                            <Shield size={11} style={{ marginRight: '3px' }} /> Core
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Modal Actions */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'flex-end',
+                  gap: '0.75rem',
+                  marginTop: '0.75rem',
+                  borderTop: '1px solid var(--border-subtle)',
+                  paddingTop: '1rem',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setIsCreateModalOpen(false)}
+                  disabled={isCreating}
+                  className="btn btn-secondary"
+                  id="btn-cancel-create-user"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreating}
+                  className="btn btn-primary"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem' }}
+                  id="btn-submit-create-user"
+                >
+                  {isCreating && <RefreshCw size={14} className="spin" />}
+                  <span>{isCreating ? 'Creating User...' : 'Register User'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 3. Enterprise Edit User Modal                                             */}
       {/* ========================================================================= */}
       {editingUser && (
         <div
@@ -1149,12 +1549,13 @@ export default function UsersPage() {
           <div
             className="modal-dialog card"
             style={{
-              maxWidth: '620px',
+              maxWidth: '580px',
               padding: '2rem',
               display: 'flex',
               flexDirection: 'column',
               gap: '1.25rem',
               border: '1px solid var(--border-subtle)',
+              backgroundColor: 'var(--bg-surface)',
             }}
           >
             {/* Header */}
@@ -1167,20 +1568,36 @@ export default function UsersPage() {
                 paddingBottom: '1rem',
               }}
             >
-              <div>
-                <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-                  Edit User Account
-                </h3>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '0.2rem 0 0 0' }}>
-                  Update profile attributes, system lifecycle status, and security roles.
-                </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <div
+                  style={{
+                    width: '42px',
+                    height: '42px',
+                    borderRadius: 'var(--radius-md)',
+                    background: 'var(--accent-glow)',
+                    color: 'var(--accent-primary)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Users size={20} />
+                </div>
+                <div>
+                  <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
+                    Edit User Account
+                  </h2>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    Update profile attributes, system lifecycle status, and security roles
+                  </span>
+                </div>
               </div>
               <button
                 type="button"
                 onClick={() => setEditingUser(null)}
                 disabled={isSubmitting}
                 className="btn btn-secondary"
-                style={{ padding: '0.4rem', borderRadius: '50%', width: '32px', height: '32px' }}
+                style={{ padding: '0.4rem', borderRadius: '50%' }}
                 title="Cancel"
                 id="cancel-edit-user-btn"
               >
@@ -1212,9 +1629,9 @@ export default function UsersPage() {
 
             {/* Form */}
             <form onSubmit={handleEditSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                 <div>
-                  <label htmlFor="edit-user-firstname" style={{ fontSize: '0.825rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                  <label htmlFor="edit-user-firstname" style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
                     First Name
                   </label>
                   <input
@@ -1222,13 +1639,12 @@ export default function UsersPage() {
                     type="text"
                     value={editFormData.first_name}
                     onChange={(e) => setEditFormData({ ...editFormData, first_name: e.target.value })}
-                    className="input-field"
-                    style={{ marginTop: '0.35rem' }}
+                    className="input"
                     placeholder="e.g. John"
                   />
                 </div>
                 <div>
-                  <label htmlFor="edit-user-lastname" style={{ fontSize: '0.825rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                  <label htmlFor="edit-user-lastname" style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
                     Last Name
                   </label>
                   <input
@@ -1236,15 +1652,14 @@ export default function UsersPage() {
                     type="text"
                     value={editFormData.last_name}
                     onChange={(e) => setEditFormData({ ...editFormData, last_name: e.target.value })}
-                    className="input-field"
-                    style={{ marginTop: '0.35rem' }}
+                    className="input"
                     placeholder="e.g. Doe"
                   />
                 </div>
               </div>
 
               <div>
-                <label htmlFor="edit-user-displayname" style={{ fontSize: '0.825rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                <label htmlFor="edit-user-displayname" style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
                   Display Name <span style={{ color: '#f43f5e' }}>*</span>
                 </label>
                 <input
@@ -1252,8 +1667,7 @@ export default function UsersPage() {
                   type="text"
                   value={editFormData.display_name}
                   onChange={(e) => setEditFormData({ ...editFormData, display_name: e.target.value })}
-                  className={`input-field ${editFieldErrors.display_name ? 'has-error' : ''}`}
-                  style={{ marginTop: '0.35rem' }}
+                  className={`input ${editFieldErrors.display_name ? 'has-error' : ''}`}
                   placeholder="e.g. John Doe (Director)"
                 />
                 {editFieldErrors.display_name && (
@@ -1263,9 +1677,9 @@ export default function UsersPage() {
                 )}
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                 <div>
-                  <label htmlFor="edit-user-phone" style={{ fontSize: '0.825rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                  <label htmlFor="edit-user-phone" style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
                     Phone Number
                   </label>
                   <input
@@ -1273,21 +1687,19 @@ export default function UsersPage() {
                     type="text"
                     value={editFormData.phone}
                     onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
-                    className="input-field"
-                    style={{ marginTop: '0.35rem' }}
+                    className="input"
                     placeholder="e.g. +1 555-0199"
                   />
                 </div>
                 <div>
-                  <label htmlFor="edit-user-status" style={{ fontSize: '0.825rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                  <label htmlFor="edit-user-status" style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
                     Lifecycle Status
                   </label>
                   <select
                     id="edit-user-status"
                     value={editFormData.status}
                     onChange={(e) => setEditFormData({ ...editFormData, status: e.target.value })}
-                    className="input-field"
-                    style={{ marginTop: '0.35rem', cursor: 'pointer' }}
+                    className="input"
                   >
                     <option value="active">Active (Full Access)</option>
                     <option value="suspended">Suspended (Access Paused)</option>
@@ -1299,10 +1711,10 @@ export default function UsersPage() {
 
               {/* Role Assignment Section */}
               <div>
-                <label style={{ fontSize: '0.825rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '0.4rem' }}>
+                <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
                   Assigned Platform Roles
                 </label>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
                   {AVAILABLE_ROLES.map((role) => {
                     const isSelected = editFormData.role_codes.includes(role.code);
                     const isRoleLocked = role.code === 'super_admin' && !isCurrentSuperAdmin;
@@ -1332,14 +1744,22 @@ export default function UsersPage() {
                             type="checkbox"
                             checked={isSelected}
                             disabled={isRoleLocked}
-                            onChange={() => {}} // Handled by container onClick
-                            style={{ cursor: isRoleLocked ? 'not-allowed' : 'pointer' }}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              if (!isRoleLocked) toggleRole(role.code);
+                            }}
+                            style={{
+                              width: '18px',
+                              height: '18px',
+                              cursor: isRoleLocked ? 'not-allowed' : 'pointer',
+                              accentColor: 'var(--accent-primary)',
+                            }}
                           />
                           <div>
                             <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                               {role.name}
                             </div>
-                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
                               {role.description}
                             </div>
                           </div>
@@ -1363,7 +1783,7 @@ export default function UsersPage() {
                   alignItems: 'center',
                   justifyContent: 'flex-end',
                   gap: '0.75rem',
-                  marginTop: '1rem',
+                  marginTop: '0.75rem',
                   borderTop: '1px solid var(--border-subtle)',
                   paddingTop: '1rem',
                 }}
@@ -1381,9 +1801,11 @@ export default function UsersPage() {
                   type="submit"
                   disabled={isSubmitting}
                   className="btn btn-primary"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem' }}
                   id="save-user-edit-btn"
                 >
-                  {isSubmitting ? 'Saving Changes...' : 'Save User Changes'}
+                  {isSubmitting && <RefreshCw size={14} className="spin" />}
+                  <span>{isSubmitting ? 'Saving Changes...' : 'Save User Changes'}</span>
                 </button>
               </div>
             </form>

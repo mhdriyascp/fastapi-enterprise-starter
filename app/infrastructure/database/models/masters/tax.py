@@ -1,11 +1,14 @@
 from decimal import Decimal
+from uuid import UUID, uuid7
 
 from sqlalchemy import (
+    BigInteger,
     CheckConstraint,
     ForeignKey,
     Numeric,
     String,
     UniqueConstraint,
+    Uuid,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -31,12 +34,18 @@ class Tax(EntityBase):
         ),
     )
 
-    id: Mapped[int] = mapped_column(primary_key=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger,
+        primary_key=True,
+        autoincrement=True,
+    )
 
-    public_id: Mapped[str] = mapped_column(
-        String(36),
+    public_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
         unique=True,
+        index=True,
         nullable=False,
+        default=uuid7,
     )
 
     name: Mapped[str] = mapped_column(
@@ -62,6 +71,7 @@ class Tax(EntityBase):
     )
 
     country_id: Mapped[int] = mapped_column(
+        BigInteger,
         ForeignKey("countries.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,

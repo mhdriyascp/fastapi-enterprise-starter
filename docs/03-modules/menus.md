@@ -18,9 +18,9 @@ The **Menus** domain module manages hierarchical navigation structures in the CR
    ┌────────────────────────────────────────────────────────┐
    │                          Menu                          │
    ├────────────────────────────────────────────────────────┤
-   │ id: UUID (PK)                                          │
-   │ public_id: UUID (Unique)                               │
-   │ parent_id: UUID (FK -> menus.id, Cascade, Nullable)    │
+   │ id: BigInteger (PK, autoincrement)                     │
+   │ public_id: UUID (Unique, Index, default=uuid7)         │
+   │ parent_id: BigInteger (FK -> menus.id, Cascade, Index) │
    │ title: String(100)                                     │
    │ code: String(50, Unique, Indexed)                      │
    │ path: String(255, Nullable)                            │
@@ -34,9 +34,8 @@ The **Menus** domain module manages hierarchical navigation structures in the CR
       ┌─────────────────────────┐   ┌──────────────────────────────┐
       │        MenuRole         │   │        MenuPermission        │
       ├─────────────────────────┤   ├──────────────────────────────┤
-      │ id: UUID (PK)           │   │ id: UUID (PK)                │
-      │ menu_id: UUID (FK)      │   │ menu_id: UUID (FK)           │
-      │ role_id: UUID (FK)      │   │ permission_id: UUID (FK)     │
+      │ menu_id: BigInteger(PK) │   │ menu_id: BigInteger(PK)      │
+      │ role_id: UUID(PK, Index)│   │ permission_id: UUID(PK, Index│
       └─────────────────────────┘   └──────────────────────────────┘
 ```
 
@@ -67,11 +66,11 @@ When a client queries `/api/v1/menus/my-menus`, the visibility engine executes t
 | `GET` | `/api/v1/menus/tree` | `menu.read` | Returns full hierarchical menu tree for management. |
 | `POST` | `/api/v1/menus` | `menu.create` | Creates a new menu item with optional roles and permissions. |
 | `GET` | `/api/v1/menus` | `menu.read` | Paginated list of menus (`PagedResponse[MenuResponse]`). |
-| `GET` | `/api/v1/menus/{menu_id}` | `menu.read` | Details of a specific menu item. |
-| `PATCH` | `/api/v1/menus/{menu_id}` | `menu.update` | Updates attributes, parent link, and access assignments. |
-| `DELETE` | `/api/v1/menus/{menu_id}` | `menu.delete` | Deletes a menu item (cascades to children & links). |
-| `PUT` | `/api/v1/menus/{menu_id}/roles` | `menu.update` | Replaces assigned roles for a menu item. |
-| `PUT` | `/api/v1/menus/{menu_id}/permissions` | `menu.update` | Replaces assigned permissions for a menu item. |
+| `GET` | `/api/v1/menus/{identifier}` | `menu.read` | Details of a specific menu item (dual-lookup: int ID or UUID public_id). |
+| `PATCH` | `/api/v1/menus/{identifier}` | `menu.update` | Updates attributes, parent link, and access assignments (dual-lookup). |
+| `DELETE` | `/api/v1/menus/{identifier}` | `menu.delete` | Deletes a menu item (cascades to children & links, dual-lookup). |
+| `PUT` | `/api/v1/menus/{identifier}/roles` | `menu.update` | Replaces assigned roles for a menu item (dual-lookup). |
+| `PUT` | `/api/v1/menus/{identifier}/permissions` | `menu.update` | Replaces assigned permissions for a menu item (dual-lookup). |
 
 ---
 

@@ -38,10 +38,18 @@ class UserService:
         # Hash the password before it ever reaches the database.
         password_hash = hash_password(data.password)
 
+        display_name = (data.display_name or "").strip()
+        if not display_name:
+            parts = [p for p in (data.first_name, data.last_name) if p and p.strip()]
+            display_name = " ".join(parts) if parts else email.split("@")[0]
+
         user = User(
             first_name=data.first_name,
             last_name=data.last_name,
+            display_name=display_name,
             email=email,
+            phone=data.phone,
+            status=data.status or "active",
             password_hash=password_hash,
         )
 
@@ -49,6 +57,9 @@ class UserService:
 
         await self.db.commit()
         await self.db.refresh(user)
+
+        if data.role_codes:
+            await self.assign_roles(user.id, data.role_codes)
 
         return user
 
@@ -248,14 +259,25 @@ class UserService:
             permissions=permissions,
         )
 
-    async def get_by_id(self, user_id: UUID) -> User | None:
-        """Fetches an active user by primary ID."""
-        result = await self.db.execute(
-            select(User).where(
-                User.id == user_id,
+    async def get_by_id(self, identifier: UUID | str) -> User | None:
+        """Fetches an active user by either primary UUID or public UUIDv7."""
+        if isinstance(identifier, UUID):
+            stmt = select(User).where(
+                (User.id == identifier) | (User.public_id == identifier),
                 User.deleted_at.is_(None),
             )
-        )
+        else:
+            str_val = str(identifier).strip()
+            try:
+                parsed_uuid = UUID(str_val)
+                stmt = select(User).where(
+                    (User.id == parsed_uuid) | (User.public_id == parsed_uuid),
+                    User.deleted_at.is_(None),
+                )
+            except ValueError, TypeError:
+                return None
+
+        result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
     async def list_users(

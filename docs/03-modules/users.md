@@ -38,10 +38,11 @@ The User module encapsulates identity profiles, credentials, state management, a
 | Method | Endpoint | Required Permission | Summary | Response | Shared in v2 Doc? |
 |---|---|---|---|---|---|
 | `GET` | `/api/v1/users` | `user.read` | List users with pagination, enriched roles, and permissions | `PagedResponse[UserResponse]` | Yes |
-| `GET` | `/api/v1/users/{user_id}` | `user.read` | Get user details by ID with assigned roles and permissions | `UserResponse` | Yes |
-| `PATCH` | `/api/v1/users/{user_id}` | `user.update` | Update profile, status, and assigned roles | `UserResponse` | Yes |
-| `POST` | `/api/v1/users/{user_id}/toggle-status` | `user.update` | Toggle user status (active <-> suspended) | `UserResponse` | Yes |
-| `DELETE` | `/api/v1/users/{user_id}` | `user.delete` | Soft-delete user account (Super Admin protected) | `204 No Content` | Yes |
+| `POST` | `/api/v1/users` | `user.create` | Create a new user account with initial credentials, status, and role assignments | `UserResponse` (201 Created) | Yes |
+| `GET` | `/api/v1/users/{identifier}` | `user.read` | Get user details (dual-lookup: UUID id or UUID public_id) with assigned roles and permissions | `UserResponse` | Yes |
+| `PATCH` | `/api/v1/users/{identifier}` | `user.update` | Update profile, status, and assigned roles (dual-lookup) | `UserResponse` | Yes |
+| `POST` | `/api/v1/users/{identifier}/toggle-status` | `user.update` | Toggle user status (active <-> suspended, dual-lookup) | `UserResponse` | Yes |
+| `DELETE` | `/api/v1/users/{identifier}` | `user.delete` | Soft-delete user account (Super Admin protected, dual-lookup) | `204 No Content` | Yes |
 
 ---
 

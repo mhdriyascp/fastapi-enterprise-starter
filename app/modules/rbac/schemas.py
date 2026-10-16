@@ -3,6 +3,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.shared.response import PagedResponse
+
 # ============================================================
 # Role Schemas
 # ============================================================
@@ -51,11 +53,8 @@ class RoleResponse(BaseModel):
     updated_at: datetime | None
 
 
-class RoleListResponse(BaseModel):
-    items: list[RoleResponse]
-    total: int
-    page: int
-    page_size: int
+# Aliased to PagedResponse for standardized collection envelope compatibility
+RoleListResponse = PagedResponse[RoleResponse]
 
 
 # ============================================================
@@ -124,11 +123,8 @@ class PermissionResponse(BaseModel):
     updated_at: datetime | None
 
 
-class PermissionListResponse(BaseModel):
-    items: list[PermissionResponse]
-    total: int
-    page: int
-    page_size: int
+# Aliased to PagedResponse for standardized collection envelope compatibility
+PermissionListResponse = PagedResponse[PermissionResponse]
 
 
 # ============================================================

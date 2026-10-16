@@ -1,14 +1,12 @@
 from typing import Annotated
-from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies.permissions import require_permission
 from app.infrastructure.database.session import get_db_session
 from app.modules.rbac.schemas import (
     RoleCreate,
-    RoleListResponse,
     RoleResponse,
     RoleUpdate,
 )
@@ -20,6 +18,8 @@ from app.modules.rbac.service import (
     SystemRoleError,
 )
 from app.modules.users.models import User
+from app.shared.pagination import PaginationParams, get_pagination
+from app.shared.response import PagedResponse
 
 roles_router = APIRouter(
     prefix="/roles",
@@ -63,29 +63,31 @@ async def create_role(
 
 @roles_router.get(
     "",
-    response_model=RoleListResponse,
+    response_model=PagedResponse[RoleResponse],
+    status_code=status.HTTP_200_OK,
+    summary="List roles",
+    description="Retrieves a paginated list of security roles.",
 )
 async def list_roles(
     db: Annotated[AsyncSession, Depends(get_db_session)],
+    pagination: Annotated[PaginationParams, Depends(get_pagination)],
     current_user: Annotated[
         User,
         Depends(require_permission("role.read")),
     ],
-    page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
-) -> RoleListResponse:
+) -> PagedResponse[RoleResponse]:
     service = RoleService(db)
 
     items, total = await service.list_roles(
-        page=page,
-        page_size=page_size,
+        offset=pagination.offset,
+        limit=pagination.page_size,
     )
 
-    return RoleListResponse(
-        items=items,
+    return PagedResponse.build(
+        items=[RoleResponse.model_validate(item) for item in items],
         total=total,
-        page=page,
-        page_size=page_size,
+        page=pagination.page,
+        page_size=pagination.page_size,
     )
 
 
@@ -95,21 +97,33 @@ async def list_roles(
 
 
 @roles_router.get(
-    "/{role_id}",
+    "/{identifier}",
     response_model=RoleResponse,
 )
 async def get_role(
-    role_id: UUID,
+    identifier: Annotated[
+        str,
+        Path(
+            description="Unique identifier of the role (UUID or unique role code)",
+            examples=["super_admin", "018f3a2b-c4d5-7e8f-9a0b-1c2d3e4f5a6b"],
+        ),
+    ],
     db: Annotated[AsyncSession, Depends(get_db_session)],
     current_user: Annotated[
         User,
         Depends(require_permission("role.read")),
     ],
 ) -> RoleResponse:
+    str_val = identifier.strip() if identifier else ""
+    if not str_val or str_val.lower() in ("null", "undefined", "none"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Role identifier cannot be null or empty.",
+        )
     service = RoleService(db)
 
     try:
-        return await service.get_role(role_id)
+        return await service.get_role(str_val)
     except RoleNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -123,11 +137,17 @@ async def get_role(
 
 
 @roles_router.patch(
-    "/{role_id}",
+    "/{identifier}",
     response_model=RoleResponse,
 )
 async def update_role(
-    role_id: UUID,
+    identifier: Annotated[
+        str,
+        Path(
+            description="Unique identifier of the role (UUID or unique role code)",
+            examples=["super_admin", "018f3a2b-c4d5-7e8f-9a0b-1c2d3e4f5a6b"],
+        ),
+    ],
     data: RoleUpdate,
     db: Annotated[AsyncSession, Depends(get_db_session)],
     current_user: Annotated[
@@ -135,10 +155,16 @@ async def update_role(
         Depends(require_permission("role.update")),
     ],
 ) -> RoleResponse:
+    str_val = identifier.strip() if identifier else ""
+    if not str_val or str_val.lower() in ("null", "undefined", "none"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Role identifier cannot be null or empty.",
+        )
     service = RoleService(db)
 
     try:
-        return await service.update_role(role_id, data)
+        return await service.update_role(str_val, data)
     except RoleNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -162,21 +188,33 @@ async def update_role(
 
 
 @roles_router.delete(
-    "/{role_id}",
+    "/{identifier}",
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def delete_role(
-    role_id: UUID,
+    identifier: Annotated[
+        str,
+        Path(
+            description="Unique identifier of the role (UUID or unique role code)",
+            examples=["super_admin", "018f3a2b-c4d5-7e8f-9a0b-1c2d3e4f5a6b"],
+        ),
+    ],
     db: Annotated[AsyncSession, Depends(get_db_session)],
     current_user: Annotated[
         User,
         Depends(require_permission("role.delete")),
     ],
 ) -> Response:
+    str_val = identifier.strip() if identifier else ""
+    if not str_val or str_val.lower() in ("null", "undefined", "none"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Role identifier cannot be null or empty.",
+        )
     service = RoleService(db)
 
     try:
-        await service.delete_role(role_id)
+        await service.delete_role(str_val)
     except RoleNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

@@ -7,8 +7,12 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 class UserCreate(BaseModel):
     first_name: str | None = Field(default=None, max_length=100)
     last_name: str | None = Field(default=None, max_length=100)
+    display_name: str | None = Field(default=None, max_length=150)
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
+    phone: str | None = Field(default=None, max_length=30)
+    status: str = Field(default="active", max_length=20)
+    role_codes: list[str] = Field(default_factory=list)
 
 
 class UserLogin(BaseModel):

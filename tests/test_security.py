@@ -1,5 +1,7 @@
 from uuid import uuid4
 
+import pytest
+
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -55,3 +57,25 @@ def test_refresh_token_hash_is_deterministic() -> None:
 
     assert first_hash == second_hash
     assert first_hash != token
+
+
+@pytest.mark.asyncio
+async def test_http_security_headers_emitted() -> None:
+    """Verifies that enterprise HTTP security headers are emitted on API responses."""
+    from httpx import ASGITransport, AsyncClient
+
+    from app.main import app
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        response = await ac.get("/api/v1/health")
+        assert response.status_code == 200
+        assert response.headers.get("X-Content-Type-Options") == "nosniff"
+        assert response.headers.get("X-Frame-Options") == "DENY"
+        assert "Strict-Transport-Security" in response.headers
+        assert response.headers.get("X-XSS-Protection") == "1; mode=block"
+        assert (
+            response.headers.get("Referrer-Policy") == "strict-origin-when-cross-origin"
+        )
+        assert "X-Request-ID" in response.headers

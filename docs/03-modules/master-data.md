@@ -40,6 +40,7 @@ The platform groups master data into four functional enterprise domains:
 | Catalog | Endpoint Slug | Key Attributes | Standard Instances |
 |---|---|---|---|
 | **Address Types** | `/masters/address-types` | `name`, `code`, `description`, `is_active` | Billing, Shipping, Headquarters, Warehouse |
+| **Addresses** | `/masters/addresses` | `address_line1`, `address_type_id`, `country_id`, `postal_code`, `is_default` | Physical & operational site location addresses |
 | **Communication Types** | `/masters/communication-types` | `name`, `code`, `description`, `is_active` | Work Email, Personal Phone, Mobile, Slack |
 | **Document Types** | `/masters/document-types` | `name`, `code`, `description`, `is_active` | Contract, Invoice, PO, NDA, Certification |
 | **Identification Types** | `/masters/identification-types` | `name`, `code`, `description`, `is_active` | Passport, National ID, Tax Number, SSN |
@@ -64,12 +65,19 @@ currency_router = create_master_router(
 )
 ```
 
-Each generated router automatically provides standardized HTTP endpoints:
-- `POST /api/v1/masters/<catalog>` — Create new master record
-- `GET /api/v1/masters/<catalog>` — Paginated list with `is_active` filtering
-- `GET /api/v1/masters/<catalog>/{public_id}` — Fetch detailed record by UUID
-- `PATCH /api/v1/masters/<catalog>/{public_id}` — Update record attributes or reactivate
-- `DELETE /api/v1/masters/<catalog>/{public_id}` — Deactivate / soft-delete (returns 204 No Content)
+Each generated router automatically provides standardized HTTP endpoints (e.g., `/api/v1/masters/addresses/{identifier}`, `/api/v1/masters/countries/{identifier}`):
+- `POST /api/v1/masters/<catalog>` — Create new master record with strict null validation for non-nullable columns
+- `GET /api/v1/masters/<catalog>` — Paginated list with `is_active` filtering and injection-safe sorting
+- `GET /api/v1/masters/<catalog>/{identifier}` — Dual-lookup: fetch detailed record by UUIDv7 `public_id` or internal integer `id` (e.g., `GET /api/v1/masters/addresses/{identifier}`)
+- `PATCH /api/v1/masters/<catalog>/{identifier}` — Dual-lookup update with null-safety checks on non-nullable columns
+- `DELETE /api/v1/masters/<catalog>/{identifier}` — Dual-lookup deactivation / soft-delete (returns 204 No Content)
+
+> **Foreign Keys & Dual Identification**:
+> - Individual record operations (`GET`, `PATCH`, `DELETE`) support **dual lookup**: accepting either sequential RFC 9562 UUIDv7 `public_id` or internal integer `id`.
+> - Empty, null, or undefined identifiers in path parameters trigger explicit HTTP 400 errors (`"<Entity> identifier cannot be empty or null."`).
+> - Updating non-nullable attributes to `null` raises HTTP 422 validation errors (`"Field '<column>' cannot be null."`) instead of database integrity conflicts.
+> - Relational foreign keys in request payloads (`Address`, `City`, `State`) use integer IDs (`country_id`, `state_id`, `city_id`, `address_type_id`, `organization_id`, `branch_id`).
+> - Responses include both integer `id` and UUID `public_id`.
 
 ---
 

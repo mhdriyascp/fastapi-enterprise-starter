@@ -1,7 +1,7 @@
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
-from sqlalchemy import exists, select
+from sqlalchemy import and_, exists, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies.auth import get_current_user
@@ -27,47 +27,29 @@ def require_permission(permission_code: str):
             Depends(get_db_session),
         ],
     ) -> User:
-        # 1. Super Administrator priority check: super_admin has universal access
-        super_admin_query = (
-            select(UserRole.id)
+        # Optimized single-query authorization check:
+        # User has super_admin role OR has the specifically assigned active permission.
+        # This replaces 2 sequential queries with 1 single index-backed EXISTS check.
+        auth_query = (
+            select(UserRole.user_id)
             .join(Role, Role.id == UserRole.role_id)
+            .outerjoin(RolePermission, RolePermission.role_id == Role.id)
+            .outerjoin(Permission, Permission.id == RolePermission.permission_id)
             .where(
                 UserRole.user_id == current_user.id,
-                Role.code.in_(("super_admin", "superadmin")),
                 Role.is_active.is_(True),
+                or_(
+                    Role.code.in_(("super_admin", "superadmin")),
+                    and_(
+                        Permission.code == permission_code,
+                        Permission.is_active.is_(True),
+                    ),
+                ),
             )
         )
-        is_super = (await db.execute(select(exists(super_admin_query)))).scalar_one()
-        if is_super:
-            return current_user
+        has_access = (await db.execute(select(exists(auth_query)))).scalar_one()
 
-        # 2. Granular RBAC Role-Permission assignment check
-        permission_exists = (
-            select(Permission.id)
-            .join(
-                RolePermission,
-                RolePermission.permission_id == Permission.id,
-            )
-            .join(
-                Role,
-                Role.id == RolePermission.role_id,
-            )
-            .join(
-                UserRole,
-                UserRole.role_id == Role.id,
-            )
-            .where(
-                UserRole.user_id == current_user.id,
-                Permission.code == permission_code,
-                Permission.is_active.is_(True),
-                Role.is_active.is_(True),
-            )
-        )
-
-        result = await db.execute(select(exists(permission_exists)))
-        has_permission = result.scalar_one()
-
-        if not has_permission:
+        if not has_access:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"You do not have the required permission ({permission_code}) to perform this action.",

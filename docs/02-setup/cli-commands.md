@@ -472,32 +472,113 @@ Note: Production server settings, worker counts, container orchestration, revers
 
 ⸻
 
-14. Quick Command Reference
+14. Frontend & Next.js CLI Commands
 
-Task	Command
-Start Docker containers	docker start crm-postgres crm-pgadmin
-Show containers	docker ps -a
-Show project tree	`tree -I ’.git
-Install dependencies	uv sync
-Start development server	uv run uvicorn app.main:app --reload
-Check application imports	uv run python -c "from app.main import app; print('Application imported successfully')"
-Check Ruff	uv run ruff check app
-Fix Ruff issues	uv run ruff check app --fix
-Check formatting	uv run ruff format --check app
-Apply migrations	uv run alembic upgrade head
-Run seeds	uv run python -m app.seeds
-Run tests	uv run pytest
-Check Git status	git status
-Commit changes	git commit -m "feat: describe the change"
+All frontend commands should be executed from the `frontend/` directory:
+
+```bash
+cd frontend
+```
+
+### Development Server
+```bash
+# Start Next.js development server (default: http://localhost:3000)
+npm run dev
+
+# Start with custom port
+npm run dev -- -p 3001
+
+# Start bound to all network interfaces (for Docker / VM testing)
+npm run dev -- -H 0.0.0.0
+
+# Start with Turbopack (Next.js 15+ high-performance bundler)
+npm run dev -- --turbo
+```
+
+### Production Build & Server
+```bash
+# Create optimized production build (compiles code, type-checks TS, prerenders pages)
+npm run build
+
+# Start production server (serves the optimized .next build)
+npm run start
+
+# Start production server on custom port
+npm run start -- -p 8080
+```
+
+### Code Quality, Linting & Type Checking
+```bash
+# Run Next.js ESLint checks
+npm run lint
+
+# Automatically fix lint issues where possible
+npx eslint . --fix
+
+# Run TypeScript type check without emitting build files
+npx tsc --noEmit
+```
+
+### Dependency Management & Maintenance
+```bash
+# Install frontend packages from package-lock.json
+npm install
+
+# Clean deterministic install for CI/CD environments
+npm ci
+
+# Check for outdated packages
+npm outdated
+
+# Audit dependencies for security vulnerabilities
+npm audit
+
+# Clear Next.js build cache (resolves stale Turbopack / compilation states)
+rm -rf .next
+
+# Hard reset of frontend dependencies
+rm -rf node_modules package-lock.json && npm install
+```
+
+### Pre-Completion Quality Gate (Definition of Done)
+```bash
+# Execute from project root to verify frontend integrity:
+cd frontend && npm run lint && npm run build
+```
 
 ⸻
 
-15. Maintenance
+15. Quick Command Reference
+
+Task	Command
+Start Docker containers	`docker start crm-postgres crm-pgadmin`
+Show containers	`docker ps -a`
+Install backend dependencies	`uv sync`
+Apply database migrations	`uv run alembic upgrade head`
+Run seeds	`uv run python -m app.seeds`
+Start backend dev server	`uv run fastapi dev app/main.py`
+Check Ruff linting	`uv run ruff check .`
+Fix Ruff issues	`uv run ruff check . --fix`
+Check Ruff formatting	`uv run ruff format --check .`
+Run pytest suite	`uv run pytest`
+Install frontend dependencies	`cd frontend && npm install`
+Start frontend dev server	`cd frontend && npm run dev`
+Lint frontend code	`cd frontend && npm run lint`
+Build frontend production bundle	`cd frontend && npm run build`
+Start frontend production server	`cd frontend && npm run start`
+Full DoD Quality Gate	`uv run ruff check . && uv run ruff format --check . && uv run pytest && cd frontend && npm run lint && npm run build`
+Check Git status	`git status`
+Commit changes	`git commit -m "feat: describe the change"`
+
+⸻
+
+16. Maintenance
 
 Keep this document updated when:
 
 * New application modules are introduced.
 * API routes change.
+* Frontend components, pages, or build scripts change.
 * Authentication or authorization behavior changes.
 * Database migration procedures change.
 * Seed functions or registry entries change.

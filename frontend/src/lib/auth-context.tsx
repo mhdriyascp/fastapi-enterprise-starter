@@ -11,6 +11,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  hasPermission: (permissionCode: string) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -22,6 +23,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  const hasPermission = useCallback(
+    (permissionCode: string): boolean => {
+      if (!user) return false;
+      if (user.is_super_admin) return true;
+      if (user.roles?.includes('super_admin')) return true;
+      return user.permissions?.includes(permissionCode) ?? false;
+    },
+    [user]
+  );
 
   const fetchCurrentUser = useCallback(async () => {
     const token = getStoredAccessToken();
@@ -135,6 +146,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         login,
         logout,
         refreshUser: fetchCurrentUser,
+        hasPermission,
       }}
     >
       {children}

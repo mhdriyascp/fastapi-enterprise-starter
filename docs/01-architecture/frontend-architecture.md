@@ -153,14 +153,14 @@ The dedicated RBAC administration suite provides granular security orchestration
 1. **Roles Management**:
    - Table of all tenant and system roles with active indicators and system protection badges (`is_system`).
    - Create Role (`POST /api/v1/roles`) with automatic uppercase code validation.
-   - Edit Role (`PATCH /api/v1/roles/{id}`) with name/description/status updates.
-   - Delete Role (`DELETE /api/v1/roles/{id}`) with protection safeguards against deleting core system roles.
+   - Edit Role (`PATCH /api/v1/roles/{identifier}`) with name/description/status updates.
+   - Delete Role (`DELETE /api/v1/roles/{identifier}`) with protection safeguards against deleting core system roles.
 2. **Permissions Registry**:
    - Categorized by functional resource (`user`, `role`, `organization`, `menu`, etc.).
    - Permission creator (`POST /api/v1/permissions`) with code preview format (`resource.action`).
 3. **Role-Permission Access Matrix**:
    - Interactive matrix mapping roles to permissions.
-   - Live assignment toggle (`POST /api/v1/roles/{id}/permissions/{perm_id}` / `DELETE /api/v1/roles/{id}/permissions/{perm_id}`) with instant optimistic status badges.
+   - Live assignment toggle (`POST /api/v1/roles/{identifier}/permissions/{perm_id}` / `DELETE /api/v1/roles/{identifier}/permissions/{perm_id}`) with instant optimistic status badges.
 
 ---
 
@@ -185,7 +185,7 @@ The dedicated RBAC administration suite provides granular security orchestration
   - **Dynamic Notification Center & Activity Stream**:
     - Notification bell with dynamic unread badge counter in [`frontend/src/components/navigation/header.tsx`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/frontend/src/components/navigation/header.tsx).
     - Directly integrated with the backend API (`/api/v1/notifications`): fetches real-time activity stream on mount/login, executes non-blocking 30-second polling for unread counters, and features tabbed filtering (All / Unread).
-    - Full interactive controls: "Mark all as read" (`POST /api/v1/notifications/mark-all-read`), toggle individual read/unread status (`PATCH /api/v1/notifications/{id}/read`), deep-link navigation for actionable items, and individual / batch dismissal (`DELETE /api/v1/notifications/{id}`, `DELETE /api/v1/notifications/clear-all`).
+    - Full interactive controls: "Mark all as read" (`POST /api/v1/notifications/mark-all-read`), toggle individual read/unread status (`PATCH /api/v1/notifications/{identifier}/read`), deep-link navigation for actionable items, and individual / batch dismissal (`DELETE /api/v1/notifications/{identifier}`, `DELETE /api/v1/notifications/clear-all`).
   - **Multi-Device Responsive Sidebar**: On desktop viewports (>= 1024px), renders as a persistent sticky sidebar; on tablets and mobile screens (< 1024px), transforms into an off-canvas drawer with smooth slide-in transition, dark blurred backdrop overlay, mobile hamburger toggle button in the header, and internal close button (`X`).
   - **Automatic Route Navigation Dismissal**: Mobile drawer automatically closes on navigation via state synchronization without cascading re-renders.
   - **Responsive Dashboard Grids**: Fluid utility classes (`.dashboard-grid-2col`, `.receivables-grid`, `.kpi-metrics-grid`, `.dashboard-toolbar-actions`) ensuring optimal rendering across phones (320px-640px), tablets (768px-1024px), and desktop displays without horizontal overflows.
@@ -249,6 +249,24 @@ The dedicated RBAC administration suite provides granular security orchestration
   - Features real-time keyword search across labels, sublabels, and system identifiers, keyboard navigation (`ArrowUp`, `ArrowDown`, `Enter`, `Escape`), active item checkmark, and click-outside dismissal.
   - Supports rich option rendering with Lucide icons, system/custom badges, and monospace secondary codes.
   - Deployed in the **RBAC Access Matrix** role selector ("Configuring Privileges for Role:"), **Menu Management** modal (`Parent Category` and `Icon Identifier` selections), and **Dashboard** period filter.
+
+---
+
+## 🛠️ Frontend CLI Commands & Quality Automation
+
+All commands must be run within the `frontend/` directory:
+
+| Task | Command | Description |
+| :--- | :--- | :--- |
+| **Start Dev Server** | `npm run dev` | Runs Next.js 15 App Router at [http://localhost:3000](http://localhost:3000) with hot-reloading. |
+| **Dev Server (Custom Port)** | `npm run dev -- -p 3001` | Runs development server on an alternative port (e.g. 3001). |
+| **Production Build** | `npm run build` | Type-checks TypeScript, executes ESLint, compiles production bundle, and validates static route rendering. |
+| **Serve Production Build** | `npm run start` | Boots optimized production server using the compiled `.next` artifacts. |
+| **Lint Check** | `npm run lint` | Runs ESLint across all components, hooks, lib, and app router pages. |
+| **Auto-Fix Lint** | `npx eslint . --fix` | Automatically formats and resolves fixable ESLint warnings. |
+| **Type Check Only** | `npx tsc --noEmit` | Strict TypeScript compiler check without emitting output files. |
+| **Clean Build Cache** | `rm -rf .next` | Wipes the Next.js compilation cache when resolving stale Turbopack states. |
+| **Mandatory Pre-Commit Gate** | `cd frontend && npm run lint && npm run build` | Full definition of done (DoD) verification gate before pushing code. |
 
 
 

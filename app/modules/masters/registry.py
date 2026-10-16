@@ -1,27 +1,42 @@
 from app.infrastructure.database.models.masters import (
+    Address,
     AddressType,
     Brand,
+    City,
     CommunicationType,
+    Country,
     Currency,
     DocumentType,
     IdentificationType,
     Industry,
     Language,
+    State,
     TimeZone,
     UnitOfMeasure,
 )
 from app.infrastructure.database.models.masters.tax import Tax
 from app.modules.masters.common.crud_router import create_master_router
+from app.modules.masters.schemas.address import (
+    AddressCreate,
+    AddressResponse,
+    AddressUpdate,
+)
 from app.modules.masters.schemas.address_type import (
     AddressTypeCreate,
     AddressTypeResponse,
     AddressTypeUpdate,
 )
 from app.modules.masters.schemas.brand import BrandCreate, BrandResponse, BrandUpdate
+from app.modules.masters.schemas.city import CityCreate, CityResponse, CityUpdate
 from app.modules.masters.schemas.communication_type import (
     CommunicationTypeCreate,
     CommunicationTypeResponse,
     CommunicationTypeUpdate,
+)
+from app.modules.masters.schemas.country import (
+    CountryCreate,
+    CountryResponse,
+    CountryUpdate,
 )
 from app.modules.masters.schemas.currency import (
     CurrencyCreate,
@@ -47,6 +62,11 @@ from app.modules.masters.schemas.language import (
     LanguageCreate,
     LanguageResponse,
     LanguageUpdate,
+)
+from app.modules.masters.schemas.state import (
+    StateCreate,
+    StateResponse,
+    StateUpdate,
 )
 from app.modules.masters.schemas.tax import (
     TaxCreate,
@@ -161,4 +181,40 @@ brand_router = create_master_router(
     response_schema=BrandResponse,
     prefix="/masters/brands",
     tag="Master Data - Brands",
+)
+
+country_router = create_master_router(
+    model=Country,
+    create_schema=CountryCreate,
+    update_schema=CountryUpdate,
+    response_schema=CountryResponse,
+    prefix="/masters/countries",
+    tag="Master Data - Countries",
+)
+
+state_router = create_master_router(
+    model=State,
+    create_schema=StateCreate,
+    update_schema=StateUpdate,
+    response_schema=StateResponse,
+    prefix="/masters/states",
+    tag="Master Data - States",
+)
+
+city_router = create_master_router(
+    model=City,
+    create_schema=CityCreate,
+    update_schema=CityUpdate,
+    response_schema=CityResponse,
+    prefix="/masters/cities",
+    tag="Master Data - Cities",
+)
+
+address_router = create_master_router(
+    model=Address,
+    create_schema=AddressCreate,
+    update_schema=AddressUpdate,
+    response_schema=AddressResponse,
+    prefix="/masters/addresses",
+    tag="Master Data - Addresses",
 )

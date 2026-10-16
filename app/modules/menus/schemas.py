@@ -12,7 +12,7 @@ class MenuCreate(BaseModel):
     path: str | None = Field(default=None, max_length=255)
     icon: str | None = Field(default=None, max_length=100)
     sort_order: int = Field(default=0, ge=0)
-    parent_id: UUID | None = None
+    parent_id: int | UUID | str | None = None
     is_active: bool = True
     role_ids: list[UUID] = Field(default_factory=list)
     permission_ids: list[UUID] = Field(default_factory=list)
@@ -26,7 +26,7 @@ class MenuUpdate(BaseModel):
     path: str | None = Field(default=None, max_length=255)
     icon: str | None = Field(default=None, max_length=100)
     sort_order: int | None = Field(default=None, ge=0)
-    parent_id: UUID | None = None
+    parent_id: int | UUID | str | None = None
     is_active: bool | None = None
     role_ids: list[UUID] | None = None
     permission_ids: list[UUID] | None = None
@@ -43,9 +43,9 @@ class MenuPermissionAssignment(BaseModel):
 class MenuResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: UUID
+    id: int
     public_id: UUID
-    parent_id: UUID | None = None
+    parent_id: int | None = None
     title: str
     code: str
     path: str | None = None
@@ -61,9 +61,9 @@ class MenuResponse(BaseModel):
 class MenuTreeNode(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: UUID
+    id: int
     public_id: UUID
-    parent_id: UUID | None = None
+    parent_id: int | None = None
     title: str
     code: str
     path: str | None = None
