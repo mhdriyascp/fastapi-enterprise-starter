@@ -25,6 +25,8 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/lib/toast-context';
 import { generateOrganizationCode } from '@/lib/code-generator';
+import { FormattedDate } from '@/components/ui/formatted-date';
+import { ConfirmationModal } from '@/components/ui/confirmation-modal';
 
 /**
  * Enterprise Organizations & Multi-Tenant Accounts Workspace.
@@ -697,7 +699,7 @@ export default function OrganizationsPage() {
                   <td style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                       <Clock size={13} color="var(--text-muted)" />
-                      {new Date(org.created_at).toLocaleDateString()}
+                      <FormattedDate value={org.created_at} variant="date" />
                     </div>
                   </td>
 
@@ -951,14 +953,14 @@ export default function OrganizationsPage() {
                   <tr>
                     <th>Created Timestamp</th>
                     <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                      {new Date(viewingOrg.created_at).toLocaleString()}
+                      <FormattedDate value={viewingOrg.created_at} variant="datetime" includeSeconds />
                     </td>
                   </tr>
                   {viewingOrg.updated_at && (
                     <tr>
                       <th>Last Modified</th>
                       <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                        {new Date(viewingOrg.updated_at).toLocaleString()}
+                        <FormattedDate value={viewingOrg.updated_at} variant="datetime" includeSeconds />
                       </td>
                     </tr>
                   )}
@@ -1321,76 +1323,24 @@ export default function OrganizationsPage() {
       )}
 
       {/* Delete Confirmation Modal */}
-      {deleteCandidate && (
-        <div
-          className="modal-backdrop"
-        >
-          <div
-            className="modal-dialog glass-panel"
-            style={{
-              maxWidth: '460px',
-              padding: '2rem',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
-              <div
-                style={{
-                  width: '40px',
-                  height: '40px',
-                  borderRadius: 'var(--radius-md)',
-                  background: 'var(--accent-danger-bg)',
-                  color: '#fda4af',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                }}
-              >
-                <Trash2 size={20} />
-              </div>
-              <div>
-                <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-                  Delete Organization?
-                </h3>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  Code: {deleteCandidate.code}
-                </div>
-              </div>
-            </div>
-
-            <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: '1.5rem' }}>
+      <ConfirmationModal
+        isOpen={!!deleteCandidate}
+        onClose={() => setDeleteCandidate(null)}
+        onConfirm={handleDeleteOrganization}
+        title="Delete Organization?"
+        subtitle={deleteCandidate ? `Code: ${deleteCandidate.code}` : undefined}
+        message={
+          deleteCandidate ? (
+            <>
               Are you sure you want to permanently delete{' '}
               <strong style={{ color: 'var(--text-primary)' }}>{deleteCandidate.name}</strong>? All associated tenant configurations will be permanently removed. This action cannot be undone.
-            </p>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
-              <button
-                type="button"
-                onClick={() => setDeleteCandidate(null)}
-                className="btn btn-secondary"
-                disabled={isSubmitting}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleDeleteOrganization}
-                disabled={isSubmitting}
-                className="btn btn-danger"
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 size={15} className="loading-spinner" />
-                    <span>Deleting...</span>
-                  </>
-                ) : (
-                  <span>Delete Organization</span>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            </>
+          ) : null
+        }
+        confirmLabel="Delete Organization"
+        variant="danger"
+        isLoading={isSubmitting}
+      />
     </div>
   );
 }

@@ -2,7 +2,9 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
+
+from app.shared.base_schema import BaseSchema
 
 
 class NotificationCreate(BaseModel):
@@ -17,9 +19,7 @@ class NotificationUpdate(BaseModel):
     is_read: bool
 
 
-class NotificationResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class NotificationResponse(BaseSchema):
     id: int
     public_id: uuid.UUID
     user_id: uuid.UUID | None = None

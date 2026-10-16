@@ -22,39 +22,8 @@ import { apiFetch } from '@/lib/api-client';
 import { NotificationItem, PagedResponse } from '@/lib/types';
 import { useToast } from '@/lib/toast-context';
 import { useAuth } from '@/lib/auth-context';
-
-function formatDateTime(isoString: string): string {
-  try {
-    const d = new Date(isoString);
-    return d.toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  } catch {
-    return isoString;
-  }
-}
-
-function formatRelativeTime(dateStr: string): string {
-  try {
-    const now = new Date();
-    const date = new Date(dateStr);
-    const diffSecs = Math.max(0, Math.floor((now.getTime() - date.getTime()) / 1000));
-    if (diffSecs < 60) return 'Just now';
-    const diffMins = Math.floor(diffSecs / 60);
-    if (diffMins < 60) return `${diffMins}m ago`;
-    const diffHours = Math.floor(diffMins / 60);
-    if (diffHours < 24) return `${diffHours}h ago`;
-    const diffDays = Math.floor(diffHours / 24);
-    if (diffDays < 7) return `${diffDays}d ago`;
-    return date.toLocaleDateString();
-  } catch {
-    return 'Recently';
-  }
-}
+import { formatDateTime, formatRelativeTime } from '@/lib/date-utils';
+import { ConfirmationModal } from '@/components/ui/confirmation-modal';
 
 export default function NotificationsPage() {
   const { toast } = useToast();
@@ -63,10 +32,13 @@ export default function NotificationsPage() {
 
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isDismissing, setIsDismissing] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedType, setSelectedType] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'unread' | 'read'>('all');
   const [viewingNotification, setViewingNotification] = useState<NotificationItem | null>(null);
+  const [clearAllConfirmOpen, setClearAllConfirmOpen] = useState<boolean>(false);
+  const [deleteCandidateNotification, setDeleteCandidateNotification] = useState<NotificationItem | null>(null);
 
   const refreshNotifications = async () => {
     try {
@@ -119,40 +91,55 @@ export default function NotificationsPage() {
     }
   };
 
-  const handleClearAll = async () => {
+  const handleClearAll = () => {
     if (!canDelete) {
       toast.error('You do not have permission to delete notifications.');
       return;
     }
-    if (!confirm('Are you sure you want to dismiss all visible notifications?')) return;
+    setClearAllConfirmOpen(true);
+  };
+
+  const confirmClearAll = async () => {
+    setIsDismissing(true);
     try {
       await apiFetch<{ deleted: number }>('/notifications/clear-all', {
         method: 'DELETE',
       });
       setNotifications([]);
+      setClearAllConfirmOpen(false);
       toast.success('All notifications cleared successfully');
     } catch {
       toast.error('Failed to clear notifications');
+    } finally {
+      setIsDismissing(false);
     }
   };
 
-  const handleDeleteSingle = async (id: number | string) => {
+  const promptDeleteSingle = (notification: NotificationItem) => {
     if (!canDelete) {
       toast.error('You do not have permission to delete notifications.');
       return;
     }
-    if (!confirm('Are you sure you want to dismiss this notification?')) return;
+    setDeleteCandidateNotification(notification);
+  };
+
+  const confirmDeleteSingle = async () => {
+    if (!deleteCandidateNotification) return;
+    setIsDismissing(true);
     try {
-      await apiFetch(`/notifications/${id}`, {
+      await apiFetch(`/notifications/${deleteCandidateNotification.id}`, {
         method: 'DELETE',
       });
-      setNotifications((prev) => prev.filter((n) => n.id !== id));
-      if (viewingNotification && viewingNotification.id === id) {
+      setNotifications((prev) => prev.filter((n) => n.id !== deleteCandidateNotification.id));
+      if (viewingNotification && viewingNotification.id === deleteCandidateNotification.id) {
         setViewingNotification(null);
       }
       toast.success('Notification dismissed');
+      setDeleteCandidateNotification(null);
     } catch {
       toast.error('Failed to dismiss notification');
+    } finally {
+      setIsDismissing(false);
     }
   };
 
@@ -588,7 +575,7 @@ export default function NotificationsPage() {
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleDeleteSingle(n.id);
+                            promptDeleteSingle(n);
                           }}
                           className="btn btn-secondary"
                           style={{ padding: '0.35rem 0.55rem', fontSize: '0.75rem', color: '#f43f5e' }}
@@ -781,7 +768,7 @@ export default function NotificationsPage() {
                 {canDelete && (
                   <button
                     type="button"
-                    onClick={() => handleDeleteSingle(viewingNotification.id)}
+                    onClick={() => promptDeleteSingle(viewingNotification)}
                     className="btn btn-danger"
                     style={{ fontSize: '0.8125rem', gap: '0.35rem' }}
                   >
@@ -801,6 +788,40 @@ export default function NotificationsPage() {
           </div>
         </div>
       )}
+
+      {/* Clear All Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={clearAllConfirmOpen}
+        onClose={() => setClearAllConfirmOpen(false)}
+        onConfirm={confirmClearAll}
+        isLoading={isDismissing}
+        title="Dismiss All Notifications?"
+        subtitle="This action will permanently remove all notifications."
+        message="Are you sure you want to dismiss all visible notifications? Once cleared, these records cannot be recovered."
+        confirmLabel="Dismiss All"
+        variant="danger"
+      />
+
+      {/* Single Notification Dismissal Modal */}
+      <ConfirmationModal
+        isOpen={Boolean(deleteCandidateNotification)}
+        onClose={() => setDeleteCandidateNotification(null)}
+        onConfirm={confirmDeleteSingle}
+        isLoading={isDismissing}
+        title="Dismiss Notification?"
+        subtitle="Remove this notification from your operational inbox."
+        message={
+          <span>
+            Are you sure you want to dismiss notification{' '}
+            <strong style={{ color: 'var(--text-primary)' }}>
+              &ldquo;{deleteCandidateNotification?.title}&rdquo;
+            </strong>
+            ?
+          </span>
+        }
+        confirmLabel="Dismiss"
+        variant="danger"
+      />
     </div>
   );
 }

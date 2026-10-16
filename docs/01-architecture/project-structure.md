@@ -75,8 +75,10 @@ crm-platform/
 │   │   ├── masters/
 │   │   │   ├── common/
 │   │   │   └── schemas/
+│   │   ├── notifications/
 │   │   ├── organizations/
 │   │   ├── rbac/
+│   │   ├── settings/
 │   │   └── users/
 │   │
 │   ├── shared/

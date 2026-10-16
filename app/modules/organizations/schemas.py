@@ -1,7 +1,9 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, HttpUrl
+from pydantic import BaseModel, EmailStr, Field, HttpUrl
+
+from app.shared.base_schema import BaseSchema
 
 
 class OrganizationCreate(BaseModel):
@@ -31,9 +33,7 @@ class OrganizationStatusUpdate(BaseModel):
     is_active: bool
 
 
-class OrganizationResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class OrganizationResponse(BaseSchema):
     id: int
     public_id: UUID
     code: str

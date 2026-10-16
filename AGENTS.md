@@ -123,6 +123,11 @@ Before generating any code, every AI agent must execute this 4-step checklist:
     - Regular queries must filter out soft-deleted records (`where(Model.is_deleted.is_(False))`) by default.
   - **Decoupled Identity Foundation**:
     - Do **NOT** bind `User` models directly to `Organization` unless explicitly instructed. Keep identity and RBAC decoupled from specific CRM tenant account models.
+  - **Standardized Enterprise Datetime Serialization (`YYYY-MM-DDTHH:MM:SSZ`)**:
+    - All datetimes in API response payloads MUST serialize strictly to ISO 8601 UTC with second precision (`YYYY-MM-DDTHH:MM:SSZ`, e.g. `2026-10-16T05:54:55Z`).
+    - **Never** expose sub-second microsecond noise (`.406703Z`) or non-UTC offsets in API outputs.
+    - All response schemas across current and upcoming modules MUST inherit from [`app.shared.base_schema.BaseSchema`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/app/shared/base_schema.py).
+    - FastAPI is configured with [`StandardJSONResponse`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/app/shared/response.py) as `default_response_class` and `ENCODERS_BY_TYPE[datetime] = format_iso_utc` to guarantee system-wide compliance on all responses.
 - **Pydantic v2 Standards**:
   - Use `model_config = ConfigDict(from_attributes=True)` instead of v1 `class Config: orm_mode = True`.
   - Use `@field_validator` and `@model_validator(mode="before"|"after")` instead of deprecated `@validator`.
@@ -156,6 +161,11 @@ Before generating any code, every AI agent must execute this 4-step checklist:
   - Maximum line length: 88 characters (Black / Ruff standard).
   - Code must pass `ruff check .` and `ruff format .` without manual interventions.
   - No dense one-liners or nested ternary chains.
+- **Frontend Human-Readable & TypeScript Standards**:
+  - **Strict Prop Interfaces**: Every exported component must define an explicit `interface ComponentNameProps` with descriptive JSDoc documentation on each prop. Never use inline untyped props or `any`.
+  - **Semantic Intent-Driven Naming**: State variables, handlers, and flags must be descriptive: `isSubmitting`, `isRefreshing`, `selectedOrganizationId`, `handleCreateOrganization`, `onToggleMobileSidebar`. Avoid cryptic abbreviations (`cb`, `fn`, `hdl`, `e1`).
+  - **JSX Readability & Ternary Cap**: Limit nested ternary expressions to a maximum of 2 levels. Extract complex multi-branch rendering into dedicated subcomponents or guard clauses with early returns.
+  - **Semantic HTML5 & Accessibility**: Use standard semantic elements (`<time>`, `<nav>`, `<aside>`, `<header>`, `<main>`, `<dialog>`, `<section>`, `<article>`) instead of arbitrary unsemantic `<div>` wrapping. Ensure accessible ARIA attributes and descriptive labels on interactive buttons.
 
 ---
 
@@ -172,6 +182,14 @@ Before generating any code, every AI agent must execute this 4-step checklist:
   - Prefer composition and explicit service methods over deep class inheritance.
 - **Domain Independence**:
   - Sibling domain modules under `app/modules/` must remain decoupled. Cross-domain interactions should go through service contracts, not direct imports of another domain's private internals.
+- **Frontend Reusable Component & Utility Architecture**:
+  - **Atomic UI Primitives First**: Always reuse shared primitives in `components/ui/` (`Button`, `Card`, `Badge`, `FormattedDate`, `SearchableSelect`, `StatCard`, `ThemeToggle`). Never re-create ad-hoc button or card styles inline.
+  - **Centralized Shared Utilities**: Always import logic from `lib/` (`api-client.ts`, `date-utils.ts`, `code-generator.ts`, `types.ts`).
+  - **Zero Redundant Helper Policy**: AI agents are **STRICTLY PROHIBITED** from writing local duplicate helper functions in page components (e.g., local date formatters, relative time calculators, or status badge color switches). Any common formatting or transformation logic MUST live in a reusable utility under `lib/`.
+  - **Standardized Enterprise Date/Time Presentation**:
+    - Every date or timestamp rendered in tables, detail modals, cards, badges, or activity logs MUST use `<FormattedDate value={...} variant="..." />` from `@/components/ui/formatted-date` or formatting functions from `@/lib/date-utils`.
+    - Direct calls to `new Date().toLocaleDateString()` or `new Date().toLocaleString()` are strictly forbidden in page and feature components.
+    - User view dates automatically adapt to the user's configured `timezone` and `locale` preferences, with fallback to browser environment. Tooltips must show the exact second-precision audit timestamp with UTC offset.
 
 ---
 
@@ -210,7 +228,19 @@ Before generating any code, every AI agent must execute this 4-step checklist:
     - New or modified database entities / columns ➔ update [`docs/01-architecture/project-structure.md`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/docs/01-architecture/project-structure.md) and [`docs/04-database/`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/docs/04-database/).
     - New or modified environment variables / settings ➔ update [`docs/02-setup/configuration.md`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/docs/02-setup/configuration.md) and `.env.example`.
     - Architectural changes (routers, auth, versions) ➔ update [`docs/01-architecture/`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/docs/01-architecture/).
+    - Frontend shared components or design tokens ➔ update [`docs/03-modules/shared-foundation.md`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/docs/03-modules/shared-foundation.md).
   - A task is strictly **INCOMPLETE** if code changes are made without updating the corresponding documentation in `docs/`.
+- **Frontend JSDoc Documentation**:
+  - Every exported React component, custom hook, and utility function MUST include a JSDoc comment describing its purpose, prop requirements, and usage patterns.
+  ```tsx
+  /**
+   * Enterprise Formatted Date Component.
+   *
+   * Renders a semantic <time> element with user-localized timezone translation
+   * and a detailed hover audit tooltip showing UTC offset.
+   */
+  export function FormattedDate({ value, variant = "datetime" }: FormattedDateProps) { ... }
+  ```
 
 
 
@@ -270,6 +300,14 @@ Before generating any code, every AI agent must execute this 4-step checklist:
 - **Code Health Automation**:
   - Code must pass `ruff check .` and `ruff format .` without manual interventions.
   - Keep modules cohesive and focused.
+- **Frontend Scalability & Production-Grade UX Standards**:
+  - **Complete UI State Triad**: Every data-driven screen or section MUST implement:
+    1. *Loading State*: Accessible skeletons or loading spinners (`<Loader2 className="animate-spin" />`) with disabled mutation triggers.
+    2. *Empty State*: Informative empty-state container with contextual iconography, clear explanation, and primary call-to-action.
+    3. *Error State*: Explicit error feedback using toast notifications (`toast.error(...)`) or inline retry alert banners.
+  - **Optimistic State Updates with Safe Rollback**: Mutate UI state optimistically for immediate responsiveness, but always wrap API calls in `try/catch` with automated rollback to previous state if the server rejects the mutation.
+  - **Hydration Safety**: Prevent SSR hydration mismatch in Next.js App Router by attaching `suppressHydrationWarning` to client-rendered temporal tags (`<time>`) or deferring browser-specific renders until after mount.
+  - **Browser Global Guards**: Guard all `window`, `document`, and `localStorage` references with `typeof window !== 'undefined'` or encapsulate inside `useEffect`.
 
 ---
 
@@ -337,6 +375,7 @@ Before generating any code, every AI agent must execute this 4-step checklist:
     - [ ] Option C Standard enforced: universal `/{identifier}` path parameter naming for single-resource endpoints (never `{id}` or `{domain}_id`)
     - [ ] Dual-lookup resolution supported (int ID or UUID public_id or unique code) with strict validation rejecting empty/null path parameters
     - [ ] Standardized structured error responses formatted with code, message, and request_id (no vendor-specific terms in code)
+    - [ ] Standardized datetime formatting enforced: ISO 8601 UTC (YYYY-MM-DDTHH:MM:SSZ) via BaseSchema and StandardJSONResponse
     - [ ] Zero vendor brand names in program code, comments, docstrings, or test assertions
     - [ ] Request tracing enabled (X-Request-ID propagation)
     - [ ] Decoupled identity maintained (No direct User-to-Organization link without explicit authorization)
@@ -344,6 +383,11 @@ Before generating any code, every AI agent must execute this 4-step checklist:
     - [ ] Transaction rollback & exception handling covered
     - [ ] Migrations use UTC timestamps for revision IDs and modular domain structure (no hex hashes)
     - [ ] Frontend navigation dynamically consumed from /api/v1/menus/my-menus
+    - [ ] Frontend user-facing dates use `<FormattedDate />` or `lib/date-utils.ts` (zero ad-hoc `toLocaleDateString()` or `toLocaleString()`)
+    - [ ] Reusable UI primitives and utilities imported from `components/ui/` and `lib/` (zero duplicate page helpers)
+    - [ ] Every exported frontend component and hook documented with JSDoc and typed prop interfaces (no `any`)
+    - [ ] Complete UI state triad (loading, empty, error) and optimistic update rollbacks implemented on data views
+    - [ ] Next.js 15 App Router conventions respected with zero hydration mismatches
     - [ ] Documentation updated in docs/ (docs/03-modules/, docs/01-architecture/, docs/04-database/, etc.)
     - [ ] Backend passes ruff check . and pytest
     - [ ] Frontend passes npm run lint and npm run build with 0 errors

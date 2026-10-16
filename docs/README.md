@@ -33,6 +33,7 @@ In-depth technical contracts, business models, and service logic for each domain
 - [Role-Based Access Control (RBAC)](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/docs/03-modules/rbac.md) — Roles, Permissions, RolePermissions, UserRoles, and endpoint security.
 - [Organizations Domain](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/docs/03-modules/organizations.md) — Multi-tenant organization model, service transaction handling, status transitions.
 - [Master Data Registry](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/docs/03-modules/master-data.md) — 11 standard lookup tables and the dynamic router factory.
+- [System Settings & Configurations](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/docs/03-modules/settings.md) — Platform parameters, security thresholds, localization baselines, and feature toggles.
 - [Shared Foundation Utilities](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/docs/03-modules/shared-foundation.md) — Generic `PagedResponse[T]` envelope and `PaginationParams` dependency.
 
 ### [04. Database & Persistence](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/docs/04-database/)

@@ -7,6 +7,7 @@ import { useMenus } from '@/hooks/use-menus';
 import { useToast } from '@/lib/toast-context';
 import { generateMenuCode } from '@/lib/code-generator';
 import { SearchableSelect, SelectOption } from '@/components/ui/searchable-select';
+import { ConfirmationModal } from '@/components/ui/confirmation-modal';
 import {
   Plus,
   Edit2,
@@ -1187,53 +1188,23 @@ export default function MenusPage() {
       )}
 
       {/* Delete Confirmation Modal Dialog */}
-      {deleteCandidate && (
-        <div className="modal-backdrop">
-          <div
-            className="modal-dialog glass-panel"
-            style={{
-              maxWidth: '440px',
-              padding: '2rem',
-              boxShadow: 'var(--shadow-lg)',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', color: '#f43f5e' }}>
-              <AlertCircle size={24} />
-              <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-                Delete Menu Item?
-              </h3>
-            </div>
-            <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: '1.5rem' }}>
+      <ConfirmationModal
+        isOpen={!!deleteCandidate}
+        onClose={() => setDeleteCandidate(null)}
+        onConfirm={handleDeleteMenu}
+        title="Delete Menu Item?"
+        subtitle="This action permanently deletes the navigation item."
+        message={
+          deleteCandidate ? (
+            <>
               Are you sure you want to permanently delete <strong>{deleteCandidate.title}</strong>? Any nested child navigation items or access assignments will also be deleted.
-            </p>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.75rem' }}>
-              <button
-                type="button"
-                onClick={() => setDeleteCandidate(null)}
-                className="btn btn-secondary"
-                disabled={isSubmitting}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleDeleteMenu}
-                disabled={isSubmitting}
-                className="btn btn-danger"
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 size={15} className="loading-spinner" />
-                    <span>Deleting...</span>
-                  </>
-                ) : (
-                  <span>Confirm Delete</span>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            </>
+          ) : null
+        }
+        confirmLabel="Confirm Delete"
+        variant="danger"
+        isLoading={isSubmitting}
+      />
     </div>
   );
 }

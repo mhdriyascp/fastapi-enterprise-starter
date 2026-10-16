@@ -15,6 +15,7 @@ import {
 } from '@/lib/types';
 import { generateRoleCode } from '@/lib/code-generator';
 import { SearchableSelect, SelectOption } from '@/components/ui/searchable-select';
+import { ConfirmationModal } from '@/components/ui/confirmation-modal';
 import {
   Shield,
   Plus,
@@ -2016,72 +2017,44 @@ function RbacWorkspace() {
       )}
 
       {/* Delete Role Confirmation Dialog */}
-      {deleteRoleCandidate && (
-        <div className="modal-backdrop">
-          <div className="glass-panel" style={{ width: '100%', maxWidth: '420px', padding: '1.75rem', boxShadow: 'var(--shadow-lg)' }}>
-            <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#f43f5e', marginBottom: '0.75rem' }}>
-              Confirm Role Deletion
-            </h3>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+      <ConfirmationModal
+        isOpen={!!deleteRoleCandidate}
+        onClose={() => setDeleteRoleCandidate(null)}
+        onConfirm={handleDeleteRole}
+        title="Confirm Role Deletion"
+        subtitle="This action detaches the role from all assigned users."
+        message={
+          deleteRoleCandidate ? (
+            <>
               Are you sure you want to delete role <strong>&ldquo;{deleteRoleCandidate.name}&rdquo;</strong> (<code>{deleteRoleCandidate.code}</code>)?
               This action permanently detaches it from assigned users.
-            </p>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.5rem' }}>
-              <button
-                type="button"
-                onClick={() => setDeleteRoleCandidate(null)}
-                className="btn btn-secondary"
-                disabled={isSubmitting}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleDeleteRole}
-                className="btn btn-danger"
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? <Loader2 size={14} className="animate-spin" /> : null}
-                <span>Delete Role</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            </>
+          ) : null
+        }
+        confirmLabel="Delete Role"
+        variant="danger"
+        isLoading={isSubmitting}
+      />
 
       {/* Delete Permission Confirmation Dialog */}
-      {deletePermissionCandidate && (
-        <div className="modal-backdrop">
-          <div className="glass-panel" style={{ width: '100%', maxWidth: '420px', padding: '1.75rem', boxShadow: 'var(--shadow-lg)' }}>
-            <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#f43f5e', marginBottom: '0.75rem' }}>
-              Confirm Permission Deletion
-            </h3>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+      <ConfirmationModal
+        isOpen={!!deletePermissionCandidate}
+        onClose={() => setDeletePermissionCandidate(null)}
+        onConfirm={handleDeletePermission}
+        title="Confirm Permission Deletion"
+        subtitle="This action revokes the privilege from all roles."
+        message={
+          deletePermissionCandidate ? (
+            <>
               Are you sure you want to delete permission <strong>&ldquo;{deletePermissionCandidate.name}&rdquo;</strong> (<code>{deletePermissionCandidate.code}</code>)?
               This action permanently removes this privilege from all roles.
-            </p>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.5rem' }}>
-              <button
-                type="button"
-                onClick={() => setDeletePermissionCandidate(null)}
-                className="btn btn-secondary"
-                disabled={isSubmitting}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleDeletePermission}
-                className="btn btn-danger"
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? <Loader2 size={14} className="animate-spin" /> : null}
-                <span>Delete Permission</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            </>
+          ) : null
+        }
+        confirmLabel="Delete Permission"
+        variant="danger"
+        isLoading={isSubmitting}
+      />
     </div>
   );
 }

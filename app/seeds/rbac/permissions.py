@@ -263,6 +263,25 @@ PERMISSIONS = (
         "is_system": True,
         "is_active": True,
     },
+    # System settings management.
+    {
+        "name": "Read System Settings",
+        "code": "settings.read",
+        "description": "View system settings and application configurations.",
+        "resource": "settings",
+        "action": "read",
+        "is_system": True,
+        "is_active": True,
+    },
+    {
+        "name": "Update System Settings",
+        "code": "settings.update",
+        "description": "Modify system settings and application configurations.",
+        "resource": "settings",
+        "action": "update",
+        "is_system": True,
+        "is_active": True,
+    },
 )
 
 

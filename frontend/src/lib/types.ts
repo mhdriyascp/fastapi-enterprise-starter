@@ -31,6 +31,10 @@ export interface User {
   is_super_admin?: boolean;
   /** Granular assigned RBAC permission codes */
   permissions?: string[];
+  /** Preferred user time zone (e.g. 'America/New_York', 'Asia/Kolkata') */
+  timezone?: string | null;
+  /** Preferred user locale (e.g. 'en-US', 'en-GB') */
+  locale?: string | null;
 }
 
 export interface UserUpdatePayload {
@@ -454,4 +458,40 @@ export interface MasterAddress {
   is_default: boolean;
   is_active: boolean;
 }
+
+/**
+ * Enterprise System Configuration & Application Preferences entity.
+ * Mirrored from FastAPI Pydantic schema: app/modules/settings/schemas.py.
+ */
+export type SettingValue = string | number | boolean | unknown[] | Record<string, unknown> | null;
+
+export interface SystemSetting {
+  id: number;
+  public_id: string;
+  category: 'general' | 'security' | 'notifications' | 'governance' | 'features' | string;
+  key: string;
+  value: SettingValue;
+  value_type: 'string' | 'integer' | 'float' | 'boolean' | 'json' | 'array';
+  label: string;
+  description?: string | null;
+  is_public: boolean;
+  is_system: boolean;
+  created_at: string;
+  updated_at?: string | null;
+}
+
+export interface SystemSettingUpdatePayload {
+  value: SettingValue;
+  label?: string;
+  description?: string;
+}
+
+export interface BulkSettingsUpdatePayload {
+  settings: Record<string, SettingValue>;
+}
+
+export interface PublicSettingsResponse {
+  settings: Record<string, SettingValue>;
+}
+
 

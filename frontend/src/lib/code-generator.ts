@@ -65,3 +65,20 @@ export function generatePermissionCode(resource: string, action: string): string
   if (!cleanAction) return cleanResource;
   return `${cleanResource}.${cleanAction}`;
 }
+
+/**
+ * Generates an uppercase system code from a master catalog entity name or label.
+ * Format: Alphanumeric uppercase with underscores.
+ * Example: "Software & Technology" -> "SOFTWARE_TECHNOLOGY"
+ * Example: "VAT 18%" -> "VAT_18"
+ * Example: "Kilogram" -> "KILOGRAM"
+ */
+export function generateMasterCode(nameOrLabel: string, maxLength: number = 30): string {
+  const clean = nameOrLabel
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  if (!clean) return '';
+  return clean.slice(0, maxLength);
+}

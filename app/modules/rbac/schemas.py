@@ -1,8 +1,9 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, Field, model_validator
 
+from app.shared.base_schema import BaseSchema
 from app.shared.response import PagedResponse
 
 # ============================================================
@@ -40,9 +41,7 @@ class RoleUpdate(BaseModel):
     is_active: bool | None = None
 
 
-class RoleResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class RoleResponse(BaseSchema):
     id: UUID
     name: str
     code: str
@@ -108,9 +107,7 @@ class PermissionUpdate(BaseModel):
     is_active: bool | None = None
 
 
-class PermissionResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class PermissionResponse(BaseSchema):
     id: UUID
     name: str
     code: str

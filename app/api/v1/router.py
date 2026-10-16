@@ -32,6 +32,7 @@ from app.modules.organizations.router import router as organizations_router
 from app.modules.rbac.permissions_router import permissions_router
 from app.modules.rbac.role_permissions_router import role_permissions_router
 from app.modules.rbac.roles_router import roles_router
+from app.modules.settings.router import router as settings_router
 from app.modules.users.router import router as users_router
 
 router = APIRouter()
@@ -74,6 +75,9 @@ router.include_router(organizations_router)
 
 # Notification routes.
 router.include_router(notifications_router)
+
+# System Settings routes.
+router.include_router(settings_router)
 
 # Master Data routes.
 router.include_router(country_router)

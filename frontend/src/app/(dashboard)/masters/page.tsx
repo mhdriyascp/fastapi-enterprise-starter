@@ -4,6 +4,8 @@ import React, { useState, useEffect, useMemo, Suspense, useCallback } from 'reac
 import { useRouter, useSearchParams } from 'next/navigation';
 import { apiFetch } from '@/lib/api-client';
 import { useToast } from '@/lib/toast-context';
+import { generateMasterCode } from '@/lib/code-generator';
+import { ConfirmationModal } from '@/components/ui/confirmation-modal';
 import {
   MasterCountry,
   MasterState,
@@ -283,6 +285,7 @@ function MastersWorkspace() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
   const [deletingRecord, setDeletingRecord] = useState<MasterRecord | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   // Form Fields State
   const [formData, setFormData] = useState<Record<string, unknown>>({
@@ -403,6 +406,7 @@ function MastersWorkspace() {
 
   // Open Create Modal
   const openCreateModal = () => {
+    setFieldErrors({});
     setFormData({
       name: '',
       code: '',
@@ -435,6 +439,7 @@ function MastersWorkspace() {
 
   // Open Edit Modal
   const openEditModal = (rec: MasterRecord) => {
+    setFieldErrors({});
     const raw = asDict(rec);
     setFormData({
       name: raw.name || raw.address_line1 || '',
@@ -469,15 +474,41 @@ function MastersWorkspace() {
   // Handle Create Submit
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const errors: Record<string, string> = {};
+    const nameVal = String(formData.name || '').trim();
+    if (!nameVal) {
+      errors.name = activeConfig.key === 'time-zones'
+        ? 'IANA canonical identifier is required.'
+        : activeConfig.key === 'addresses'
+        ? 'Address line 1 is required.'
+        : `${activeConfig.singular} name is required.`;
+    }
+    if (activeConfig.key === 'time-zones' && !String(formData.label || '').trim()) {
+      errors.label = 'Friendly label is required.';
+    }
+    if (activeConfig.hasCountry && !formData.country_id) {
+      errors.country_id = 'Parent country is required.';
+    }
+    if (activeConfig.key === 'taxes' && (formData.rate === undefined || formData.rate === null || isNaN(Number(formData.rate)))) {
+      errors.rate = 'Tax rate is required.';
+    }
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      return;
+    }
+    setFieldErrors({});
     setIsSubmitting(true);
     try {
       const payload: Record<string, unknown> = {};
 
+      const maxLen = activeConfig.key === 'countries' ? 2 : activeConfig.key === 'currencies' ? 3 : 30;
       if (formData.name) payload.name = (formData.name as string).trim();
-      if (formData.code) payload.code = (formData.code as string).trim().toUpperCase();
+      const rawCode = (formData.code ? String(formData.code) : (formData.name ? generateMasterCode(String(formData.name), maxLen) : '')).trim();
+      if (rawCode) payload.code = activeConfig.key === 'languages' ? rawCode.toLowerCase() : rawCode.toUpperCase();
 
       if (activeConfig.key === 'countries') {
-        if (formData.iso3_code) payload.iso3_code = (formData.iso3_code as string).trim().toUpperCase();
+        const iso3 = formData.iso3_code ? String(formData.iso3_code).trim().toUpperCase() : (formData.name ? generateMasterCode(String(formData.name), 3) : '');
+        if (iso3) payload.iso3_code = iso3;
         if (formData.phone_code) payload.phone_code = (formData.phone_code as string).trim();
       } else if (activeConfig.key === 'currencies') {
         if (formData.symbol) payload.symbol = (formData.symbol as string).trim();
@@ -487,20 +518,20 @@ function MastersWorkspace() {
         payload.label = (formData.label as string).trim();
         if (formData.utc_offset) payload.utc_offset = (formData.utc_offset as string).trim();
       } else if (activeConfig.key === 'languages') {
-        payload.code = (formData.code as string).trim().toLowerCase();
+        payload.code = (payload.code || (formData.name ? generateMasterCode(String(formData.name), 10) : '')).toString().toLowerCase();
         if (formData.native_name) payload.native_name = (formData.native_name as string).trim();
       } else if (activeConfig.key === 'units-of-measure') {
         if (formData.symbol) payload.symbol = (formData.symbol as string).trim();
         if (formData.category) payload.category = (formData.category as string).trim();
       } else if (activeConfig.key === 'taxes') {
         payload.name = (formData.name as string).trim();
-        payload.code = (formData.code as string).trim().toUpperCase();
+        payload.code = (payload.code || (formData.name ? generateMasterCode(String(formData.name), 30) : '')).toString().toUpperCase();
         payload.rate = Number(formData.rate) || 0;
         payload.tax_type = (formData.tax_type as string) || 'percentage';
         payload.country_id = Number(formData.country_id);
       } else if (activeConfig.key === 'brands') {
         payload.name = (formData.name as string).trim();
-        payload.code = (formData.code as string).trim().toUpperCase();
+        payload.code = (payload.code || (formData.name ? generateMasterCode(String(formData.name), 30) : '')).toString().toUpperCase();
         if (formData.description) payload.description = (formData.description as string).trim();
       } else if (activeConfig.key === 'addresses') {
         payload.address_line1 = (formData.address_line1 as string || formData.name as string || '').trim();
@@ -515,7 +546,7 @@ function MastersWorkspace() {
         if (formData.description) payload.description = (formData.description as string).trim();
       } else if (activeConfig.key === 'states') {
         payload.country_id = Number(formData.country_id);
-        if (formData.code) payload.code = (formData.code as string).trim().toUpperCase();
+        if (!payload.code && formData.name) payload.code = generateMasterCode(String(formData.name), 10);
       } else if (activeConfig.key === 'cities') {
         payload.country_id = Number(formData.country_id);
         if (formData.state_id) payload.state_id = Number(formData.state_id);
@@ -541,6 +572,26 @@ function MastersWorkspace() {
   const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingRecord) return;
+    const errors: Record<string, string> = {};
+    const nameVal = String(formData.name || '').trim();
+    if (!nameVal) {
+      errors.name = activeConfig.key === 'time-zones'
+        ? 'IANA canonical identifier is required.'
+        : activeConfig.key === 'addresses'
+        ? 'Address line 1 is required.'
+        : `${activeConfig.singular} name is required.`;
+    }
+    if (activeConfig.key === 'time-zones' && !String(formData.label || '').trim()) {
+      errors.label = 'Friendly label is required.';
+    }
+    if (activeConfig.key === 'taxes' && (formData.rate === undefined || formData.rate === null || isNaN(Number(formData.rate)))) {
+      errors.rate = 'Tax rate is required.';
+    }
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      return;
+    }
+    setFieldErrors({});
     setIsSubmitting(true);
     try {
       const payload: Record<string, unknown> = {};
@@ -1346,7 +1397,7 @@ function MastersWorkspace() {
               </button>
             </div>
 
-            <form onSubmit={handleCreateSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <form onSubmit={handleCreateSubmit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               {/* Primary Name Field */}
               <div>
                 <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
@@ -1359,10 +1410,20 @@ function MastersWorkspace() {
                 <input
                   id="input-create-name"
                   type="text"
-                  required
-                  className="input"
+                  className={`input ${fieldErrors.name ? 'has-error' : ''}`}
                   value={String(formData.name || '')}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value, address_line1: e.target.value }))}
+                  onChange={(e) => {
+                    const newName = e.target.value;
+                    const maxLen = activeConfig.key === 'countries' ? 2 : activeConfig.key === 'currencies' ? 3 : 30;
+                    const autoCode = generateMasterCode(newName, maxLen);
+                    setFormData((prev) => ({
+                      ...prev,
+                      name: newName,
+                      address_line1: newName,
+                      code: activeConfig.key === 'languages' ? autoCode.toLowerCase() : autoCode,
+                      ...(activeConfig.key === 'countries' ? { iso3_code: generateMasterCode(newName, 3) } : {}),
+                    }));
+                  }}
                   placeholder={
                     activeConfig.key === 'time-zones'
                       ? 'e.g. America/New_York or Asia/Dubai'
@@ -1371,24 +1432,40 @@ function MastersWorkspace() {
                       : `e.g. ${activeConfig.singular} Name`
                   }
                 />
+                {fieldErrors.name && (
+                  <div className="field-error-text" role="alert">
+                    <AlertCircle size={13} style={{ flexShrink: 0 }} />
+                    <span>{fieldErrors.name}</span>
+                  </div>
+                )}
               </div>
 
-              {/* Code field if applicable */}
+              {/* Code field if applicable - strictly read-only and auto-generated */}
               {activeConfig.codeLabel && activeConfig.key !== 'time-zones' && (
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
-                    {activeConfig.codeLabel} *
-                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                    <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                      {activeConfig.codeLabel}
+                    </label>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Auto-generated from Name • Read-Only</span>
+                  </div>
                   <input
                     id="input-create-code"
                     type="text"
-                    required
+                    readOnly
+                    tabIndex={-1}
                     className="input"
                     value={String(formData.code || '')}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))}
-                    placeholder={`e.g. ${activeConfig.key === 'countries' ? 'US' : activeConfig.key === 'currencies' ? 'USD' : activeConfig.key === 'taxes' ? 'VAT-15' : 'CODE'}`}
-                    maxLength={activeConfig.key === 'countries' ? 2 : activeConfig.key === 'currencies' ? 3 : 30}
-                    style={{ textTransform: 'uppercase', fontFamily: 'monospace' }}
+                    placeholder="Auto-generated from Name"
+                    style={{
+                      textTransform: activeConfig.key === 'languages' ? 'lowercase' : 'uppercase',
+                      fontFamily: 'monospace',
+                      fontWeight: 600,
+                      background: 'var(--bg-app)',
+                      cursor: 'not-allowed',
+                      opacity: 0.85,
+                      borderColor: 'var(--border-subtle, var(--border-color))',
+                    }}
                   />
                 </div>
               )}
@@ -1397,17 +1474,27 @@ function MastersWorkspace() {
               {activeConfig.key === 'countries' && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
-                      ISO3 Alpha-3 Code
-                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                      <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                        ISO3 Alpha-3 Code
+                      </label>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Auto-generated • Read-Only</span>
+                    </div>
                     <input
                       type="text"
+                      readOnly
+                      tabIndex={-1}
                       className="input"
                       value={String(formData.iso3_code || '')}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, iso3_code: e.target.value.toUpperCase() }))}
                       placeholder="e.g. USA"
-                      maxLength={3}
-                      style={{ textTransform: 'uppercase', fontFamily: 'monospace' }}
+                      style={{
+                        textTransform: 'uppercase',
+                        fontFamily: 'monospace',
+                        fontWeight: 600,
+                        background: 'var(--bg-app)',
+                        cursor: 'not-allowed',
+                        opacity: 0.85,
+                      }}
                     />
                   </div>
                   <div>
@@ -1467,12 +1554,17 @@ function MastersWorkspace() {
                     </label>
                     <input
                       type="text"
-                      required
-                      className="input"
+                      className={`input ${fieldErrors.label ? 'has-error' : ''}`}
                       value={String(formData.label || '')}
                       onChange={(e) => setFormData((prev) => ({ ...prev, label: e.target.value }))}
                       placeholder="e.g. Eastern Time (US & Canada)"
                     />
+                    {fieldErrors.label && (
+                      <div className="field-error-text" role="alert">
+                        <AlertCircle size={13} style={{ flexShrink: 0 }} />
+                        <span>{fieldErrors.label}</span>
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
@@ -1546,8 +1638,7 @@ function MastersWorkspace() {
                     Parent Country *
                   </label>
                   <select
-                    required
-                    className="input"
+                    className={`input ${fieldErrors.country_id ? 'has-error' : ''}`}
                     value={String(formData.country_id || '')}
                     onChange={(e) => handleCountryChangeInForm(e.target.value)}
                   >
@@ -1558,6 +1649,12 @@ function MastersWorkspace() {
                       </option>
                     ))}
                   </select>
+                  {fieldErrors.country_id && (
+                    <div className="field-error-text" role="alert">
+                      <AlertCircle size={13} style={{ flexShrink: 0 }} />
+                      <span>{fieldErrors.country_id}</span>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1593,12 +1690,17 @@ function MastersWorkspace() {
                       type="number"
                       step="0.01"
                       min="0"
-                      required
-                      className="input"
+                      className={`input ${fieldErrors.rate ? 'has-error' : ''}`}
                       value={Number(formData.rate ?? 0)}
                       onChange={(e) => setFormData((prev) => ({ ...prev, rate: parseFloat(e.target.value) || 0 }))}
                       placeholder="e.g. 5.00 or 15.00"
                     />
+                    {fieldErrors.rate && (
+                      <div className="field-error-text" role="alert">
+                        <AlertCircle size={13} style={{ flexShrink: 0 }} />
+                        <span>{fieldErrors.rate}</span>
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
@@ -1780,7 +1882,7 @@ function MastersWorkspace() {
               </button>
             </div>
 
-            <form onSubmit={handleEditSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <form onSubmit={handleEditSubmit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               {/* Primary Name Field */}
               <div>
                 <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
@@ -1792,26 +1894,42 @@ function MastersWorkspace() {
                 </label>
                 <input
                   type="text"
-                  required
-                  className="input"
+                  className={`input ${fieldErrors.name ? 'has-error' : ''}`}
                   value={String(formData.name || '')}
                   onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value, address_line1: e.target.value }))}
                 />
+                {fieldErrors.name && (
+                  <div className="field-error-text" role="alert">
+                    <AlertCircle size={13} style={{ flexShrink: 0 }} />
+                    <span>{fieldErrors.name}</span>
+                  </div>
+                )}
               </div>
 
               {/* Code field */}
               {activeConfig.codeLabel && activeConfig.key !== 'time-zones' && (
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
-                    {activeConfig.codeLabel}
-                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                    <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                      {activeConfig.codeLabel}
+                    </label>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>System Code • Read-Only</span>
+                  </div>
                   <input
                     type="text"
-                    required
+                    readOnly
+                    tabIndex={-1}
                     className="input"
                     value={String(formData.code || '')}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))}
-                    style={{ textTransform: 'uppercase', fontFamily: 'monospace' }}
+                    style={{
+                      textTransform: activeConfig.key === 'languages' ? 'lowercase' : 'uppercase',
+                      fontFamily: 'monospace',
+                      fontWeight: 600,
+                      background: 'var(--bg-app)',
+                      cursor: 'not-allowed',
+                      opacity: 0.85,
+                      borderColor: 'var(--border-subtle, var(--border-color))',
+                    }}
                   />
                 </div>
               )}
@@ -1820,16 +1938,26 @@ function MastersWorkspace() {
               {activeConfig.key === 'countries' && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
-                      ISO3 Alpha-3 Code
-                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                      <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                        ISO3 Alpha-3 Code
+                      </label>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>System Code • Read-Only</span>
+                    </div>
                     <input
                       type="text"
+                      readOnly
+                      tabIndex={-1}
                       className="input"
                       value={String(formData.iso3_code || '')}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, iso3_code: e.target.value.toUpperCase() }))}
-                      maxLength={3}
-                      style={{ textTransform: 'uppercase', fontFamily: 'monospace' }}
+                      style={{
+                        textTransform: 'uppercase',
+                        fontFamily: 'monospace',
+                        fontWeight: 600,
+                        background: 'var(--bg-app)',
+                        cursor: 'not-allowed',
+                        opacity: 0.85,
+                      }}
                     />
                   </div>
                   <div>
@@ -1883,11 +2011,16 @@ function MastersWorkspace() {
                     </label>
                     <input
                       type="text"
-                      required
-                      className="input"
+                      className={`input ${fieldErrors.label ? 'has-error' : ''}`}
                       value={String(formData.label || '')}
                       onChange={(e) => setFormData((prev) => ({ ...prev, label: e.target.value }))}
                     />
+                    {fieldErrors.label && (
+                      <div className="field-error-text" role="alert">
+                        <AlertCircle size={13} style={{ flexShrink: 0 }} />
+                        <span>{fieldErrors.label}</span>
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
@@ -1914,11 +2047,16 @@ function MastersWorkspace() {
                       type="number"
                       step="0.01"
                       min="0"
-                      required
-                      className="input"
+                      className={`input ${fieldErrors.rate ? 'has-error' : ''}`}
                       value={Number(formData.rate ?? 0)}
                       onChange={(e) => setFormData((prev) => ({ ...prev, rate: parseFloat(e.target.value) || 0 }))}
                     />
+                    {fieldErrors.rate && (
+                      <div className="field-error-text" role="alert">
+                        <AlertCircle size={13} style={{ flexShrink: 0 }} />
+                        <span>{fieldErrors.rate}</span>
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
@@ -2049,81 +2187,27 @@ function MastersWorkspace() {
       {/* ========================================================================= */}
       {/* Deactivate / Delete Confirmation Dialog */}
       {/* ========================================================================= */}
-      {deletingRecord && (
-        <div
-          className="modal-backdrop"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setDeletingRecord(null);
-          }}
-        >
-          <div
-            className="modal-dialog card"
-            style={{
-              maxWidth: '440px',
-              padding: '1.75rem',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '1rem',
-              border: '1px solid rgba(239, 68, 68, 0.3)',
-              backgroundColor: 'var(--bg-surface)',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <div
-                style={{
-                  width: '40px',
-                  height: '40px',
-                  borderRadius: '50%',
-                  background: 'rgba(239, 68, 68, 0.15)',
-                  color: '#ef4444',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                }}
-              >
-                <AlertCircle size={22} />
-              </div>
-              <div>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
-                  Deactivate {activeConfig.singular}?
-                </h3>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  This will change the operational state to inactive.
-                </span>
-              </div>
-            </div>
-
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
+      <ConfirmationModal
+        isOpen={!!deletingRecord}
+        onClose={() => setDeletingRecord(null)}
+        onConfirm={handleDeleteConfirm}
+        title={`Deactivate ${activeConfig.singular}?`}
+        subtitle="This will change the operational state to inactive."
+        message={
+          deletingRecord ? (
+            <>
               Are you sure you want to deactivate{' '}
               <strong style={{ color: 'var(--text-primary)' }}>
                 {String(asDict(deletingRecord).name || asDict(deletingRecord).label || 'this record')}
               </strong>
               ? Inactive master records will no longer appear in operational dropdown selectors.
-            </p>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
-              <button
-                type="button"
-                onClick={() => setDeletingRecord(null)}
-                className="btn btn-secondary"
-                disabled={isSubmitting}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleDeleteConfirm}
-                className="btn btn-primary"
-                disabled={isSubmitting}
-                style={{ background: '#ef4444', borderColor: '#ef4444' }}
-              >
-                {isSubmitting ? 'Deactivating...' : 'Confirm Deactivation'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            </>
+          ) : null
+        }
+        confirmLabel="Confirm Deactivation"
+        variant="danger"
+        isLoading={isSubmitting}
+      />
     </div>
   );
 }

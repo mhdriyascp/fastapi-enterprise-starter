@@ -39,6 +39,9 @@ ROLE_PERMISSION_MAP: dict[str, tuple[str, ...]] = {
         "notification.create",
         "notification.update",
         "notification.delete",
+        # System Settings
+        "settings.read",
+        "settings.update",
     ),
     "admin": (
         # Roles & Permissions (Read/Create/Update non-system roles)
@@ -71,6 +74,9 @@ ROLE_PERMISSION_MAP: dict[str, tuple[str, ...]] = {
         "notification.create",
         "notification.update",
         "notification.delete",
+        # System Settings
+        "settings.read",
+        "settings.update",
     ),
     "sales_manager": (
         "organization.read",

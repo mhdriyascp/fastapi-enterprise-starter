@@ -3,10 +3,11 @@
 import React, { useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { apiFetch } from '@/lib/api-client';
-import { KeyRound, Loader2, Palette } from 'lucide-react';
+import { KeyRound, Loader2, Palette, AlertCircle } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { useTheme } from '@/lib/theme-context';
 import { useToast } from '@/lib/toast-context';
+import { FormattedDate } from '@/components/ui/formatted-date';
 
 /**
  * User Profile & Account Settings page.
@@ -20,17 +21,91 @@ export default function ProfilePage() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+
+  function validateField(name: string, value: string, compareValue?: string): string | null {
+    switch (name) {
+      case 'currentPassword':
+        if (!value) return 'Current password is required.';
+        return null;
+      case 'newPassword':
+        if (!value) return 'New password is required.';
+        if (value.length < 8) return 'New password must be at least 8 characters.';
+        return null;
+      case 'confirmPassword':
+        if (!value) return 'Please confirm your new password.';
+        if (value !== (compareValue !== undefined ? compareValue : newPassword)) {
+          return 'Passwords do not match.';
+        }
+        return null;
+      default:
+        return null;
+    }
+  }
+
+  const handleBlur = (name: string, value: string) => {
+    setTouched((prev) => ({ ...prev, [name]: true }));
+    const error = validateField(name, value);
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      if (error) next[name] = error;
+      else delete next[name];
+      return next;
+    });
+  };
+
+  const handleChange = (name: string, value: string) => {
+    if (name === 'currentPassword') setCurrentPassword(value);
+    if (name === 'newPassword') {
+      setNewPassword(value);
+      if (touched.confirmPassword && confirmPassword) {
+        const confirmErr = validateField('confirmPassword', confirmPassword, value);
+        setFieldErrors((prev) => {
+          const next = { ...prev };
+          if (confirmErr) next.confirmPassword = confirmErr;
+          else delete next.confirmPassword;
+          return next;
+        });
+      }
+    }
+    if (name === 'confirmPassword') setConfirmPassword(value);
+
+    if (touched[name]) {
+      const error = validateField(name, value);
+      setFieldErrors((prev) => {
+        const next = { ...prev };
+        if (error) next[name] = error;
+        else delete next[name];
+        return next;
+      });
+    }
+  };
 
   async function handlePasswordChange(e: React.FormEvent) {
     e.preventDefault();
+    setFormError(null);
 
-    if (newPassword !== confirmPassword) {
-      toast.error('New password and confirmation do not match.');
-      return;
-    }
+    const newErrors: Record<string, string> = {};
+    const newTouched = { currentPassword: true, newPassword: true, confirmPassword: true };
 
-    if (newPassword.length < 8) {
-      toast.error('New password must be at least 8 characters long.');
+    const currErr = validateField('currentPassword', currentPassword);
+    if (currErr) newErrors.currentPassword = currErr;
+
+    const newErr = validateField('newPassword', newPassword);
+    if (newErr) newErrors.newPassword = newErr;
+
+    const confirmErr = validateField('confirmPassword', confirmPassword);
+    if (confirmErr) newErrors.confirmPassword = confirmErr;
+
+    setTouched(newTouched);
+    setFieldErrors(newErrors);
+
+    if (Object.keys(newErrors).length > 0) {
+      const firstInvalidKey = Object.keys(newErrors)[0];
+      const elem = document.getElementById(`profile-input-${firstInvalidKey}`);
+      if (elem) elem.focus();
       return;
     }
 
@@ -48,8 +123,11 @@ export default function ProfilePage() {
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
+      setTouched({});
+      setFieldErrors({});
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to change password.';
+      setFormError(message);
       toast.error(message);
     } finally {
       setIsSubmitting(false);
@@ -107,7 +185,7 @@ export default function ProfilePage() {
           <div>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Account Registered</span>
             <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)', marginTop: '0.2rem' }}>
-              {user?.created_at ? new Date(user.created_at).toLocaleString() : 'N/A'}
+              <FormattedDate value={user?.created_at} variant="datetime" includeSeconds placeholder="N/A" />
             </div>
           </div>
         </div>
@@ -153,47 +231,88 @@ export default function ProfilePage() {
           <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-primary)' }}>Change Password</h3>
         </div>
 
-        <form onSubmit={handlePasswordChange} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+        {formError && (
+          <div
+            style={{
+              padding: '0.75rem 1rem',
+              borderRadius: 'var(--radius-md)',
+              background: 'var(--accent-danger-bg)',
+              border: '1px solid rgba(244, 63, 94, 0.3)',
+              color: '#fda4af',
+              fontSize: '0.825rem',
+              marginBottom: '1.25rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+            }}
+          >
+            <AlertCircle size={15} style={{ flexShrink: 0 }} />
+            <span>{formError}</span>
+          </div>
+        )}
+
+        <form onSubmit={handlePasswordChange} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           <div>
-            <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-              Current Password
+            <label htmlFor="profile-input-currentPassword" style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+              Current Password <span style={{ color: '#f43f5e' }}>*</span>
             </label>
             <input
+              id="profile-input-currentPassword"
               type="password"
-              required
               value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
+              onChange={(e) => handleChange('currentPassword', e.target.value)}
+              onBlur={() => handleBlur('currentPassword', currentPassword)}
               placeholder="••••••••••••"
-              className="input-field"
+              className={`input-field ${fieldErrors.currentPassword && touched.currentPassword ? 'has-error' : ''}`}
             />
+            {fieldErrors.currentPassword && touched.currentPassword && (
+              <div className="field-error-text" role="alert">
+                <AlertCircle size={13} style={{ flexShrink: 0 }} />
+                <span>{fieldErrors.currentPassword}</span>
+              </div>
+            )}
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-                New Password (min 8 chars)
+              <label htmlFor="profile-input-newPassword" style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+                New Password (min 8 chars) <span style={{ color: '#f43f5e' }}>*</span>
               </label>
               <input
+                id="profile-input-newPassword"
                 type="password"
-                required
                 value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
+                onChange={(e) => handleChange('newPassword', e.target.value)}
+                onBlur={() => handleBlur('newPassword', newPassword)}
                 placeholder="••••••••••••"
-                className="input-field"
+                className={`input-field ${fieldErrors.newPassword && touched.newPassword ? 'has-error' : ''}`}
               />
+              {fieldErrors.newPassword && touched.newPassword && (
+                <div className="field-error-text" role="alert">
+                  <AlertCircle size={13} style={{ flexShrink: 0 }} />
+                  <span>{fieldErrors.newPassword}</span>
+                </div>
+              )}
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-                Confirm New Password
+              <label htmlFor="profile-input-confirmPassword" style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+                Confirm New Password <span style={{ color: '#f43f5e' }}>*</span>
               </label>
               <input
+                id="profile-input-confirmPassword"
                 type="password"
-                required
                 value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
+                onChange={(e) => handleChange('confirmPassword', e.target.value)}
+                onBlur={() => handleBlur('confirmPassword', confirmPassword)}
                 placeholder="••••••••••••"
-                className="input-field"
+                className={`input-field ${fieldErrors.confirmPassword && touched.confirmPassword ? 'has-error' : ''}`}
               />
+              {fieldErrors.confirmPassword && touched.confirmPassword && (
+                <div className="field-error-text" role="alert">
+                  <AlertCircle size={13} style={{ flexShrink: 0 }} />
+                  <span>{fieldErrors.confirmPassword}</span>
+                </div>
+              )}
             </div>
           </div>
 

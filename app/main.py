@@ -1,10 +1,12 @@
 import logging
+from datetime import datetime
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, status
+from fastapi.encoders import ENCODERS_BY_TYPE
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import RedirectResponse
 from scalar_fastapi import get_scalar_api_reference
 from starlette.requests import Request
 
@@ -14,7 +16,12 @@ from app.core.config import settings
 from app.core.lifecycle import lifespan
 from app.core.middleware import RequestIDMiddleware, SecurityHeadersMiddleware
 from app.core.request_context import get_request_id
+from app.shared.base_schema import format_iso_utc
 from app.shared.error_response import ErrorDetail, ErrorResponse
+from app.shared.response import StandardJSONResponse
+
+# Enforce standardized ISO 8601 UTC (YYYY-MM-DDTHH:MM:SSZ) on FastAPI encoders
+ENCODERS_BY_TYPE[datetime] = format_iso_utc
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +35,7 @@ V2_SHARED_TAGS = {
     "Public",
 }
 
-# Initialize FastAPI application.
+# Initialize FastAPI application with StandardJSONResponse for uniform ISO UTC dates.
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
@@ -36,6 +43,7 @@ app = FastAPI(
     docs_url=None,
     redoc_url=None,
     lifespan=lifespan,
+    default_response_class=StandardJSONResponse,
 )
 
 # Request ID tracing middleware for distributed request correlation
@@ -82,7 +90,9 @@ def _get_default_code(status_code: int) -> str:
 
 
 @app.exception_handler(HTTPException)
-async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+async def http_exception_handler(
+    request: Request, exc: HTTPException
+) -> StandardJSONResponse:
     request_id = get_request_id()
     msg = str(exc.detail)
     status_code = exc.status_code
@@ -101,7 +111,7 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
     )
     headers = dict(getattr(exc, "headers", None) or {})
     headers["X-Request-ID"] = request_id
-    return JSONResponse(
+    return StandardJSONResponse(
         status_code=status_code,
         content=error_response.model_dump(),
         headers=headers,
@@ -135,7 +145,7 @@ def _format_validation_error(err: dict[str, Any]) -> str:
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(
     request: Request, exc: RequestValidationError
-) -> JSONResponse:
+) -> StandardJSONResponse:
     request_id = get_request_id()
     errors = exc.errors()
     first_error = errors[0] if errors else {}
@@ -160,7 +170,7 @@ async def validation_exception_handler(
         ),
         detail=full_message,
     )
-    return JSONResponse(
+    return StandardJSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         content=error_response.model_dump(),
         headers={"X-Request-ID": request_id},
@@ -168,7 +178,9 @@ async def validation_exception_handler(
 
 
 @app.exception_handler(Exception)
-async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+async def unhandled_exception_handler(
+    request: Request, exc: Exception
+) -> StandardJSONResponse:
     request_id = get_request_id()
     logger.exception("Unhandled server error: %s [Request-ID: %s]", exc, request_id)
     error_response = ErrorResponse(
@@ -181,7 +193,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
         ),
         detail="An unexpected internal server error occurred.",
     )
-    return JSONResponse(
+    return StandardJSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content=error_response.model_dump(),
         headers={"X-Request-ID": request_id},

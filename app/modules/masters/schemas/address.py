@@ -3,6 +3,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.shared.base_schema import BaseSchema
+
 
 class AddressCreate(BaseModel):
     """Validate data when creating an address."""
@@ -60,10 +62,8 @@ class AddressUpdate(BaseModel):
     is_active: bool | None = None
 
 
-class AddressResponse(BaseModel):
+class AddressResponse(BaseSchema):
     """Represent an address returned by the API."""
-
-    model_config = ConfigDict(from_attributes=True)
 
     id: int
     public_id: UUID

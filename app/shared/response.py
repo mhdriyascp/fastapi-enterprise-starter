@@ -1,21 +1,57 @@
-"""
-Shared API response schemas.
+"""Shared API response schemas.
 
-Provides reusable response structures for standard API operations
-and paginated list endpoints.
+Provides reusable response structures for standard API operations,
+paginated list endpoints, and enterprise-grade standardized JSON responses.
 """
 
+import re
+from datetime import datetime
 from http import HTTPStatus
 from typing import Any, TypeVar
 
-from pydantic import BaseModel, Field
+from fastapi.responses import JSONResponse
+from pydantic import Field
+
+from app.shared.base_schema import BaseSchema, format_iso_utc
 
 T = TypeVar("T")
 
+_ISO_MICROSECONDS_RE = re.compile(
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+(?:Z|[+-]\d{2}:\d{2})?$"
+)
 
-class APIResponse[T](BaseModel):
+
+class StandardJSONResponse(JSONResponse):
+    """FastAPI JSONResponse subclass that standardizes all datetimes to ISO 8601 UTC.
+
+    Format: YYYY-MM-DDTHH:MM:SSZ (e.g. 2026-10-16T05:54:55Z).
+    Guarantees that all API responses across existing and upcoming modules strip
+    sub-second microsecond noise and standardize to explicit UTC.
     """
-    Standard response envelope for individual API operations.
+
+    @classmethod
+    def normalize_datetimes(cls, val: Any) -> Any:
+        if isinstance(val, dict):
+            return {k: cls.normalize_datetimes(v) for k, v in val.items()}
+        if isinstance(val, list):
+            return [cls.normalize_datetimes(item) for item in val]
+        if isinstance(val, datetime):
+            return format_iso_utc(val)
+        if isinstance(val, str) and len(val) >= 20 and "T" in val:
+            if _ISO_MICROSECONDS_RE.match(val):
+                try:
+                    dt = datetime.fromisoformat(val.replace("Z", "+00:00"))
+                    return format_iso_utc(dt)
+                except ValueError, TypeError:
+                    return val
+        return val
+
+    def render(self, content: Any) -> bytes:
+        return super().render(self.normalize_datetimes(content))
+
+
+class APIResponse[T](BaseSchema):
+    """Standard response envelope for individual API operations.
 
     Attributes:
         success: Indicates whether the operation succeeded.
@@ -41,9 +77,8 @@ class APIResponse[T](BaseModel):
     data: T
 
 
-class PagedResponse[T](BaseModel):
-    """
-    Standard paginated response envelope used by list endpoints.
+class PagedResponse[T](BaseSchema):
+    """Standard paginated response envelope used by list endpoints.
 
     Attributes:
         status_code: HTTP status code associated with the response.
@@ -82,7 +117,6 @@ class PagedResponse[T](BaseModel):
         status_code: int = HTTPStatus.OK,
     ) -> PagedResponse[T]:
         """Build a paginated response with calculated total pages."""
-
         total_pages = -(-total // page_size) if page_size > 0 else 0
 
         return cls(
@@ -100,8 +134,7 @@ def success_response(
     data: Any = None,
     status_code: int = HTTPStatus.OK,
 ) -> APIResponse[Any]:
-    """
-    Build a standardized successful API response.
+    """Build a standardized successful API response.
 
     Args:
         message: Human-readable success message.
@@ -110,12 +143,7 @@ def success_response(
 
     Returns:
         APIResponse[Any]: Standardized success response.
-
-    Note:
-        This helper sets the status code in the response body only.
-        Set the actual HTTP status code in the FastAPI endpoint as well.
     """
-
     return APIResponse[Any](
         success=True,
         status_code=status_code,

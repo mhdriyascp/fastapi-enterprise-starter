@@ -25,6 +25,7 @@ import {
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { apiFetch } from '@/lib/api-client';
 import { NotificationItem, PagedResponse, UnreadCountResponse } from '@/lib/types';
+import { formatRelativeTime } from '@/lib/date-utils';
 
 export interface HeaderProps {
   /** Optional handler triggered when the mobile navigation hamburger icon is clicked */
@@ -43,26 +44,6 @@ interface RouteSuggestion {
   keywords: string[];
 }
 
-/**
- * Formats a UTC ISO timestamp into a human-friendly relative time string.
- */
-function formatRelativeTime(dateStr: string): string {
-  try {
-    const now = new Date();
-    const date = new Date(dateStr);
-    const diffSecs = Math.max(0, Math.floor((now.getTime() - date.getTime()) / 1000));
-    if (diffSecs < 60) return 'Just now';
-    const diffMins = Math.floor(diffSecs / 60);
-    if (diffMins < 60) return `${diffMins}m ago`;
-    const diffHours = Math.floor(diffMins / 60);
-    if (diffHours < 24) return `${diffHours}h ago`;
-    const diffDays = Math.floor(diffHours / 24);
-    if (diffDays < 7) return `${diffDays}d ago`;
-    return date.toLocaleDateString();
-  } catch {
-    return 'Recently';
-  }
-}
 
 const SYSTEM_ROUTES: RouteSuggestion[] = [
   {

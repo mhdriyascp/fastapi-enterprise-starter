@@ -8,6 +8,7 @@ import { PagedResponse, Organization, User } from '@/lib/types';
 import { Card } from '@/components/ui/card';
 import { StatCard } from '@/components/ui/stat-card';
 import { SearchableSelect } from '@/components/ui/searchable-select';
+import { FormattedDate } from '@/components/ui/formatted-date';
 import {
   Building2,
   Users,
@@ -600,7 +601,7 @@ export default function DashboardOverviewPage() {
                       <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                           <Clock size={13} />
-                          {new Date(u.created_at).toLocaleDateString()}
+                          <FormattedDate value={u.created_at} variant="date" />
                         </div>
                       </td>
                     </tr>

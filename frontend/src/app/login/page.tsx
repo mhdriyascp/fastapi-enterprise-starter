@@ -20,6 +20,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (user) {
@@ -27,13 +29,69 @@ export default function LoginPage() {
     }
   }, [user, router]);
 
+  function validateField(name: string, value: string): string | null {
+    if (name === 'email') {
+      const trimmed = value.trim();
+      if (!trimmed) return 'Work email is required.';
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) return 'Please enter a valid work email address.';
+      return null;
+    }
+    if (name === 'password') {
+      if (!value) return 'Password is required.';
+      return null;
+    }
+    return null;
+  }
+
+  const handleBlur = (name: string, value: string) => {
+    setTouched((prev) => ({ ...prev, [name]: true }));
+    const err = validateField(name, value);
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      if (err) next[name] = err;
+      else delete next[name];
+      return next;
+    });
+  };
+
+  const handleInputChange = (name: string, value: string) => {
+    if (name === 'email') setEmail(value);
+    if (name === 'password') setPassword(value);
+    if (touched[name]) {
+      const err = validateField(name, value);
+      setFieldErrors((prev) => {
+        const next = { ...prev };
+        if (err) next[name] = err;
+        else delete next[name];
+        return next;
+      });
+    }
+  };
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+
+    const emailErr = validateField('email', email);
+    const passErr = validateField('password', password);
+    const newErrors: Record<string, string> = {};
+    if (emailErr) newErrors.email = emailErr;
+    if (passErr) newErrors.password = passErr;
+
+    setTouched({ email: true, password: true });
+    setFieldErrors(newErrors);
+
+    if (Object.keys(newErrors).length > 0) {
+      const firstInvalid = Object.keys(newErrors)[0];
+      const elem = document.getElementById(`login-input-${firstInvalid}`);
+      if (elem) elem.focus();
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
-      await login(email, password);
+      await login(email.trim(), password);
       toast.success('Signed in successfully!');
       router.push('/');
     } catch (err: unknown) {
@@ -110,9 +168,10 @@ export default function LoginPage() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <form onSubmit={handleSubmit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             <div>
               <label
+                htmlFor="login-input-email"
                 style={{
                   display: 'block',
                   fontSize: '0.8125rem',
@@ -121,7 +180,7 @@ export default function LoginPage() {
                   marginBottom: '0.5rem',
                 }}
               >
-                Work Email
+                Work Email <span style={{ color: '#f43f5e' }}>*</span>
               </label>
               <div style={{ position: 'relative' }}>
                 <Mail
@@ -129,19 +188,27 @@ export default function LoginPage() {
                   style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}
                 />
                 <input
-                  type="email"
-                  required
+                  id="login-input-email"
+                  type="text"
                   placeholder="name@company.com"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="input-field"
+                  onChange={(e) => handleInputChange('email', e.target.value)}
+                  onBlur={() => handleBlur('email', email)}
+                  className={`input-field ${fieldErrors.email && touched.email ? 'has-error' : ''}`}
                   style={{ paddingLeft: '2.75rem' }}
                 />
               </div>
+              {fieldErrors.email && touched.email && (
+                <div className="field-error-text" role="alert">
+                  <AlertCircle size={13} style={{ flexShrink: 0 }} />
+                  <span>{fieldErrors.email}</span>
+                </div>
+              )}
             </div>
 
             <div>
               <label
+                htmlFor="login-input-password"
                 style={{
                   display: 'block',
                   fontSize: '0.8125rem',
@@ -150,7 +217,7 @@ export default function LoginPage() {
                   marginBottom: '0.5rem',
                 }}
               >
-                Password
+                Password <span style={{ color: '#f43f5e' }}>*</span>
               </label>
               <div style={{ position: 'relative' }}>
                 <Lock
@@ -158,15 +225,22 @@ export default function LoginPage() {
                   style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}
                 />
                 <input
+                  id="login-input-password"
                   type="password"
-                  required
                   placeholder="••••••••••••"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="input-field"
+                  onChange={(e) => handleInputChange('password', e.target.value)}
+                  onBlur={() => handleBlur('password', password)}
+                  className={`input-field ${fieldErrors.password && touched.password ? 'has-error' : ''}`}
                   style={{ paddingLeft: '2.75rem' }}
                 />
               </div>
+              {fieldErrors.password && touched.password && (
+                <div className="field-error-text" role="alert">
+                  <AlertCircle size={13} style={{ flexShrink: 0 }} />
+                  <span>{fieldErrors.password}</span>
+                </div>
+              )}
             </div>
 
             <button type="submit" disabled={isSubmitting} className="btn btn-primary" style={{ width: '100%', marginTop: '0.5rem' }}>

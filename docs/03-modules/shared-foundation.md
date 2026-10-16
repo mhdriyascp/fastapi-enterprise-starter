@@ -152,4 +152,61 @@ Base declarative model for high-value business entities (Customer Accounts, Cont
 - `is_deleted: Mapped[bool]` (default `False`, indexed)
 - `deleted_at: Mapped[datetime | None]`
 
+---
 
+## 7. Enterprise Datetime Standardization (`BaseSchema` & `StandardJSONResponse`)
+
+Located in [`app/shared/base_schema.py`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/app/shared/base_schema.py) and [`app/shared/response.py`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/app/shared/response.py).
+
+Enforces industry-standard ISO 8601 UTC date/time formatting (`YYYY-MM-DDTHH:MM:SSZ`, e.g. `2026-10-16T05:54:55Z`) across all current and upcoming API responses:
+- **Zero Microsecond Clutter**: Eliminates variable 6-digit database sub-second microseconds (`.406703Z` $\rightarrow$ `Z`).
+- **Pydantic v2 `BaseSchema`**: All response schemas inherit from `BaseSchema`, which provides `from_attributes=True` and a recursive `field_serializer("*")` normalizer.
+- **FastAPI `StandardJSONResponse`**: Configured as `app = FastAPI(default_response_class=StandardJSONResponse)`. Intercepts all outgoing responses and normalizes any ISO strings with fractional microseconds to clean UTC timestamps.
+- **FastAPI Type Encoders**: `fastapi.encoders.ENCODERS_BY_TYPE[datetime] = format_iso_utc` ensures any direct `jsonable_encoder()` calls follow the same standard.
+
+---
+
+## 8. Frontend User View Presentation (`date-utils.ts` & `FormattedDate`)
+
+Located in [`frontend/src/lib/date-utils.ts`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/frontend/src/lib/date-utils.ts) and [`frontend/src/components/ui/formatted-date.tsx`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/frontend/src/components/ui/formatted-date.tsx).
+
+Translates universal UTC API responses into user-localized view formats matching Tier-1 enterprise CRM patterns:
+- **Timezone & Locale Dynamic Resolution**: Resolves user's preferred timezone (e.g. `America/New_York`, `Asia/Kolkata`) and locale from profile or browser default (`Intl.DateTimeFormat().resolvedOptions().timeZone`).
+- **Semantic `<time>` Element**: Renders `<time dateTime={iso} title={auditTooltip} suppressHydrationWarning>{displayText}</time>`.
+- **Variants Supported**:
+  - `datetime`: Standard compact date and time (e.g. `Oct 16, 2026, 05:54 PM`).
+  - `date`: Calendar date only without timezone skew (e.g. `Oct 16, 2026`).
+  - `time`: Time of day only (e.g. `05:54 PM`).
+  - `relative`: Human-friendly relative time (e.g. `Just now`, `5m ago`, `2h ago`, `Yesterday`).
+- **Comprehensive Audit Tooltip**: Hovering on any date displays the exact localized second-precision timestamp with timezone name and universal UTC offset.
+
+---
+
+## 9. Universal Frontend Form Validation Standards
+
+Enforced across all CRM domain forms (`Login`, `Organizations`, `Users`, `RBAC`, `Menus`, `Masters`, `Profile`):
+- **Zero Browser Native / jQuery Popup Bubbles**: Every `<form>` element defines `noValidate`. Native HTML5 popup bubbles (`required`, `minLength`, `pattern`) are strictly eliminated.
+- **Controlled Validation State**: Forms maintain a `fieldErrors: Record<string, string>` and `touched: Record<string, boolean>` state.
+- **Input Error Highlighting**: Invalid input elements dynamically receive the `.has-error` class (`border-color: #f43f5e`, glow focus state).
+- **Standardized Inline Error Component**: Field validation failures render inline below the input with animated slide-in:
+  ```tsx
+  {fieldErrors.name && (
+    <div className="field-error-text" role="alert">
+      <AlertCircle size={13} style={{ flexShrink: 0 }} />
+      <span>{fieldErrors.name}</span>
+    </div>
+  )}
+  ```
+- **Top Error Banner**: Server rejection messages render in a structured `formError` banner at the top of modal containers.
+
+---
+
+## 10. Standardized Confirmation & Warning Dialogs (`ConfirmationModal`)
+
+Located in [`frontend/src/components/ui/confirmation-modal.tsx`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/frontend/src/components/ui/confirmation-modal.tsx).
+
+Standardizes all destructive, deactivation, and warning popups across all modules with complete visual and behavioral consistency:
+- **Zero Native `window.confirm()`**: Replaces arbitrary browser prompts and ad-hoc modals.
+- **Visual Parity**: Built upon the Master Data Governance warning design standard with glassmorphic backdrop, circular icon badge, and color variants (`danger`, `warning`, `primary`).
+- **Full Accessibility**: Implements `role="dialog"`, `aria-modal="true"`, `aria-labelledby`, keyboard `ESC` dismissal, and body scroll lock.
+- **Loading State**: Displays inline spinner (`<Loader2 className="loading-spinner" />`) and disables action buttons while async operations are in progress.

@@ -1,7 +1,9 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field
+
+from app.shared.base_schema import BaseSchema
 
 
 class UserCreate(BaseModel):
@@ -30,9 +32,7 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
 
 
-class UserResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class UserResponse(BaseSchema):
     id: UUID
     public_id: UUID
     first_name: str | None

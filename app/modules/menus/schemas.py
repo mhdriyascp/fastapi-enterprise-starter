@@ -1,7 +1,9 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
+
+from app.shared.base_schema import BaseSchema
 
 
 class MenuCreate(BaseModel):
@@ -40,9 +42,7 @@ class MenuPermissionAssignment(BaseModel):
     permission_ids: list[UUID] = Field(default_factory=list)
 
 
-class MenuResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class MenuResponse(BaseSchema):
     id: int
     public_id: UUID
     parent_id: int | None = None
@@ -58,9 +58,7 @@ class MenuResponse(BaseModel):
     updated_at: datetime | None = None
 
 
-class MenuTreeNode(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class MenuTreeNode(BaseSchema):
     id: int
     public_id: UUID
     parent_id: int | None = None

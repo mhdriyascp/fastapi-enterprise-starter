@@ -1,3 +1,4 @@
+import re
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
@@ -7,6 +8,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import DeclarativeBase
+
+
+def generate_master_code(name_or_label: str, max_length: int = 30) -> str:
+    """Generates an alphanumeric uppercase system code from a master name or label."""
+    clean = re.sub(r"[^A-Za-z0-9]+", "_", name_or_label.strip()).upper().strip("_")
+    return clean[:max_length]
 
 
 class MasterNotFoundError(Exception):
@@ -171,6 +178,21 @@ async def create_record(
 ) -> Any:
     resolved_data = await resolve_foreign_keys(db, model, data)
     mapper = inspect(model)
+
+    if "code" in mapper.columns and not resolved_data.get("code"):
+        source_val = (
+            resolved_data.get("name")
+            or resolved_data.get("label")
+            or resolved_data.get("title")
+            or ""
+        )
+        if source_val:
+            col = mapper.columns["code"]
+            max_len = getattr(col.type, "length", 30) or 30
+            generated_code = generate_master_code(str(source_val), max_len)
+            if getattr(model, "__tablename__", "") == "languages":
+                generated_code = generated_code.lower()
+            resolved_data["code"] = generated_code
 
     for field, value in resolved_data.items():
         if field in mapper.columns:

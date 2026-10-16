@@ -5,6 +5,8 @@ import { apiFetch } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/lib/toast-context';
 import { PagedResponse, User, UserUpdatePayload } from '@/lib/types';
+import { FormattedDate } from '@/components/ui/formatted-date';
+import { ConfirmationModal } from '@/components/ui/confirmation-modal';
 import {
   ChevronLeft,
   ChevronRight,
@@ -20,7 +22,6 @@ import {
   Phone,
   Calendar,
   AlertCircle,
-  AlertTriangle,
   Lock,
   RefreshCw,
   Users,
@@ -837,7 +838,7 @@ export default function UsersPage() {
                     <td style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                         <Clock size={12} color="var(--text-muted)" />
-                        {new Date(user.created_at).toLocaleDateString()}
+                        <FormattedDate value={user.created_at} variant="date" />
                       </div>
                     </td>
 
@@ -1152,7 +1153,7 @@ export default function UsersPage() {
                       <td>
                         {viewingUser.email_verified_at ? (
                           <span style={{ color: '#22c55e', fontSize: '0.825rem', fontWeight: 600 }}>
-                            Verified on {new Date(viewingUser.email_verified_at).toLocaleDateString()}
+                            Verified on <FormattedDate value={viewingUser.email_verified_at} variant="date" />
                           </span>
                         ) : (
                           <span style={{ color: '#f59e0b', fontSize: '0.825rem' }}>
@@ -1176,13 +1177,13 @@ export default function UsersPage() {
                     <tr>
                       <th>Account Registered</th>
                       <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                        {new Date(viewingUser.created_at).toLocaleString()}
+                        <FormattedDate value={viewingUser.created_at} variant="datetime" includeSeconds />
                       </td>
                     </tr>
                     <tr>
                       <th>Last Profile Modification</th>
                       <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                        {viewingUser.updated_at ? new Date(viewingUser.updated_at).toLocaleString() : 'Never modified'}
+                        <FormattedDate value={viewingUser.updated_at} variant="datetime" includeSeconds placeholder="Never modified" />
                       </td>
                     </tr>
                   </tbody>
@@ -1304,7 +1305,7 @@ export default function UsersPage() {
             </div>
 
             {/* Create Form */}
-            <form onSubmit={handleCreateSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <form onSubmit={handleCreateSubmit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               {/* Email & Password */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                 <div>
@@ -1314,15 +1315,15 @@ export default function UsersPage() {
                   <input
                     id="create-user-email"
                     type="email"
-                    required
                     value={createFormData.email}
                     onChange={(e) => setCreateFormData({ ...createFormData, email: e.target.value })}
                     className={`input ${createFieldErrors.email ? 'has-error' : ''}`}
                     placeholder="e.g. operator@company.com"
                   />
                   {createFieldErrors.email && (
-                    <div style={{ color: '#f43f5e', fontSize: '0.75rem', marginTop: '0.25rem' }}>
-                      {createFieldErrors.email}
+                    <div className="field-error-text" role="alert">
+                      <AlertCircle size={13} style={{ flexShrink: 0 }} />
+                      <span>{createFieldErrors.email}</span>
                     </div>
                   )}
                 </div>
@@ -1333,16 +1334,15 @@ export default function UsersPage() {
                   <input
                     id="create-user-password"
                     type="password"
-                    required
-                    minLength={8}
                     value={createFormData.password}
                     onChange={(e) => setCreateFormData({ ...createFormData, password: e.target.value })}
                     className={`input ${createFieldErrors.password ? 'has-error' : ''}`}
                     placeholder="Min 8 characters"
                   />
                   {createFieldErrors.password && (
-                    <div style={{ color: '#f43f5e', fontSize: '0.75rem', marginTop: '0.25rem' }}>
-                      {createFieldErrors.password}
+                    <div className="field-error-text" role="alert">
+                      <AlertCircle size={13} style={{ flexShrink: 0 }} />
+                      <span>{createFieldErrors.password}</span>
                     </div>
                   )}
                 </div>
@@ -1408,8 +1408,9 @@ export default function UsersPage() {
                     placeholder="e.g. +1 555-0199"
                   />
                   {createFieldErrors.phone && (
-                    <div style={{ color: '#f43f5e', fontSize: '0.75rem', marginTop: '0.25rem' }}>
-                      {createFieldErrors.phone}
+                    <div className="field-error-text" role="alert">
+                      <AlertCircle size={13} style={{ flexShrink: 0 }} />
+                      <span>{createFieldErrors.phone}</span>
                     </div>
                   )}
                 </div>
@@ -1628,7 +1629,7 @@ export default function UsersPage() {
             )}
 
             {/* Form */}
-            <form onSubmit={handleEditSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <form onSubmit={handleEditSubmit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                 <div>
                   <label htmlFor="edit-user-firstname" style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
@@ -1671,8 +1672,9 @@ export default function UsersPage() {
                   placeholder="e.g. John Doe (Director)"
                 />
                 {editFieldErrors.display_name && (
-                  <div style={{ color: '#f43f5e', fontSize: '0.75rem', marginTop: '0.25rem' }}>
-                    {editFieldErrors.display_name}
+                  <div className="field-error-text" role="alert">
+                    <AlertCircle size={13} style={{ flexShrink: 0 }} />
+                    <span>{editFieldErrors.display_name}</span>
                   </div>
                 )}
               </div>
@@ -1687,9 +1689,15 @@ export default function UsersPage() {
                     type="text"
                     value={editFormData.phone}
                     onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
-                    className="input"
+                    className={`input ${editFieldErrors.phone ? 'has-error' : ''}`}
                     placeholder="e.g. +1 555-0199"
                   />
+                  {editFieldErrors.phone && (
+                    <div className="field-error-text" role="alert">
+                      <AlertCircle size={13} style={{ flexShrink: 0 }} />
+                      <span>{editFieldErrors.phone}</span>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label htmlFor="edit-user-status" style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
@@ -1816,106 +1824,27 @@ export default function UsersPage() {
       {/* ========================================================================= */}
       {/* 3. Delete Confirmation Dialog                                             */}
       {/* ========================================================================= */}
-      {deletingUser && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="modal-backdrop"
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !isDeleting) setDeletingUser(null);
-          }}
-        >
-          <div
-            className="modal-dialog card"
-            style={{
-              maxWidth: '460px',
-              padding: '1.75rem',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '1.25rem',
-              border: '1px solid rgba(244, 63, 94, 0.35)',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-              <div
-                style={{
-                  width: '42px',
-                  height: '42px',
-                  borderRadius: '50%',
-                  background: 'rgba(244, 63, 94, 0.15)',
-                  color: '#f43f5e',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                }}
-              >
-                <AlertTriangle size={20} />
-              </div>
-              <div>
-                <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-                  Confirm Account Deletion
-                </h3>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
-                  This action performs a soft-deletion and disables account access.
-                </div>
-              </div>
-            </div>
-
-            <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+      <ConfirmationModal
+        isOpen={!!deletingUser}
+        onClose={() => setDeletingUser(null)}
+        onConfirm={handleConfirmDelete}
+        title="Confirm Account Deletion"
+        subtitle="This action performs a soft-deletion and disables account access."
+        message={
+          deletingUser ? (
+            <>
               Are you sure you want to deactivate and remove user{' '}
               <strong style={{ color: 'var(--text-primary)' }}>
                 {deletingUser.display_name || deletingUser.email}
               </strong>{' '}
               ({deletingUser.email})?
-            </div>
-
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'flex-end',
-                gap: '0.75rem',
-                borderTop: '1px solid var(--border-subtle)',
-                paddingTop: '1rem',
-              }}
-            >
-              <button
-                type="button"
-                onClick={() => setDeletingUser(null)}
-                disabled={isDeleting}
-                className="btn btn-secondary"
-                id="cancel-delete-user-btn"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmDelete}
-                disabled={isDeleting}
-                style={{
-                  background: '#f43f5e',
-                  color: '#ffffff',
-                  border: 'none',
-                  borderRadius: 'var(--radius-md)',
-                  padding: '0.5rem 1rem',
-                  fontSize: '0.85rem',
-                  fontWeight: 600,
-                  cursor: isDeleting ? 'not-allowed' : 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.4rem',
-                  boxShadow: '0 2px 8px rgba(244, 63, 94, 0.35)',
-                }}
-                id="confirm-delete-user-btn"
-              >
-                <Trash2 size={14} />
-                <span>{isDeleting ? 'Deleting...' : 'Delete User'}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            </>
+          ) : null
+        }
+        confirmLabel="Delete User"
+        variant="danger"
+        isLoading={isDeleting}
+      />
     </div>
   );
 }
