@@ -47,7 +47,8 @@ All endpoints are registered under `/api/v1/notifications` and require fine-grai
 |---|---|---|---|---|---|
 | `GET` | `/api/v1/notifications` | `notification.read` | List user notifications | `PagedResponse[NotificationResponse]` | Fetches paginated activity stream for current user (supports `unread_only=true`). |
 | `GET` | `/api/v1/notifications/unread-count` | `notification.read` | Get unread count | `UnreadCountResponse` | Returns number of unread notifications visible to current user. |
-| `POST` | `/api/v1/notifications` | `notification.create` | Dispatch notification | `NotificationResponse` (201) | Creates a new notification (defaults target to `current_user.id`). |
+| `GET` | `/api/v1/notifications/modules` | `notification.read` | Get supported modules | `list[str]` | Returns standard module taxonomy dynamically resolved from `SystemSetting` (`notifications.notification_modules`), allowing administrators to add or remove modules at runtime. |
+| `POST` | `/api/v1/notifications` | `notification.create` | Dispatch notification | `NotificationResponse` (201) | Creates a new notification tagged with any standard or custom domain module (defaults target to `current_user.id`). |
 | `PATCH` | `/api/v1/notifications/{identifier}/read` | `notification.update` | Mark read / unread | `NotificationResponse` | Toggles read status (dual-lookup: int ID or UUID public_id) and sets `read_at` timestamp. |
 | `POST` | `/api/v1/notifications/mark-all-read` | `notification.update` | Mark all read | `{"updated": int}` | Batch marks all unread notifications visible to user as read. |
 | `DELETE` | `/api/v1/notifications/{identifier}` | `notification.delete` | Dismiss notification | 204 No Content | Deletes single notification (dual-lookup: int ID or UUID public_id) visible to user. |
@@ -55,25 +56,40 @@ All endpoints are registered under `/api/v1/notifications` and require fine-grai
 
 ---
 
+## ⚡ Automated Notification Dispatch Engine
+
+1. **Transactional Hook (`record_activity`)**:
+   - System activities captured via `record_activity` in [`app/modules/activity_logs/service.py`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/app/modules/activity_logs/service.py) automatically trigger `_dispatch_module_notification`.
+   - **Create & Update Isolation**: Notifications are dispatched **strictly** for newly created (`action == "CREATE"`) or modified (`action == "UPDATE"`) records. Deletions, purges, restores, and reads do NOT trigger alerts.
+   - **Dynamic Module Taxonomy**: Checked against the active `SystemSetting` key `notification_modules`. Administrators can configure which modules dispatch notifications dynamically via the Settings UI.
+   - **In-App Notification Switch**: Respects `SystemSetting` flag `enable_in_app_notifications` (defaults to active).
+   - **Deep Linking**: Automatically maps entity domains (`organizations` ➔ `/organizations`, `masters` ➔ `/masters`, `users` ➔ `/users`, `rbac` ➔ `/rbac`, `menus` ➔ `/menus`, `settings` ➔ `/settings`) to corresponding frontend routes.
+
+---
+
 ## 🖥️ Frontend Dynamic Integration
 
 The global Next.js header ([`frontend/src/components/navigation/header.tsx`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/frontend/src/components/navigation/header.tsx)) connects directly to the Notifications API:
 
-1. **Initial Hydration & Periodic Polling**:
-   - On user login, parallel queries fetch initial notifications (`GET /notifications?page=1&page_size=25`) and unread count (`GET /notifications/unread-count`).
-   - A non-blocking 30-second background polling cycle automatically synchronizes the unread counter badge.
-2. **Optimistic Updates**:
-   - Toggling read/unread status immediately adjusts local counter badges before committing the `PATCH` request.
-   - Marking all read or dismissing notifications reflects instantly with seamless error rollback.
-3. **Deep Linking**:
-   - Notifications with a target route destination (`link`) render an external navigation anchor, navigating the operator directly to the relevant entity (e.g. `/organizations`).
-4. **Dedicated System Settings Notification Workspace (`/notifications`)**:
-   - Accessible via the **System Settings ➔ Notifications & Alerts** sidebar menu item or the "View All Notifications" link in the header bell popover.
+1. **Header Bell Icon & Counter**:
+   - The bell badge strictly reflects the count of **unread** notifications (`GET /notifications/unread-count`).
+   - Non-blocking 30-second background polling keeps unread counters synchronized in real-time.
+2. **Unread-Only Popover Experience**:
+   - The header popover displays **strictly unread** notifications (`unread_only=true`).
+   - Popover header displays `Unread Notifications` with `{unreadCount} new`.
+   - **No Delete Action**: In accordance with enterprise design standards, row-level delete/trash buttons are excluded from the header bell dropdown to prevent accidental loss of audit alerts.
+   - Clicking an unread item immediately marks it as read, removes it from the unread list, and navigates to the associated entity.
+   - Popover footer directs operators to the full **Notification Center** (`/notifications`) for historical search, inspection, and dismissal.
+3. **Dedicated System Settings Notification Workspace (`/notifications`)**:
+   - Accessible via the **System Settings ➔ Notifications & Alerts** sidebar menu item or the "View Full Notification Center" link in the header bell popover.
    - **Executive KPI Cards**: Aggregates Total Alerts, Unread Notices, Security Advisories, and Commercial Updates.
-   - **Data Filtering & Search**: Instant keyword filtering across titles and messages, event taxonomy selection (`deal`, `security`, `tenant`, `system`), and status tabs (All, Unread, Read).
+   - **Dedicated Dispatch Modal**:
+     - Operators with `notification.create` permission can trigger notifications across standard system modules (`organizations`, `masters`, `rbac`, `users`, `settings`, `menus`, `activity_logs`, `security`, `system`, `deal`) or enter arbitrary domain modules.
+   - **Dynamic Module Options**:
+     - Supported modules are retrieved live from `GET /api/v1/notifications/modules`, driven by `SystemSetting` (`notifications.notification_modules`) and database taxonomy.
+   - **Data Filtering & Search**: Instant keyword filtering across titles and messages, dynamic module taxonomy selection, and status tabs (All, Unread, Read).
    - **Read-Only Detail Inspector Modal**: Formatted with `.detail-spec-table` two-column key-value tables:
      - *Event Specification*: Title, event taxonomy category, audience scope (Broadcast vs Recipient), operational read status with timestamp.
      - *Content Payload*: Full message body with styled callout.
      - *Audit Identifiers*: Primary UUID with 1-click clipboard copy, and direct action deep-link button.
-   - Strictly read-only ("no updation required"), satisfying security requirements without exposing unnecessary mutation endpoints.
 

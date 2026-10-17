@@ -18,11 +18,11 @@ import {
   ArrowRight,
   DollarSign,
   Building2,
-  Trash2,
   Loader2,
   ExternalLink,
 } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
+import { usePublicSettings } from '@/lib/use-public-settings';
 import { apiFetch } from '@/lib/api-client';
 import { NotificationItem, PagedResponse, UnreadCountResponse } from '@/lib/types';
 import { formatRelativeTime } from '@/lib/date-utils';
@@ -131,8 +131,11 @@ const SYSTEM_ROUTES: RouteSuggestion[] = [
  */
 export function Header({ onToggleMobileSidebar }: HeaderProps) {
   const router = useRouter();
-  const { user, logout, hasPermission } = useAuth();
-  const canDeleteNotifications = hasPermission('notification.delete');
+  const { user, logout } = useAuth();
+
+  // Dynamic system public settings configuration
+  const { settings: publicSettings } = usePublicSettings();
+  const showThemeToggle = publicSettings.show_theme_toggle_in_header !== false;
 
   // Search State
   const [searchQuery, setSearchQuery] = useState('');
@@ -144,7 +147,6 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const [isLoadingNotifications, setIsLoadingNotifications] = useState<boolean>(false);
-  const [notifFilter, setNotifFilter] = useState<'all' | 'unread'>('all');
 
   // User Menu State
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -159,13 +161,10 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
   const userMenuRef = useRef<HTMLDivElement>(null);
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Filtered notifications
+  // Filtered notifications strictly for unread notifications
   const filteredNotifications = useMemo(() => {
-    if (notifFilter === 'unread') {
-      return notifications.filter((n) => !n.is_read);
-    }
-    return notifications;
-  }, [notifications, notifFilter]);
+    return notifications.filter((n) => !n.is_read);
+  }, [notifications]);
 
   // Auto-suggestions based on search query
   const suggestions = useMemo(() => {
@@ -188,17 +187,17 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
     router.push(path);
   };
 
-  // Load notifications from API (used on manual refresh and user interactions)
+  // Load unread notifications from API (used on manual refresh and user interactions)
   const loadNotifications = React.useCallback(async () => {
     if (!user) return;
     try {
       setIsLoadingNotifications(true);
       const [notifRes, countRes] = await Promise.allSettled([
-        apiFetch<PagedResponse<NotificationItem>>('/notifications?page=1&page_size=25'),
+        apiFetch<PagedResponse<NotificationItem>>('/notifications?unread_only=true&page=1&page_size=25'),
         apiFetch<UnreadCountResponse>('/notifications/unread-count'),
       ]);
       if (notifRes.status === 'fulfilled') {
-        setNotifications(notifRes.value.items);
+        setNotifications(notifRes.value.items.filter((n) => !n.is_read));
       }
       if (countRes.status === 'fulfilled') {
         setUnreadCount(countRes.value.unread_count);
@@ -218,12 +217,12 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
     const fetchInitial = async () => {
       try {
         const [notifRes, countRes] = await Promise.allSettled([
-          apiFetch<PagedResponse<NotificationItem>>('/notifications?page=1&page_size=25'),
+          apiFetch<PagedResponse<NotificationItem>>('/notifications?unread_only=true&page=1&page_size=25'),
           apiFetch<UnreadCountResponse>('/notifications/unread-count'),
         ]);
         if (isMounted) {
           if (notifRes.status === 'fulfilled') {
-            setNotifications(notifRes.value.items);
+            setNotifications(notifRes.value.items.filter((n) => !n.is_read));
           }
           if (countRes.status === 'fulfilled') {
             setUnreadCount(countRes.value.unread_count);
@@ -297,34 +296,6 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
         prev.map((n) => (n.id === id ? { ...n, is_read: currentIsRead } : n))
       );
       setUnreadCount((prev) => (currentIsRead ? Math.max(0, prev - 1) : prev + 1));
-    }
-  };
-
-  const handleClearNotifications = async () => {
-    setNotifications([]);
-    setUnreadCount(0);
-    try {
-      await apiFetch<{ deleted: number }>('/notifications/clear-all', {
-        method: 'DELETE',
-      });
-    } catch {
-      loadNotifications();
-    }
-  };
-
-  const handleDeleteNotification = async (e: React.MouseEvent, id: number | string) => {
-    e.stopPropagation();
-    const item = notifications.find((n) => n.id === id);
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
-    if (item && !item.is_read) {
-      setUnreadCount((prev) => Math.max(0, prev - 1));
-    }
-    try {
-      await apiFetch(`/notifications/${id}`, {
-        method: 'DELETE',
-      });
-    } catch {
-      loadNotifications();
     }
   };
 
@@ -629,8 +600,10 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
 
       {/* Right Controls */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', flexShrink: 0 }}>
-        {/* Theme Mode Selector as Dropdown */}
-        <ThemeToggle variant="dropdown" />
+        {/* Theme Mode Selector as Dropdown (configurable via system settings) */}
+        {showThemeToggle && (
+          <ThemeToggle variant="dropdown" />
+        )}
 
         {/* Enterprise Notification Center */}
         <div ref={notificationsRef} style={{ position: 'relative' }}>
@@ -712,7 +685,7 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <span style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-                    Notifications
+                    Unread Notifications
                   </span>
                   {unreadCount > 0 && (
                     <span className="badge badge-primary" style={{ fontSize: '0.65rem', padding: '0.1rem 0.4rem' }}>
@@ -734,67 +707,23 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
                       cursor: 'pointer',
                     }}
                   >
-                    Mark all read
+                    Mark all as read
                   </button>
                 )}
               </div>
 
-              {/* Filter Tabs */}
+              {/* Notification List (strictly unread notifications, no delete button) */}
               <div
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.4rem',
-                  padding: '0.5rem 0',
-                  borderBottom: '1px solid var(--border-subtle)',
-                }}
-              >
-                <button
-                  type="button"
-                  onClick={() => setNotifFilter('all')}
-                  style={{
-                    padding: '0.25rem 0.65rem',
-                    borderRadius: 'var(--radius-sm)',
-                    fontSize: '0.75rem',
-                    fontWeight: 600,
-                    border: 'none',
-                    cursor: 'pointer',
-                    background: notifFilter === 'all' ? 'var(--border-subtle)' : 'transparent',
-                    color: notifFilter === 'all' ? 'var(--text-primary)' : 'var(--text-muted)',
-                  }}
-                >
-                  All ({notifications.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setNotifFilter('unread')}
-                  style={{
-                    padding: '0.25rem 0.65rem',
-                    borderRadius: 'var(--radius-sm)',
-                    fontSize: '0.75rem',
-                    fontWeight: 600,
-                    border: 'none',
-                    cursor: 'pointer',
-                    background: notifFilter === 'unread' ? 'var(--border-subtle)' : 'transparent',
-                    color: notifFilter === 'unread' ? 'var(--text-primary)' : 'var(--text-muted)',
-                  }}
-                >
-                  Unread ({unreadCount})
-                </button>
-              </div>
-
-              {/* Notification List */}
-              <div
-                style={{
-                  maxHeight: '300px',
+                  maxHeight: '320px',
                   overflowY: 'auto',
                   display: 'flex',
                   flexDirection: 'column',
                   gap: '0.5rem',
-                  paddingTop: '0.5rem',
+                  paddingTop: '0.65rem',
                 }}
               >
-                {isLoadingNotifications && notifications.length === 0 ? (
+                {isLoadingNotifications && filteredNotifications.length === 0 ? (
                   <div
                     style={{
                       display: 'flex',
@@ -820,7 +749,7 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
                         gap: '0.75rem',
                         padding: '0.65rem',
                         borderRadius: 'var(--radius-md)',
-                        background: !n.is_read ? 'var(--accent-glow)' : 'transparent',
+                        background: 'var(--accent-glow)',
                         cursor: 'pointer',
                         transition: 'background 0.15s ease',
                       }}
@@ -866,48 +795,51 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
                         </div>
                       </div>
 
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '4px', flexShrink: 0 }}>
-                        {!n.is_read && (
-                          <div
-                            style={{
-                              width: '7px',
-                              height: '7px',
-                              borderRadius: '50%',
-                              background: 'var(--accent-primary)',
-                            }}
-                          />
-                        )}
-                        {canDeleteNotifications && (
-                          <button
-                            type="button"
-                            onClick={(e) => handleDeleteNotification(e, n.id)}
-                            title="Dismiss notification"
-                            style={{
-                              background: 'transparent',
-                              border: 'none',
-                              color: 'var(--text-muted)',
-                              cursor: 'pointer',
-                              padding: '2px',
-                              display: 'flex',
-                              alignItems: 'center',
-                            }}
-                            onMouseEnter={(e) => (e.currentTarget.style.color = '#f43f5e')}
-                            onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        )}
+                      <div style={{ display: 'flex', alignItems: 'center', marginTop: '6px', flexShrink: 0 }}>
+                        <div
+                          style={{
+                            width: '7px',
+                            height: '7px',
+                            borderRadius: '50%',
+                            background: 'var(--accent-primary)',
+                          }}
+                        />
                       </div>
                     </div>
                   ))
                 ) : (
-                  <div style={{ padding: '2rem 1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-                    No notifications to display.
+                  <div
+                    style={{
+                      padding: '2.5rem 1rem',
+                      textAlign: 'center',
+                      color: 'var(--text-muted)',
+                      fontSize: '0.8rem',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: '36px',
+                        height: '36px',
+                        borderRadius: '50%',
+                        background: 'var(--bg-input)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <CheckCircle2 size={18} color="var(--accent-primary)" />
+                    </div>
+                    <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>All caught up!</span>
+                    <span>No unread notifications to display.</span>
                   </div>
                 )}
               </div>
 
-              {/* Popover Footer */}
+              {/* Popover Footer (Navigation to full notifications center without delete buttons) */}
               <div
                 style={{
                   display: 'flex',
@@ -919,32 +851,15 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
                   fontSize: '0.75rem',
                 }}
               >
-                {canDeleteNotifications ? (
-                  <button
-                    type="button"
-                    onClick={handleClearNotifications}
-                    style={{
-                      background: 'transparent',
-                      border: 'none',
-                      color: 'var(--text-muted)',
-                      cursor: 'pointer',
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.color = '#f43f5e')}
-                    onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
-                  >
-                    Clear all
-                  </button>
-                ) : (
-                  <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>
-                    Activity Stream
-                  </span>
-                )}
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>
+                  {filteredNotifications.length > 0 ? `${filteredNotifications.length} unread` : 'No unread alerts'}
+                </span>
                 <Link
                   href="/notifications"
                   onClick={() => setShowNotifications(false)}
                   style={{ color: 'var(--accent-primary)', fontWeight: 600, textDecoration: 'none' }}
                 >
-                  View All Notifications
+                  View Full Notification Center &rarr;
                 </Link>
               </div>
             </div>

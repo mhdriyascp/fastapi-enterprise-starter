@@ -71,10 +71,12 @@ crm-platform/
 │   │       └── session.py
 │   │
 │   ├── modules/
+│   │   ├── activity_logs/
 │   │   ├── identity/
 │   │   ├── masters/
 │   │   │   ├── common/
 │   │   │   └── schemas/
+│   │   ├── menus/
 │   │   ├── notifications/
 │   │   ├── organizations/
 │   │   ├── rbac/

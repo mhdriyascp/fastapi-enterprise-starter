@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.menus.models import Menu, MenuPermission, MenuRole
@@ -249,8 +249,8 @@ async def seed_menus(db: AsyncSession) -> None:
             "path": "/settings",
             "icon": "settings",
             "sort_order": 5,
-            "roles": ["super_admin", "admin", "sales_manager"],
-            "permissions": [],
+            "roles": ["super_admin", "admin"],
+            "permissions": ["settings.read"],
             "children": [
                 {
                     "code": "settings_general",
@@ -262,11 +262,20 @@ async def seed_menus(db: AsyncSession) -> None:
                     "permissions": ["settings.read"],
                 },
                 {
+                    "code": "settings_activity_logs",
+                    "title": "System Activity",
+                    "path": "/system-logs",
+                    "icon": "activity",
+                    "sort_order": 2,
+                    "roles": ["super_admin", "admin"],
+                    "permissions": ["activity_logs.read"],
+                },
+                {
                     "code": "settings_notifications",
                     "title": "Notifications & Alerts",
                     "path": "/notifications",
                     "icon": "bell",
-                    "sort_order": 2,
+                    "sort_order": 3,
                     "roles": ["super_admin", "admin", "sales_manager"],
                     "permissions": ["notification.read"],
                 },
@@ -275,7 +284,7 @@ async def seed_menus(db: AsyncSession) -> None:
                     "title": "Menu Architecture",
                     "path": "/menus",
                     "icon": "menu",
-                    "sort_order": 3,
+                    "sort_order": 4,
                     "roles": [],
                     "permissions": ["menu.read"],
                 },
@@ -284,7 +293,7 @@ async def seed_menus(db: AsyncSession) -> None:
                     "title": "Account & Security",
                     "path": "/profile",
                     "icon": "user",
-                    "sort_order": 4,
+                    "sort_order": 5,
                     "roles": ["super_admin", "admin", "sales_manager"],
                     "permissions": [],
                 },
@@ -332,6 +341,24 @@ async def seed_menus(db: AsyncSession) -> None:
             parent.sort_order = item["sort_order"]
             existing += 1
 
+            # Sync roles for existing parent
+            await db.execute(delete(MenuRole).where(MenuRole.menu_id == parent.id))
+            for r_code in item["roles"]:
+                if r_code in roles:
+                    db.add(MenuRole(menu_id=parent.id, role_id=roles[r_code].id))
+
+            # Sync permissions for existing parent
+            await db.execute(
+                delete(MenuPermission).where(MenuPermission.menu_id == parent.id)
+            )
+            for p_code in item["permissions"]:
+                if p_code in perms:
+                    db.add(
+                        MenuPermission(
+                            menu_id=parent.id, permission_id=perms[p_code].id
+                        )
+                    )
+
         # Process children
         for child_item in item["children"]:
             child_stmt = select(Menu).where(Menu.code == child_item["code"])
@@ -369,6 +396,24 @@ async def seed_menus(db: AsyncSession) -> None:
                 child.icon = child_item["icon"]
                 child.sort_order = child_item["sort_order"]
                 existing += 1
+
+                # Sync roles for existing child
+                await db.execute(delete(MenuRole).where(MenuRole.menu_id == child.id))
+                for r_code in child_item["roles"]:
+                    if r_code in roles:
+                        db.add(MenuRole(menu_id=child.id, role_id=roles[r_code].id))
+
+                # Sync permissions for existing child
+                await db.execute(
+                    delete(MenuPermission).where(MenuPermission.menu_id == child.id)
+                )
+                for p_code in child_item["permissions"]:
+                    if p_code in perms:
+                        db.add(
+                            MenuPermission(
+                                menu_id=child.id, permission_id=perms[p_code].id
+                            )
+                        )
 
         await db.flush()
     print(f"Menus: {created} created, {existing} already existed.")

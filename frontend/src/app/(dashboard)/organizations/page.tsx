@@ -22,11 +22,17 @@ import {
   ExternalLink,
   Shield,
   CheckCircle2,
+  CheckSquare,
+  Square,
+  MinusSquare,
+  RotateCcw,
 } from 'lucide-react';
 import { useToast } from '@/lib/toast-context';
+import { useAuth } from '@/lib/auth-context';
 import { generateOrganizationCode } from '@/lib/code-generator';
 import { FormattedDate } from '@/components/ui/formatted-date';
 import { ConfirmationModal } from '@/components/ui/confirmation-modal';
+import { useDefaultPageSize } from '@/lib/use-page-size';
 
 /**
  * Enterprise Organizations & Multi-Tenant Accounts Workspace.
@@ -36,20 +42,46 @@ import { ConfirmationModal } from '@/components/ui/confirmation-modal';
  * - Update: PATCH /api/v1/organizations/{id} with optimistic state updates
  * - Status Toggle: PATCH /api/v1/organizations/{id}/status for instant tenant activation/suspension
  * - Delete: DELETE /api/v1/organizations/{id} with modal confirmation safeguards
+ * - Bulk Delete: Selection & multi-record deletion governed strictly by RBAC
  */
 export default function OrganizationsPage() {
   const { toast } = useToast();
+  const { user, hasPermission } = useAuth();
+  const isAdmin = useMemo(() => {
+    return Boolean(
+      user?.is_super_admin ||
+      user?.roles?.some((r) =>
+        ['super_admin', 'superadmin', 'admin', 'system_admin'].includes(r.toLowerCase())
+      )
+    );
+  }, [user]);
+
+  const canDelete = Boolean(isAdmin || hasPermission('organization.delete') || hasPermission('organization.manage') || user?.is_super_admin);
+  const canHardDelete = Boolean(isAdmin || user?.is_super_admin || hasPermission('organization.hard_delete') || hasPermission('*.hard_delete'));
+  const canRestore = Boolean(isAdmin || hasPermission('organization.restore') || hasPermission('organization.manage') || user?.is_super_admin);
+
   const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [isBulkDeleting, setIsBulkDeleting] = useState<boolean>(false);
+  const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState<boolean>(false);
+  const [bulkHardDeleteRequested, setBulkHardDeleteRequested] = useState<boolean>(false);
+  const [restoreCandidate, setRestoreCandidate] = useState<Organization | null>(null);
+  const [bulkRestoreConfirmOpen, setBulkRestoreConfirmOpen] = useState<boolean>(false);
+  const [isBulkRestoring, setIsBulkRestoring] = useState<boolean>(false);
+
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [search, setSearch] = useState<string>('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'deleted'>('all');
+  const [pageSize] = useDefaultPageSize(15);
+  const [currentPage, setCurrentPage] = useState<number>(1);
 
   // Modal Dialog States
   const [modalMode, setModalMode] = useState<'create' | 'edit' | null>(null);
   const [selectedOrg, setSelectedOrg] = useState<Organization | null>(null);
   const [viewingOrg, setViewingOrg] = useState<Organization | null>(null);
   const [deleteCandidate, setDeleteCandidate] = useState<Organization | null>(null);
+  const [isHardDelete, setIsHardDelete] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -83,7 +115,9 @@ export default function OrganizationsPage() {
   const loadOrganizations = async () => {
     setIsRefreshing(true);
     try {
-      const res = await apiFetch<PagedResponse<Organization> | Organization[]>('/organizations');
+      const shouldIncludeDeleted = isAdmin || canRestore || canDelete;
+      const url = `/organizations?page_size=100${shouldIncludeDeleted ? '&include_deleted=true' : ''}`;
+      const res = await apiFetch<PagedResponse<Organization> | Organization[]>(url);
       const items = Array.isArray(res) ? res : (res?.items || []);
       setOrganizations(items);
     } catch (err: unknown) {
@@ -100,7 +134,9 @@ export default function OrganizationsPage() {
 
     async function init() {
       try {
-        const res = await apiFetch<PagedResponse<Organization> | Organization[]>('/organizations');
+        const shouldIncludeDeleted = isAdmin || canRestore || canDelete;
+        const url = `/organizations?page_size=100${shouldIncludeDeleted ? '&include_deleted=true' : ''}`;
+        const res = await apiFetch<PagedResponse<Organization> | Organization[]>(url);
         if (isMounted) {
           const items = Array.isArray(res) ? res : (res?.items || []);
           setOrganizations(items);
@@ -123,13 +159,15 @@ export default function OrganizationsPage() {
     return () => {
       isMounted = false;
     };
-  }, [toast]);
+  }, [toast, isAdmin, canRestore, canDelete]);
 
   // Filter organizations by search and status
   const filtered = useMemo(() => {
     return organizations.filter((org) => {
-      if (statusFilter === 'active' && !org.is_active) return false;
-      if (statusFilter === 'inactive' && org.is_active) return false;
+      if (statusFilter === 'all' && org.is_deleted) return false;
+      if (statusFilter === 'active' && (!org.is_active || org.is_deleted)) return false;
+      if (statusFilter === 'inactive' && (org.is_active || org.is_deleted)) return false;
+      if (statusFilter === 'deleted' && !org.is_deleted) return false;
 
       if (!search.trim()) return true;
       const q = search.toLowerCase();
@@ -142,6 +180,21 @@ export default function OrganizationsPage() {
       );
     });
   }, [organizations, search, statusFilter]);
+
+  const selectedOrgs = useMemo(
+    () => organizations.filter((o) => selectedIds.has(o.id)),
+    [organizations, selectedIds]
+  );
+  const allSelectedAreDeleted = selectedOrgs.length > 0 && selectedOrgs.every((o) => o.is_deleted);
+
+  const totalRecords = organizations.length;
+  const filteredCount = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(filteredCount / pageSize));
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+  const paginatedOrgs = useMemo(() => {
+    const start = (safeCurrentPage - 1) * pageSize;
+    return filtered.slice(start, start + pageSize);
+  }, [filtered, safeCurrentPage, pageSize]);
 
   /**
    * Validates an individual form field against business constraints.
@@ -209,7 +262,7 @@ export default function OrganizationsPage() {
   const handleFieldChange = (field: string, value: string) => {
     setFormData((prev) => {
       const next = { ...prev, [field]: value };
-      if (field === 'name' && modalMode === 'create') {
+      if (field === 'name') {
         next.code = generateOrganizationCode(value);
       }
       return next;
@@ -343,8 +396,10 @@ export default function OrganizationsPage() {
 
         toast.success(`Organization "${created.name}" created successfully!`);
       } else if (modalMode === 'edit' && selectedOrg) {
+        const derivedCode = (formData.code || generateOrganizationCode(formData.name)).trim().toUpperCase();
         const payload: OrganizationUpdateInput = {
           name: formData.name.trim(),
+          code: derivedCode,
           legal_name: formData.legal_name.trim() || null,
           registration_number: formData.registration_number.trim() || null,
           tax_registration_number: formData.tax_registration_number.trim() || null,
@@ -398,10 +453,14 @@ export default function OrganizationsPage() {
     if (!deleteCandidate) return;
     setIsSubmitting(true);
     try {
-      await apiFetch(`/organizations/${deleteCandidate.id}`, {
+      await apiFetch(`/organizations/${deleteCandidate.id}?hard_delete=${isHardDelete}`, {
         method: 'DELETE',
       });
-      toast.success(`Organization "${deleteCandidate.name}" deleted successfully.`);
+      toast.success(
+        isHardDelete
+          ? `Organization "${deleteCandidate.name}" permanently deleted.`
+          : `Organization "${deleteCandidate.name}" soft-deleted successfully.`
+      );
       setDeleteCandidate(null);
       await loadOrganizations();
     } catch (err: unknown) {
@@ -410,6 +469,111 @@ export default function OrganizationsPage() {
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  async function handleRestoreOrganization() {
+    if (!restoreCandidate) return;
+    setIsSubmitting(true);
+    try {
+      await apiFetch(`/organizations/${restoreCandidate.id}/restore`, {
+        method: 'POST',
+      });
+      toast.success(`Organization "${restoreCandidate.name}" restored successfully.`);
+      setRestoreCandidate(null);
+      await loadOrganizations();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to restore organization.';
+      toast.error(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  const handleToggleSelectAll = () => {
+    if (selectedIds.size === filtered.length && filtered.length > 0) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filtered.map((o) => o.id)));
+    }
+  };
+
+  const handleToggleSelect = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  async function handleBulkDelete() {
+    if (selectedIds.size === 0) return;
+    setIsBulkDeleting(true);
+    let successCount = 0;
+    const errors: string[] = [];
+
+    for (const orgId of selectedIds) {
+      try {
+        const queryParam = bulkHardDeleteRequested ? '?hard_delete=true' : '?hard_delete=false';
+        await apiFetch(`/organizations/${orgId}${queryParam}`, {
+          method: 'DELETE',
+        });
+        successCount++;
+      } catch (err: unknown) {
+        const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+        errors.push(errorMsg);
+      }
+    }
+
+    if (successCount > 0) {
+      toast.success(
+        bulkHardDeleteRequested
+          ? `Successfully purged ${successCount} organization(s) permanently.`
+          : `Successfully soft-deleted ${successCount} organization(s).`
+      );
+    }
+    if (errors.length > 0) {
+      toast.error(`Failed to delete ${errors.length} organization(s): ${errors[0]}`);
+    }
+
+    setSelectedIds(new Set());
+    setBulkDeleteConfirmOpen(false);
+    setIsBulkDeleting(false);
+    await loadOrganizations();
+  }
+
+  async function handleBulkRestore() {
+    if (selectedIds.size === 0) return;
+    setIsBulkRestoring(true);
+    let successCount = 0;
+    const errors: string[] = [];
+
+    for (const orgId of selectedIds) {
+      try {
+        await apiFetch(`/organizations/${orgId}/restore`, {
+          method: 'POST',
+        });
+        successCount++;
+      } catch (err: unknown) {
+        const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+        errors.push(errorMsg);
+      }
+    }
+
+    if (successCount > 0) {
+      toast.success(`Successfully restored ${successCount} organization(s).`);
+    }
+    if (errors.length > 0) {
+      toast.error(`Failed to restore ${errors.length} organization(s): ${errors[0]}`);
+    }
+
+    setSelectedIds(new Set());
+    setBulkRestoreConfirmOpen(false);
+    setIsBulkRestoring(false);
+    await loadOrganizations();
   }
 
   return (
@@ -425,15 +589,68 @@ export default function OrganizationsPage() {
         }}
       >
         <div>
-          <h1 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.03em', margin: 0 }}>
-            Organizations & Accounts
-          </h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <h1 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.03em', margin: 0 }}>
+              Organizations & Accounts
+            </h1>
+            <span className="badge badge-neutral" style={{ fontWeight: 600, fontSize: '0.75rem' }}>
+              {filteredCount === totalRecords ? `${totalRecords} Total Records` : `${filteredCount} of ${totalRecords} Records`}
+            </span>
+          </div>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: '0.2rem' }}>
             Multi-tenant master organizations, billing profiles, and corporate legal entities.
           </p>
         </div>
 
         <div className="dashboard-toolbar-actions">
+          {selectedIds.size > 0 && (statusFilter === 'deleted' || allSelectedAreDeleted) ? (
+            <>
+              {canRestore && (
+                <button
+                  type="button"
+                  onClick={() => setBulkRestoreConfirmOpen(true)}
+                  className="btn btn-restore"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+                  title={`Restore ${selectedIds.size} selected organization(s)`}
+                >
+                  <RotateCcw size={14} />
+                  <span>Restore ({selectedIds.size})</span>
+                </button>
+              )}
+              {canHardDelete && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBulkHardDeleteRequested(true);
+                    setBulkDeleteConfirmOpen(true);
+                  }}
+                  className="btn btn-danger"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+                  title={`Permanently purge ${selectedIds.size} selected organization(s)`}
+                >
+                  <Trash2 size={14} />
+                  <span>Purge ({selectedIds.size})</span>
+                </button>
+              )}
+            </>
+          ) : (
+            canDelete && selectedIds.size > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setBulkHardDeleteRequested(false);
+                  setBulkDeleteConfirmOpen(true);
+                }}
+                className="btn btn-danger"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+                title={`Delete ${selectedIds.size} selected organization(s)`}
+              >
+                <Trash2 size={14} />
+                <span>Delete ({selectedIds.size})</span>
+              </button>
+            )
+          )}
+
           <button
             type="button"
             onClick={() => {
@@ -484,14 +701,20 @@ export default function OrganizationsPage() {
             type="text"
             placeholder="Search by name, code, tax ID, email..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setCurrentPage(1);
+            }}
             className="input-field"
             style={{ paddingLeft: '2.5rem', fontSize: '0.85rem', height: '36px' }}
           />
           {search && (
             <button
               type="button"
-              onClick={() => setSearch('')}
+              onClick={() => {
+                setSearch('');
+                setCurrentPage(1);
+              }}
               style={{
                 position: 'absolute',
                 right: '0.65rem',
@@ -518,27 +741,58 @@ export default function OrganizationsPage() {
             border: '1px solid var(--border-subtle)',
           }}
         >
-          {(['all', 'active', 'inactive'] as const).map((filter) => (
-            <button
-              key={filter}
-              type="button"
-              onClick={() => setStatusFilter(filter)}
-              style={{
-                padding: '0.35rem 0.75rem',
-                fontSize: '0.78rem',
-                fontWeight: 600,
-                textTransform: 'capitalize',
-                border: 'none',
-                borderRadius: 'calc(var(--radius-md) - 2px)',
-                background: statusFilter === filter ? 'var(--accent-primary)' : 'transparent',
-                color: statusFilter === filter ? '#ffffff' : 'var(--text-secondary)',
-                cursor: 'pointer',
-                transition: 'var(--transition)',
-              }}
-            >
-              {filter}
-            </button>
-          ))}
+          {(
+            (isAdmin
+              ? ['all', 'active', 'inactive', 'deleted']
+              : ['all', 'active', 'inactive']) as Array<'all' | 'active' | 'inactive' | 'deleted'>
+          ).map((filter) => {
+            const count = organizations.filter((o) => {
+              if (filter === 'all') return !o.is_deleted;
+              if (filter === 'active') return o.is_active && !o.is_deleted;
+              if (filter === 'inactive') return !o.is_active && !o.is_deleted;
+              if (filter === 'deleted') return o.is_deleted;
+              return true;
+            }).length;
+            return (
+              <button
+                key={filter}
+                type="button"
+                onClick={() => {
+                  setStatusFilter(filter);
+                  setCurrentPage(1);
+                  setSelectedIds(new Set());
+                }}
+                style={{
+                  padding: '0.35rem 0.75rem',
+                  fontSize: '0.78rem',
+                  fontWeight: 600,
+                  textTransform: 'capitalize',
+                  border: 'none',
+                  borderRadius: 'calc(var(--radius-md) - 2px)',
+                  background: statusFilter === filter ? 'var(--accent-primary)' : 'transparent',
+                  color: statusFilter === filter ? '#ffffff' : 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  transition: 'var(--transition)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                }}
+              >
+                <span>{filter}</span>
+                <span
+                  style={{
+                    fontSize: '0.7rem',
+                    opacity: 0.85,
+                    padding: '0 4px',
+                    borderRadius: '4px',
+                    background: statusFilter === filter ? 'rgba(255,255,255,0.2)' : 'var(--bg-card)',
+                  }}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -547,6 +801,32 @@ export default function OrganizationsPage() {
         <table className="data-table">
           <thead>
             <tr>
+              <th style={{ width: '45px', textAlign: 'center' }}>#</th>
+              <th style={{ width: '40px', textAlign: 'center' }}>
+                <button
+                  type="button"
+                  onClick={handleToggleSelectAll}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: selectedIds.size > 0 ? 'var(--accent-primary)' : 'var(--text-muted)',
+                    padding: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  title={selectedIds.size === filtered.length && filtered.length > 0 ? 'Deselect all' : 'Select all'}
+                >
+                  {selectedIds.size === filtered.length && filtered.length > 0 ? (
+                    <CheckSquare size={16} />
+                  ) : selectedIds.size > 0 ? (
+                    <MinusSquare size={16} />
+                  ) : (
+                    <Square size={16} />
+                  )}
+                </button>
+              </th>
               <th>Organization</th>
               <th>System Code</th>
               <th>Tax & Registration</th>
@@ -560,14 +840,38 @@ export default function OrganizationsPage() {
             {isLoading ? (
               [...Array(4)].map((_, i) => (
                 <tr key={i}>
-                  <td colSpan={7}>
+                  <td colSpan={9}>
                     <div className="skeleton" style={{ height: '36px', width: '100%' }} />
                   </td>
                 </tr>
               ))
-            ) : filtered.length > 0 ? (
-              filtered.map((org) => (
-                <tr key={org.id}>
+            ) : paginatedOrgs.length > 0 ? (
+              paginatedOrgs.map((org, index) => (
+                <tr key={org.id} style={{ background: selectedIds.has(org.id) ? 'rgba(99, 102, 241, 0.06)' : undefined }}>
+                  {/* Sequence Number */}
+                  <td style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 600 }}>
+                    {(safeCurrentPage - 1) * pageSize + index + 1}
+                  </td>
+                  {/* Selection Checkbox */}
+                  <td style={{ textAlign: 'center' }}>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleSelect(org.id)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: selectedIds.has(org.id) ? 'var(--accent-primary)' : 'var(--text-muted)',
+                        padding: 0,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      {selectedIds.has(org.id) ? <CheckSquare size={16} /> : <Square size={16} />}
+                    </button>
+                  </td>
+
                   {/* Name & Legal Entity */}
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -677,22 +981,40 @@ export default function OrganizationsPage() {
 
                   {/* Status Toggle Badge */}
                   <td>
-                    <button
-                      type="button"
-                      onClick={() => handleToggleStatus(org)}
-                      title={`Click to mark as ${org.is_active ? 'Inactive' : 'Active'}`}
-                      style={{
-                        background: 'transparent',
-                        border: 'none',
-                        cursor: 'pointer',
-                        padding: 0,
-                      }}
-                    >
-                      <span className={`badge ${org.is_active ? 'badge-success' : 'badge-danger'}`} style={{ cursor: 'pointer' }}>
-                        <Power size={11} style={{ marginRight: '0.25rem' }} />
-                        {org.is_active ? 'Active' : 'Inactive'}
+                    {org.is_deleted ? (
+                      <span
+                        className="badge badge-neutral"
+                        style={{
+                          background: 'rgba(239, 68, 68, 0.12)',
+                          color: 'var(--danger)',
+                          border: '1px solid rgba(239, 68, 68, 0.3)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.25rem',
+                        }}
+                        title="Soft-deleted record preserved for audit trails"
+                      >
+                        <Trash2 size={11} />
+                        Deleted
                       </span>
-                    </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleToggleStatus(org)}
+                        title={`Click to mark as ${org.is_active ? 'Inactive' : 'Active'}`}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          cursor: 'pointer',
+                          padding: 0,
+                        }}
+                      >
+                        <span className={`badge ${org.is_active ? 'badge-success' : 'badge-danger'}`} style={{ cursor: 'pointer' }}>
+                          <Power size={11} style={{ marginRight: '0.25rem' }} />
+                          {org.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                      </button>
+                    )}
                   </td>
 
                   {/* Created At */}
@@ -728,22 +1050,59 @@ export default function OrganizationsPage() {
                         <span>Edit</span>
                       </button>
 
-                      <button
-                        type="button"
-                        onClick={() => setDeleteCandidate(org)}
-                        className="btn btn-danger"
-                        style={{ padding: '0.35rem 0.65rem', height: '30px' }}
-                        title="Delete organization"
-                      >
-                        <Trash2 size={13} />
-                      </button>
+                      {org.is_deleted ? (
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                          {canRestore && (
+                            <button
+                              type="button"
+                              onClick={() => setRestoreCandidate(org)}
+                              className="btn btn-restore"
+                              style={{ padding: '0.35rem 0.65rem', height: '30px' }}
+                              title="Restore organization back to active"
+                            >
+                              <RotateCcw size={13} />
+                              <span>Restore</span>
+                            </button>
+                          )}
+                          {canDelete && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDeleteCandidate(org);
+                                setIsHardDelete(true);
+                              }}
+                              className="btn btn-danger"
+                              style={{ padding: '0.35rem 0.65rem', height: '30px' }}
+                              title="Permanently purge organization from database"
+                            >
+                              <Trash2 size={13} />
+                              <span>Purge</span>
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        canDelete && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDeleteCandidate(org);
+                              setIsHardDelete(false);
+                            }}
+                            className="btn btn-danger"
+                            style={{ padding: '0.35rem 0.65rem', height: '30px' }}
+                            title="Soft-delete organization"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        )
+                      )}
                     </div>
                   </td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan={7} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                <td colSpan={9} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                   No organizations found matching the current criteria.
                 </td>
               </tr>
@@ -751,6 +1110,54 @@ export default function OrganizationsPage() {
           </tbody>
         </table>
       </div>
+
+      {/* Pagination Footer */}
+      {filteredCount > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '1rem',
+            padding: '0.85rem 1.25rem',
+            background: 'var(--bg-card)',
+            borderRadius: 'var(--radius-lg)',
+            border: '1px solid var(--border-subtle)',
+            fontSize: '0.85rem',
+            color: 'var(--text-muted)',
+          }}
+        >
+          <div>
+            Showing <strong>{(safeCurrentPage - 1) * pageSize + 1}</strong> to{' '}
+            <strong>{Math.min(safeCurrentPage * pageSize, filteredCount)}</strong> of <strong>{filteredCount}</strong> organizations
+            {filteredCount !== totalRecords && ` (filtered from ${totalRecords} total)`}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={safeCurrentPage <= 1}
+              style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
+            >
+              Previous
+            </button>
+            <span style={{ padding: '0 0.5rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+              Page {safeCurrentPage} of {totalPages}
+            </span>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={safeCurrentPage >= totalPages}
+              style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Individual Organization View Modal */}
       {viewingOrg && (
@@ -1115,9 +1522,7 @@ export default function OrganizationsPage() {
                       letterSpacing: '0.05em',
                     }}
                   >
-                    {modalMode === 'edit'
-                      ? (selectedOrg?.code || 'SYSTEM_RECORD')
-                      : (formData.code || generateOrganizationCode(formData.name) || 'AUTO_GENERATED')}
+                    {formData.code || generateOrganizationCode(formData.name) || 'AUTO_GENERATED'}
                   </div>
                 </div>
               </div>
@@ -1327,19 +1732,111 @@ export default function OrganizationsPage() {
         isOpen={!!deleteCandidate}
         onClose={() => setDeleteCandidate(null)}
         onConfirm={handleDeleteOrganization}
-        title="Delete Organization?"
+        title={isHardDelete ? "Permanently Delete Organization?" : "Soft Delete Organization?"}
         subtitle={deleteCandidate ? `Code: ${deleteCandidate.code}` : undefined}
         message={
           deleteCandidate ? (
+            isHardDelete ? (
+              <>
+                Are you sure you want to <strong>permanently purge</strong>{' '}
+                <strong style={{ color: 'var(--text-primary)' }}>{deleteCandidate.name}</strong> from the database? This action <strong>cannot be undone</strong> and will erase all organizational data.
+              </>
+            ) : (
+              <>
+                Are you sure you want to soft delete{' '}
+                <strong style={{ color: 'var(--text-primary)' }}>{deleteCandidate.name}</strong>? The organization will be moved to deleted records, where you can restore it or permanently purge it later.
+              </>
+            )
+          ) : null
+        }
+        confirmLabel={isHardDelete ? "Permanently Delete" : "Soft Delete"}
+        variant="danger"
+        isLoading={isSubmitting}
+      />
+
+      {/* Restore Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={!!restoreCandidate}
+        onClose={() => setRestoreCandidate(null)}
+        onConfirm={handleRestoreOrganization}
+        title="Restore Organization?"
+        subtitle={restoreCandidate ? `Code: ${restoreCandidate.code}` : undefined}
+        message={
+          restoreCandidate ? (
             <>
-              Are you sure you want to permanently delete{' '}
-              <strong style={{ color: 'var(--text-primary)' }}>{deleteCandidate.name}</strong>? All associated tenant configurations will be permanently removed. This action cannot be undone.
+              Are you sure you want to restore{' '}
+              <strong style={{ color: 'var(--text-primary)' }}>{restoreCandidate.name}</strong> back to active status? The organization will immediately be visible across CRM workspaces.
             </>
           ) : null
         }
-        confirmLabel="Delete Organization"
-        variant="danger"
+        confirmLabel="Restore Organization"
+        variant="primary"
         isLoading={isSubmitting}
+      />
+
+      {/* Bulk Delete Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={bulkDeleteConfirmOpen}
+        onClose={() => setBulkDeleteConfirmOpen(false)}
+        onConfirm={handleBulkDelete}
+        title={
+          bulkHardDeleteRequested
+            ? `Permanently Purge ${selectedIds.size} Selected Organization(s)?`
+            : `Soft Delete ${selectedIds.size} Selected Organization(s)?`
+        }
+        subtitle={`${selectedIds.size} record${selectedIds.size === 1 ? '' : 's'} selected`}
+        message={
+          <div>
+            <p>
+              {bulkHardDeleteRequested ? (
+                <>
+                  Are you sure you want to <strong>permanently purge</strong> the {selectedIds.size} selected organization(s) from the database? This action <strong>cannot be undone</strong> and will erase all organizational data.
+                </>
+              ) : (
+                <>
+                  Are you sure you want to soft delete the {selectedIds.size} selected organization(s)? They will be moved to the <strong>Deleted</strong> tab, where they can be restored or permanently purged later.
+                </>
+              )}
+            </p>
+            {canHardDelete && !allSelectedAreDeleted && statusFilter !== 'deleted' && (
+              <div style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <input
+                  type="checkbox"
+                  id="bulk_hard_delete_check"
+                  checked={bulkHardDeleteRequested}
+                  onChange={(e) => setBulkHardDeleteRequested(e.target.checked)}
+                />
+                <label htmlFor="bulk_hard_delete_check" style={{ fontSize: '0.82rem', color: 'var(--danger)', fontWeight: 600 }}>
+                  Permanently purge records immediately (Bypass Trash)
+                </label>
+              </div>
+            )}
+          </div>
+        }
+        confirmLabel={
+          bulkHardDeleteRequested
+            ? `Permanently Purge (${selectedIds.size})`
+            : `Soft Delete (${selectedIds.size})`
+        }
+        variant="danger"
+        isLoading={isBulkDeleting}
+      />
+
+      {/* Bulk Restore Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={bulkRestoreConfirmOpen}
+        onClose={() => setBulkRestoreConfirmOpen(false)}
+        onConfirm={handleBulkRestore}
+        title={`Restore ${selectedIds.size} Selected Organization(s)?`}
+        subtitle={`${selectedIds.size} record${selectedIds.size === 1 ? '' : 's'} selected`}
+        message={
+          <p>
+            Are you sure you want to restore the {selectedIds.size} selected organization(s) back to active status? They will immediately be visible across the active workspace.
+          </p>
+        }
+        confirmLabel={`Restore (${selectedIds.size})`}
+        variant="primary"
+        isLoading={isBulkRestoring}
       />
     </div>
   );

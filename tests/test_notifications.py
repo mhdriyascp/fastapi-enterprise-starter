@@ -153,3 +153,92 @@ async def test_notifications_api_endpoints() -> None:
             headers=headers,
         )
         assert del_again_resp.status_code == 404
+
+        # 8. Test GET /api/v1/notifications/modules
+        modules_resp = await client.get(
+            "/api/v1/notifications/modules",
+            headers=headers,
+        )
+        assert modules_resp.status_code == 200
+        module_list = modules_resp.json()
+        assert isinstance(module_list, list)
+        assert "organizations" in module_list
+        assert "security" in module_list
+
+        # 9. Test creating a notification with an arbitrary custom module
+        custom_module = "pipeline_analytics"
+        custom_resp = await client.post(
+            "/api/v1/notifications",
+            json={
+                "title": "Custom Module Notification",
+                "message": "Custom module notification created successfully.",
+                "type": custom_module,
+                "link": "/analytics",
+            },
+            headers=headers,
+        )
+        assert custom_resp.status_code == 201
+        custom_data = custom_resp.json()
+        assert custom_data["type"] == custom_module
+
+        # Clean up custom notification
+        await client.delete(
+            f"/api/v1/notifications/{custom_data['id']}",
+            headers=headers,
+        )
+
+
+@pytest.mark.asyncio
+async def test_dynamic_notification_modules_from_settings() -> None:
+    """Verifies that supported notification modules are dynamic from settings and can be added/removed."""
+    from app.infrastructure.database.models.system.setting import SystemSetting
+
+    async with SessionFactory() as db:
+        res = await db.execute(
+            select(User).where(User.email == settings.seed_super_admin_email)
+        )
+        super_admin = res.scalar_one()
+        token = create_access_token(super_admin.id)
+
+        # Retrieve current setting
+        setting_stmt = select(SystemSetting).where(
+            SystemSetting.category == "notifications",
+            SystemSetting.key == "notification_modules",
+        )
+        setting_obj = (await db.execute(setting_stmt)).scalar_one_or_none()
+        original_value = (
+            list(setting_obj.value)
+            if setting_obj and isinstance(setting_obj.value, list)
+            else []
+        )
+
+    headers = {"Authorization": f"Bearer {token}"}
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as client:
+        # 1. Fetch baseline modules
+        base_res = await client.get("/api/v1/notifications/modules", headers=headers)
+        assert base_res.status_code == 200
+        base_modules = base_res.json()
+        assert isinstance(base_modules, list)
+
+        # 2. Update setting dynamically: add "telephony" and remove "deal"
+        new_modules = [m for m in base_modules if m != "deal"] + ["telephony"]
+        async with SessionFactory() as db:
+            s_obj = (await db.execute(setting_stmt)).scalar_one()
+            s_obj.value = new_modules
+            await db.commit()
+
+        # 3. Query modules endpoint again: must reflect additions and removals
+        updated_res = await client.get("/api/v1/notifications/modules", headers=headers)
+        assert updated_res.status_code == 200
+        updated_modules = updated_res.json()
+        assert "telephony" in updated_modules
+        assert "deal" not in updated_modules
+
+        # 4. Restore original setting
+        async with SessionFactory() as db:
+            s_obj = (await db.execute(setting_stmt)).scalar_one()
+            s_obj.value = original_value
+            await db.commit()

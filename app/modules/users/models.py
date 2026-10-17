@@ -137,3 +137,8 @@ class User(EntityBase):
             name="ck_users_failed_login_attempts",
         ),
     )
+
+    @property
+    def is_deleted(self) -> bool:
+        """Determines if the user account is soft-deleted or disabled."""
+        return self.deleted_at is not None or self.status == "disabled"

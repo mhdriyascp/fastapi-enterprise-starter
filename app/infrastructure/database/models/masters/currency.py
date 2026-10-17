@@ -1,9 +1,13 @@
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid7
 
 from sqlalchemy import BigInteger, Boolean, Integer, String, Uuid
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.infrastructure.database.models.base_entity import EntityBase
+
+if TYPE_CHECKING:
+    from app.infrastructure.database.models.masters.country import Country
 
 
 class Currency(EntityBase):
@@ -29,4 +33,10 @@ class Currency(EntityBase):
     )
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default="true"
+    )
+
+    countries: Mapped[list[Country]] = relationship(
+        "Country",
+        back_populates="default_currency",
+        lazy="selectin",
     )

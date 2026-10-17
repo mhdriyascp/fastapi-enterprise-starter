@@ -34,6 +34,12 @@ class RoleUpdate(BaseModel):
         min_length=2,
         max_length=100,
     )
+    code: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=50,
+        pattern=r"^[a-z][a-z0-9_]*$",
+    )
     description: str | None = Field(
         default=None,
         max_length=2000,
@@ -48,6 +54,8 @@ class RoleResponse(BaseSchema):
     description: str | None
     is_system: bool
     is_active: bool
+    is_deleted: bool = False
+    deleted_at: datetime | None = None
     created_at: datetime
     updated_at: datetime | None
 
@@ -116,6 +124,8 @@ class PermissionResponse(BaseSchema):
     action: str
     is_system: bool
     is_active: bool
+    is_deleted: bool = False
+    deleted_at: datetime | None = None
     created_at: datetime
     updated_at: datetime | None
 

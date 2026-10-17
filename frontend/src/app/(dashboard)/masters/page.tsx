@@ -4,8 +4,11 @@ import React, { useState, useEffect, useMemo, Suspense, useCallback } from 'reac
 import { useRouter, useSearchParams } from 'next/navigation';
 import { apiFetch } from '@/lib/api-client';
 import { useToast } from '@/lib/toast-context';
+import { useAuth } from '@/lib/auth-context';
 import { generateMasterCode } from '@/lib/code-generator';
 import { ConfirmationModal } from '@/components/ui/confirmation-modal';
+import { SearchableSelect, SelectOption } from '@/components/ui/searchable-select';
+import { useDefaultPageSize } from '@/lib/use-page-size';
 import {
   MasterCountry,
   MasterState,
@@ -37,6 +40,7 @@ import {
   Plus,
   Search,
   RefreshCw,
+  RotateCcw,
   Eye,
   Edit2,
   Trash2,
@@ -265,6 +269,15 @@ function MastersWorkspace() {
   };
 
   const { toast } = useToast();
+  const { user } = useAuth();
+
+  const isAdmin = useMemo(() => {
+    if (!user) return false;
+    if (user.is_super_admin) return true;
+    return (user.roles || []).some((r: string) =>
+      ['super_admin', 'superadmin', 'admin', 'system_admin'].includes(r.toLowerCase())
+    );
+  }, [user]);
 
   // Master Data State
   const [records, setRecords] = useState<MasterRecord[]>([]);
@@ -272,20 +285,122 @@ function MastersWorkspace() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'deleted'>('all');
+  const [pageSize] = useDefaultPageSize(15);
+  const [currentPage, setCurrentPage] = useState<number>(1);
 
   // Related lookups for dropdowns in forms
   const [countriesLookup, setCountriesLookup] = useState<MasterCountry[]>([]);
   const [statesLookup, setStatesLookup] = useState<MasterState[]>([]);
   const [addressTypesLookup, setAddressTypesLookup] = useState<MasterTypeEntity[]>([]);
+  const [currenciesLookup, setCurrenciesLookup] = useState<MasterCurrency[]>([]);
+
+  // Manual code catalog check (Country ISO, State Abbreviation, Currency ISO 4217 are user-controlled, not read-only system slugs)
+  const isManualCodeMaster = useMemo(() => {
+    return ['countries', 'states', 'currencies'].includes(activeConfig.key);
+  }, [activeConfig.key]);
+
+  // Memoized Select2 options for Form comboboxes
+  const countrySelectOptions: SelectOption[] = useMemo(() => {
+    return countriesLookup.map((c) => ({
+      value: String(c.id),
+      label: `${c.name} (${c.code})`,
+      sublabel: c.code,
+      badge: c.iso3_code || undefined,
+    }));
+  }, [countriesLookup]);
+
+  const currencySelectOptions: SelectOption[] = useMemo(() => {
+    return currenciesLookup.map((curr) => ({
+      value: String(curr.id ?? ''),
+      label: `${curr.name} (${curr.code})`,
+      sublabel: curr.symbol ? `Symbol: ${curr.symbol}` : curr.code,
+      badge: curr.symbol || undefined,
+    }));
+  }, [currenciesLookup]);
+
+  const stateSelectOptions: SelectOption[] = useMemo(() => {
+    return statesLookup.map((s) => ({
+      value: String(s.id),
+      label: s.code ? `${s.name} (${s.code})` : s.name,
+      sublabel: s.code || undefined,
+    }));
+  }, [statesLookup]);
+
+  const taxTypeSelectOptions: SelectOption[] = useMemo(() => [
+    { value: 'percentage', label: 'Percentage (%)', sublabel: 'Proportional tax calculation' },
+    { value: 'fixed', label: 'Fixed Levy', sublabel: 'Flat transaction duty' },
+  ], []);
+
+  const uomCategorySelectOptions: SelectOption[] = useMemo(() => [
+    { value: 'Weight', label: 'Weight', sublabel: 'Mass (kg, g, lb)' },
+    { value: 'Length', label: 'Length', sublabel: 'Linear (m, cm, ft)' },
+    { value: 'Volume', label: 'Volume', sublabel: 'Capacity (l, ml, gal)' },
+    { value: 'Time', label: 'Time', sublabel: 'Duration (hr, min, sec)' },
+    { value: 'Quantity', label: 'Quantity / Each', sublabel: 'Count (pcs, box, pack)' },
+  ], []);
+
+  const addressTypeSelectOptions: SelectOption[] = useMemo(() => {
+    if (addressTypesLookup.length === 0) {
+      return [{ value: '1', label: 'Primary / Registered', sublabel: 'HQ' }];
+    }
+    return addressTypesLookup.map((t) => ({
+      value: String((t as unknown as { id: number }).id || 1),
+      label: `${t.name} (${t.code})`,
+      sublabel: t.code,
+    }));
+  }, [addressTypesLookup]);
 
   // Modal States
   const [viewingRecord, setViewingRecord] = useState<MasterRecord | null>(null);
   const [editingRecord, setEditingRecord] = useState<MasterRecord | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
   const [deletingRecord, setDeletingRecord] = useState<MasterRecord | null>(null);
+  const [isHardDelete, setIsHardDelete] = useState<boolean>(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState<boolean>(false);
+  const [bulkHardDeleteRequested, setBulkHardDeleteRequested] = useState<boolean>(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState<boolean>(false);
+  const [bulkRestoreConfirmOpen, setBulkRestoreConfirmOpen] = useState<boolean>(false);
+  const [isBulkRestoring, setIsBulkRestoring] = useState<boolean>(false);
+  const [restoreCandidate, setRestoreCandidate] = useState<MasterRecord | null>(null);
+  const [isRestoring, setIsRestoring] = useState<boolean>(false);
+
+  const canRestore = useMemo(() => {
+    if (!user) return false;
+    if (user.is_super_admin) return true;
+    return Boolean(
+      isAdmin ||
+      user?.permissions?.includes('masters:restore') ||
+      user?.permissions?.includes('masters.restore') ||
+      user?.permissions?.includes('*.manage')
+    );
+  }, [isAdmin, user]);
+
+  const canHardDelete = useMemo(() => {
+    if (!user) return false;
+    return Boolean(
+      isAdmin ||
+      user.is_super_admin ||
+      user?.permissions?.includes('masters:hard_delete') ||
+      user?.permissions?.includes('*.hard_delete')
+    );
+  }, [isAdmin, user]);
+
+  const canDelete = useMemo(() => {
+    if (!user) return false;
+    return Boolean(
+      isAdmin ||
+      user.is_super_admin ||
+      user?.permissions?.includes('masters:delete') ||
+      user?.permissions?.includes('masters.delete') ||
+      user?.permissions?.includes('*.manage')
+    );
+  }, [isAdmin, user]);
+
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [isCustomCodeEntered, setIsCustomCodeEntered] = useState<boolean>(false);
 
   // Form Fields State
   const [formData, setFormData] = useState<Record<string, unknown>>({
@@ -301,6 +416,7 @@ function MastersWorkspace() {
     description: '',
     category: '',
     country_id: '',
+    default_currency_id: '',
     state_id: '',
     city_id: '',
     rate: 0,
@@ -317,9 +433,7 @@ function MastersWorkspace() {
   const loadRecords = useCallback(async () => {
     setIsLoading(true);
     try {
-      let filterParam = '';
-      if (statusFilter === 'active') filterParam = '&is_active=true';
-      if (statusFilter === 'inactive') filterParam = '&is_active=false';
+      const filterParam = isAdmin || canRestore || canHardDelete ? '&include_deleted=true' : '';
 
       const res = await apiFetch<MasterListResponse<MasterRecord>>(
         `${activeConfig.endpoint}?limit=100&offset=0${filterParam}`
@@ -333,16 +447,14 @@ function MastersWorkspace() {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [activeConfig, statusFilter, toast]);
+  }, [activeConfig, isAdmin, canRestore, canHardDelete, toast]);
 
   // Initial and tab change load
   useEffect(() => {
     let ignore = false;
     async function init() {
       try {
-        let filterParam = '';
-        if (statusFilter === 'active') filterParam = '&is_active=true';
-        if (statusFilter === 'inactive') filterParam = '&is_active=false';
+        const filterParam = isAdmin || canRestore || canHardDelete ? '&include_deleted=true' : '';
 
         const res = await apiFetch<MasterListResponse<MasterRecord>>(
           `${activeConfig.endpoint}?limit=100&offset=0${filterParam}`
@@ -366,7 +478,7 @@ function MastersWorkspace() {
     return () => {
       ignore = true;
     };
-  }, [activeConfig, statusFilter, toast]);
+  }, [activeConfig, isAdmin, canRestore, canHardDelete, statusFilter, toast]);
 
   // Load countries lookup for State/City creation if needed
   useEffect(() => {
@@ -385,6 +497,15 @@ function MastersWorkspace() {
         .catch(() => {});
     }
   }, [activeConfig.key, addressTypesLookup.length]);
+
+  // Load currencies lookup for Country form if needed
+  useEffect(() => {
+    if (activeConfig.key === 'countries' && currenciesLookup.length === 0) {
+      apiFetch<MasterListResponse<MasterCurrency>>('/masters/currencies?limit=100&is_active=true')
+        .then((res) => setCurrenciesLookup(res.items || []))
+        .catch(() => {});
+    }
+  }, [activeConfig.key, currenciesLookup.length]);
 
   // Load states lookup if country selected in City form
   const handleCountryChangeInForm = async (countryId: number | string) => {
@@ -407,6 +528,7 @@ function MastersWorkspace() {
   // Open Create Modal
   const openCreateModal = () => {
     setFieldErrors({});
+    setIsCustomCodeEntered(false);
     setFormData({
       name: '',
       code: '',
@@ -420,6 +542,7 @@ function MastersWorkspace() {
       description: '',
       category: 'Weight',
       country_id: countriesLookup[0]?.id || '',
+      default_currency_id: '',
       state_id: '',
       city_id: '',
       rate: 0,
@@ -440,6 +563,7 @@ function MastersWorkspace() {
   // Open Edit Modal
   const openEditModal = (rec: MasterRecord) => {
     setFieldErrors({});
+    setIsCustomCodeEntered(true);
     const raw = asDict(rec);
     setFormData({
       name: raw.name || raw.address_line1 || '',
@@ -454,6 +578,7 @@ function MastersWorkspace() {
       description: raw.description || '',
       category: raw.category || '',
       country_id: raw.country_id || '',
+      default_currency_id: raw.default_currency_id || '',
       state_id: raw.state_id || '',
       city_id: raw.city_id || '',
       rate: raw.rate !== undefined ? Number(raw.rate) : 0,
@@ -489,6 +614,33 @@ function MastersWorkspace() {
     if (activeConfig.hasCountry && !formData.country_id) {
       errors.country_id = 'Parent country is required.';
     }
+    if (activeConfig.key === 'countries') {
+      const codeVal = String(formData.code || '').trim();
+      if (!codeVal) {
+        errors.code = 'ISO Alpha-2 code is required.';
+      } else if (codeVal.length !== 2 || !/^[A-Za-z]{2}$/.test(codeVal)) {
+        errors.code = 'ISO Alpha-2 code must be exactly 2 letters.';
+      }
+
+      const iso3Val = String(formData.iso3_code || '').trim();
+      if (iso3Val && (iso3Val.length !== 3 || !/^[A-Za-z]{3}$/.test(iso3Val))) {
+        errors.iso3_code = 'ISO Alpha-3 code must be exactly 3 letters.';
+      }
+    }
+    if (activeConfig.key === 'currencies') {
+      const codeVal = String(formData.code || '').trim().toUpperCase();
+      if (!codeVal) {
+        errors.code = 'ISO 4217 currency code is required.';
+      } else if (codeVal.length !== 3 || !/^[A-Za-z]{3}$/.test(codeVal)) {
+        errors.code = 'Currency code must be exactly 3 uppercase letters (e.g. USD, EUR, INR).';
+      }
+    }
+    if (activeConfig.key === 'states') {
+      const codeVal = String(formData.code || '').trim();
+      if (codeVal && codeVal.length > 20) {
+        errors.code = 'State code cannot exceed 20 characters.';
+      }
+    }
     if (activeConfig.key === 'taxes' && (formData.rate === undefined || formData.rate === null || isNaN(Number(formData.rate)))) {
       errors.rate = 'Tax rate is required.';
     }
@@ -507,10 +659,15 @@ function MastersWorkspace() {
       if (rawCode) payload.code = activeConfig.key === 'languages' ? rawCode.toLowerCase() : rawCode.toUpperCase();
 
       if (activeConfig.key === 'countries') {
-        const iso3 = formData.iso3_code ? String(formData.iso3_code).trim().toUpperCase() : (formData.name ? generateMasterCode(String(formData.name), 3) : '');
+        const countryCode = String(formData.code || '').trim().toUpperCase();
+        if (countryCode) payload.code = countryCode;
+        const iso3 = formData.iso3_code ? String(formData.iso3_code).trim().toUpperCase() : null;
         if (iso3) payload.iso3_code = iso3;
         if (formData.phone_code) payload.phone_code = (formData.phone_code as string).trim();
+        if (formData.default_currency_id) payload.default_currency_id = Number(formData.default_currency_id);
       } else if (activeConfig.key === 'currencies') {
+        const currCode = String(formData.code || '').trim().toUpperCase();
+        if (currCode) payload.code = currCode;
         if (formData.symbol) payload.symbol = (formData.symbol as string).trim();
         payload.decimal_places = Number(formData.decimal_places) || 2;
       } else if (activeConfig.key === 'time-zones') {
@@ -546,7 +703,8 @@ function MastersWorkspace() {
         if (formData.description) payload.description = (formData.description as string).trim();
       } else if (activeConfig.key === 'states') {
         payload.country_id = Number(formData.country_id);
-        if (!payload.code && formData.name) payload.code = generateMasterCode(String(formData.name), 10);
+        if (formData.code) payload.code = String(formData.code).trim().toUpperCase();
+        else if (formData.name) payload.code = generateMasterCode(String(formData.name), 10);
       } else if (activeConfig.key === 'cities') {
         payload.country_id = Number(formData.country_id);
         if (formData.state_id) payload.state_id = Number(formData.state_id);
@@ -584,6 +742,33 @@ function MastersWorkspace() {
     if (activeConfig.key === 'time-zones' && !String(formData.label || '').trim()) {
       errors.label = 'Friendly label is required.';
     }
+    if (activeConfig.key === 'countries') {
+      const codeVal = String(formData.code || '').trim();
+      if (!codeVal) {
+        errors.code = 'ISO Alpha-2 code is required.';
+      } else if (codeVal.length !== 2 || !/^[A-Za-z]{2}$/.test(codeVal)) {
+        errors.code = 'ISO Alpha-2 code must be exactly 2 letters.';
+      }
+
+      const iso3Val = String(formData.iso3_code || '').trim();
+      if (iso3Val && (iso3Val.length !== 3 || !/^[A-Za-z]{3}$/.test(iso3Val))) {
+        errors.iso3_code = 'ISO Alpha-3 code must be exactly 3 letters.';
+      }
+    }
+    if (activeConfig.key === 'currencies') {
+      const codeVal = String(formData.code || '').trim().toUpperCase();
+      if (!codeVal) {
+        errors.code = 'ISO 4217 currency code is required.';
+      } else if (codeVal.length !== 3 || !/^[A-Za-z]{3}$/.test(codeVal)) {
+        errors.code = 'Currency code must be exactly 3 uppercase letters (e.g. USD, EUR, INR).';
+      }
+    }
+    if (activeConfig.key === 'states') {
+      const codeVal = String(formData.code || '').trim();
+      if (codeVal && codeVal.length > 20) {
+        errors.code = 'State code cannot exceed 20 characters.';
+      }
+    }
     if (activeConfig.key === 'taxes' && (formData.rate === undefined || formData.rate === null || isNaN(Number(formData.rate)))) {
       errors.rate = 'Tax rate is required.';
     }
@@ -597,13 +782,24 @@ function MastersWorkspace() {
       const payload: Record<string, unknown> = {};
 
       if (formData.name) payload.name = (formData.name as string).trim();
-      if (formData.code) payload.code = (formData.code as string).trim().toUpperCase();
+      if (!isManualCodeMaster && activeConfig.codeLabel && activeConfig.key !== 'time-zones') {
+        const maxLen = activeConfig.key === 'titles' || activeConfig.key === 'languages' ? 10 : 30;
+        const generated = generateMasterCode(String(formData.name), maxLen);
+        payload.code = activeConfig.key === 'languages'
+          ? (formData.code ? String(formData.code).trim().toLowerCase() : generated.toLowerCase())
+          : (formData.code ? String(formData.code).trim().toUpperCase() : generated.toUpperCase());
+      } else if (formData.code) {
+        payload.code = (formData.code as string).trim().toUpperCase();
+      }
       payload.is_active = Boolean(formData.is_active);
 
       if (activeConfig.key === 'countries') {
+        if (formData.code) payload.code = (formData.code as string).trim().toUpperCase();
         payload.iso3_code = formData.iso3_code ? (formData.iso3_code as string).trim().toUpperCase() : null;
         payload.phone_code = formData.phone_code ? (formData.phone_code as string).trim() : null;
+        payload.default_currency_id = formData.default_currency_id ? Number(formData.default_currency_id) : null;
       } else if (activeConfig.key === 'currencies') {
+        if (formData.code) payload.code = String(formData.code).trim().toUpperCase();
         payload.symbol = formData.symbol ? (formData.symbol as string).trim() : null;
         payload.decimal_places = Number(formData.decimal_places) || 2;
       } else if (activeConfig.key === 'time-zones') {
@@ -622,6 +818,9 @@ function MastersWorkspace() {
         if (formData.rate !== undefined) payload.rate = Number(formData.rate);
         if (formData.tax_type) payload.tax_type = formData.tax_type;
         if (formData.country_id) payload.country_id = Number(formData.country_id);
+      } else if (activeConfig.key === 'states') {
+        if (formData.country_id) payload.country_id = Number(formData.country_id);
+        if (formData.code) payload.code = String(formData.code).trim().toUpperCase();
       } else if (activeConfig.key === 'brands') {
         if (formData.name) payload.name = (formData.name as string).trim();
         if (formData.code) payload.code = (formData.code as string).trim().toUpperCase();
@@ -679,30 +878,150 @@ function MastersWorkspace() {
     }
   };
 
-  // Handle Deactivate Confirm
+  // Handle Deactivate / Delete Confirm
   const handleDeleteConfirm = async () => {
     if (!deletingRecord) return;
     setIsSubmitting(true);
     try {
-      await apiFetch(`${activeConfig.endpoint}/${deletingRecord.public_id}`, {
+      await apiFetch(`${activeConfig.endpoint}/${deletingRecord.public_id}?hard_delete=${isHardDelete}`, {
         method: 'DELETE',
       });
-      toast.success(`${activeConfig.singular} deactivated successfully.`);
+      toast.success(
+        isHardDelete
+          ? `${activeConfig.singular} permanently deleted.`
+          : `${activeConfig.singular} soft-deleted / deactivated successfully.`
+      );
       setDeletingRecord(null);
       loadRecords();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : `Failed to deactivate ${activeConfig.singular}.`;
+      const msg = err instanceof Error ? err.message : `Failed to delete ${activeConfig.singular}.`;
       toast.error(msg);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Filtered records based on live search
+  const handleToggleSelectAll = (items: MasterRecord[]) => {
+    if (selectedIds.size === items.length && items.length > 0) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(items.map((r) => r.public_id)));
+    }
+  };
+
+  const handleToggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    setIsBulkDeleting(true);
+    let successCount = 0;
+    const errors: string[] = [];
+
+    for (const publicId of selectedIds) {
+      try {
+        const query = bulkHardDeleteRequested ? '?hard_delete=true' : '?hard_delete=false';
+        await apiFetch(`${activeConfig.endpoint}/${publicId}${query}`, {
+          method: 'DELETE',
+        });
+        successCount++;
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Unknown error';
+        errors.push(msg);
+      }
+    }
+
+    if (successCount > 0) {
+      toast.success(
+        bulkHardDeleteRequested
+          ? `Successfully purged ${successCount} ${activeConfig.singular.toLowerCase()}(s) permanently.`
+          : `Successfully soft-deleted ${successCount} ${activeConfig.singular.toLowerCase()}(s).`
+      );
+    }
+    if (errors.length > 0) {
+      toast.error(`Failed to delete ${errors.length} record(s): ${errors[0]}`);
+    }
+
+    setSelectedIds(new Set());
+    setBulkDeleteConfirmOpen(false);
+    setIsBulkDeleting(false);
+    loadRecords();
+  };
+
+  const handleBulkRestore = async () => {
+    if (selectedIds.size === 0) return;
+    setIsBulkRestoring(true);
+    let successCount = 0;
+    const errors: string[] = [];
+
+    for (const publicId of selectedIds) {
+      try {
+        await apiFetch(`${activeConfig.endpoint}/${publicId}/restore`, {
+          method: 'POST',
+        });
+        successCount++;
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Unknown error';
+        errors.push(msg);
+      }
+    }
+
+    if (successCount > 0) {
+      toast.success(`Successfully restored ${successCount} ${activeConfig.singular.toLowerCase()}(s).`);
+    }
+    if (errors.length > 0) {
+      toast.error(`Failed to restore ${errors.length} record(s): ${errors[0]}`);
+    }
+
+    setSelectedIds(new Set());
+    setBulkRestoreConfirmOpen(false);
+    setIsBulkRestoring(false);
+    loadRecords();
+  };
+
+  const handleConfirmRestore = async () => {
+    if (!restoreCandidate) return;
+    setIsRestoring(true);
+    try {
+      await apiFetch(`${activeConfig.endpoint}/${restoreCandidate.public_id}/restore`, {
+        method: 'POST',
+      });
+      toast.success(`${activeConfig.singular} restored successfully.`);
+      setRestoreCandidate(null);
+      loadRecords();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : `Failed to restore ${activeConfig.singular}.`;
+      toast.error(msg);
+    } finally {
+      setIsRestoring(false);
+    }
+  };
+
+  // Filtered records based on live search and active status filter
   const filteredRecords = useMemo(() => {
+    let list = records;
+    if (statusFilter === 'all') {
+      list = list.filter((r) => !((r as unknown as { is_deleted?: boolean }).is_deleted));
+    } else if (statusFilter === 'active') {
+      list = list.filter((r) => r.is_active && !((r as unknown as { is_deleted?: boolean }).is_deleted));
+    } else if (statusFilter === 'inactive') {
+      list = list.filter((r) => !r.is_active && !((r as unknown as { is_deleted?: boolean }).is_deleted));
+    } else if (statusFilter === 'deleted') {
+      list = list.filter((r) => Boolean((r as unknown as { is_deleted?: boolean }).is_deleted));
+    }
+
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return records;
-    return records.filter((r) => {
+    if (!q) return list;
+    return list.filter((r) => {
       const raw = asDict(r);
       const matchName = String(raw.name || '').toLowerCase().includes(q);
       const matchCode = String(raw.code || '').toLowerCase().includes(q);
@@ -715,7 +1034,24 @@ function MastersWorkspace() {
         String(raw.postal_code || '').toLowerCase().includes(q);
       return matchName || matchCode || matchLabel || matchIso || matchPhone || matchDesc || matchAddress;
     });
-  }, [records, searchQuery]);
+  }, [records, searchQuery, statusFilter]);
+
+  const masterCounts = useMemo(() => {
+    return {
+      all: records.filter((r) => !((r as unknown as { is_deleted?: boolean }).is_deleted)).length,
+      active: records.filter((r) => r.is_active && !((r as unknown as { is_deleted?: boolean }).is_deleted)).length,
+      inactive: records.filter((r) => !r.is_active && !((r as unknown as { is_deleted?: boolean }).is_deleted)).length,
+      deleted: records.filter((r) => Boolean((r as unknown as { is_deleted?: boolean }).is_deleted)).length,
+    };
+  }, [records]);
+
+  const filteredCount = filteredRecords.length;
+  const totalPages = Math.max(1, Math.ceil(filteredCount / pageSize));
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+  const paginatedRecords = useMemo(() => {
+    const start = (safeCurrentPage - 1) * pageSize;
+    return filteredRecords.slice(start, start + pageSize);
+  }, [filteredRecords, safeCurrentPage, pageSize]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -749,6 +1085,9 @@ function MastersWorkspace() {
             <h1 style={{ fontSize: '1.75rem', fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--text-primary)', margin: 0 }}>
               Master Data Governance
             </h1>
+            <span className="badge badge-neutral" style={{ fontWeight: 600, fontSize: '0.75rem' }}>
+              {filteredCount === totalCount ? `${totalCount} Records (${activeConfig.title})` : `${filteredCount} of ${totalCount} Records (${activeConfig.title})`}
+            </span>
           </div>
           <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginTop: '0.35rem' }}>
             Centralized reference tables and system taxonomies across geographic, financial, and organizational domains.
@@ -770,6 +1109,62 @@ function MastersWorkspace() {
             <RefreshCw size={15} className={isRefreshing ? 'animate-spin' : ''} />
             <span>Sync</span>
           </button>
+
+          {selectedIds.size > 0 && (statusFilter === 'deleted' || (selectedIds.size > 0 && records.filter((r) => selectedIds.has(r.public_id)).every((r) => Boolean((r as unknown as { is_deleted?: boolean }).is_deleted)))) ? (
+            <>
+              {canRestore && (
+                <button
+                  id="btn-bulk-restore-master"
+                  type="button"
+                  onClick={() => setBulkRestoreConfirmOpen(true)}
+                  className="btn btn-restore"
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}
+                  title={`Restore ${selectedIds.size} selected record(s)`}
+                >
+                  <RotateCcw size={15} />
+                  <span>Restore ({selectedIds.size})</span>
+                </button>
+              )}
+              {canHardDelete && (
+                <button
+                  id="btn-bulk-purge-master"
+                  type="button"
+                  onClick={() => {
+                    setBulkHardDeleteRequested(true);
+                    setBulkDeleteConfirmOpen(true);
+                  }}
+                  className="btn btn-danger"
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}
+                  title={`Permanently purge ${selectedIds.size} selected record(s)`}
+                >
+                  <Trash2 size={15} />
+                  <span>Purge ({selectedIds.size})</span>
+                </button>
+              )}
+            </>
+          ) : (
+            canDelete && selectedIds.size > 0 && (
+              <button
+                id="btn-bulk-delete-master"
+                type="button"
+                onClick={() => {
+                  setBulkHardDeleteRequested(false);
+                  setBulkDeleteConfirmOpen(true);
+                }}
+                className="btn btn-secondary"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.45rem',
+                  color: 'var(--danger)',
+                  borderColor: 'rgba(239, 68, 68, 0.4)',
+                }}
+              >
+                <Trash2 size={15} />
+                <span>Delete ({selectedIds.size})</span>
+              </button>
+            )
+          )}
 
           <button
             id="btn-create-master"
@@ -907,34 +1302,63 @@ function MastersWorkspace() {
           gap: '1rem',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <button
-            id="btn-filter-status-all"
-            type="button"
-            onClick={() => setStatusFilter('all')}
-            className={`btn ${statusFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
-            style={{ fontSize: '0.8125rem', padding: '0.35rem 0.75rem' }}
-          >
-            All Statuses
-          </button>
-          <button
-            id="btn-filter-status-active"
-            type="button"
-            onClick={() => setStatusFilter('active')}
-            className={`btn ${statusFilter === 'active' ? 'btn-primary' : 'btn-secondary'}`}
-            style={{ fontSize: '0.8125rem', padding: '0.35rem 0.75rem' }}
-          >
-            Active Only
-          </button>
-          <button
-            id="btn-filter-status-inactive"
-            type="button"
-            onClick={() => setStatusFilter('inactive')}
-            className={`btn ${statusFilter === 'inactive' ? 'btn-primary' : 'btn-secondary'}`}
-            style={{ fontSize: '0.8125rem', padding: '0.35rem 0.75rem' }}
-          >
-            Inactive Only
-          </button>
+        {/* Status Filter Segmented Control */}
+        <div
+          style={{
+            display: 'inline-flex',
+            padding: '2px',
+            background: 'var(--bg-input)',
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--border-subtle)',
+          }}
+        >
+          {(
+            (isAdmin
+              ? ['all', 'active', 'inactive', 'deleted']
+              : ['all', 'active', 'inactive']) as Array<'all' | 'active' | 'inactive' | 'deleted'>
+          ).map((filter) => {
+            const count = masterCounts[filter];
+            return (
+              <button
+                key={filter}
+                id={`btn-filter-status-${filter}`}
+                type="button"
+                onClick={() => {
+                  setStatusFilter(filter);
+                  setSelectedIds(new Set());
+                  setCurrentPage(1);
+                }}
+                style={{
+                  padding: '0.35rem 0.75rem',
+                  fontSize: '0.78rem',
+                  fontWeight: 600,
+                  textTransform: 'capitalize',
+                  border: 'none',
+                  borderRadius: 'calc(var(--radius-md) - 2px)',
+                  background: statusFilter === filter ? 'var(--accent-primary)' : 'transparent',
+                  color: statusFilter === filter ? '#ffffff' : 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  transition: 'var(--transition)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                }}
+              >
+                <span>{filter}</span>
+                <span
+                  style={{
+                    fontSize: '0.7rem',
+                    opacity: 0.85,
+                    padding: '0 4px',
+                    borderRadius: '4px',
+                    background: statusFilter === filter ? 'rgba(255,255,255,0.2)' : 'var(--bg-card)',
+                  }}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         <div style={{ position: 'relative', width: '280px' }}>
@@ -959,11 +1383,20 @@ function MastersWorkspace() {
         <table className="data-table">
           <thead>
             <tr>
-              <th style={{ width: '40px' }}>#</th>
+              <th style={{ width: '40px', textAlign: 'center' }}>#</th>
+              <th style={{ width: '38px', textAlign: 'center' }}>
+                <input
+                  type="checkbox"
+                  checked={selectedIds.size === filteredRecords.length && filteredRecords.length > 0}
+                  onChange={() => handleToggleSelectAll(filteredRecords)}
+                  aria-label="Select all master records"
+                />
+              </th>
               <th>Name / Label</th>
               {activeConfig.codeLabel && <th>{activeConfig.codeLabel}</th>}
               {activeConfig.key === 'countries' && <th>ISO3 Code</th>}
               {activeConfig.key === 'countries' && <th>Phone Code</th>}
+              {activeConfig.key === 'countries' && <th>Default Currency</th>}
               {activeConfig.key === 'currencies' && <th>Symbol</th>}
               {activeConfig.key === 'currencies' && <th>Decimals</th>}
               {activeConfig.key === 'time-zones' && <th>UTC Offset</th>}
@@ -983,7 +1416,7 @@ function MastersWorkspace() {
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={10} style={{ textAlign: 'center', padding: '3rem' }}>
+                <td colSpan={22} style={{ textAlign: 'center', padding: '3rem' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
                     <RefreshCw size={24} className="animate-spin" color="var(--accent-primary)" />
                     <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
@@ -994,7 +1427,7 @@ function MastersWorkspace() {
               </tr>
             ) : filteredRecords.length === 0 ? (
               <tr>
-                <td colSpan={10} style={{ textAlign: 'center', padding: '3.5rem' }}>
+                <td colSpan={22} style={{ textAlign: 'center', padding: '3.5rem' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
                     <Database size={32} color="var(--text-muted)" />
                     <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
@@ -1019,14 +1452,22 @@ function MastersWorkspace() {
                 </td>
               </tr>
             ) : (
-              filteredRecords.map((rec, index) => {
+              paginatedRecords.map((rec, index) => {
                 const raw = asDict(rec);
                 const nameDisplay = String(raw.name || raw.label || raw.address_line1 || 'Unnamed');
                 const codeDisplay = String(raw.code || (raw.postal_code ? `ZIP: ${raw.postal_code}` : '—'));
 
                 return (
-                  <tr key={rec.public_id}>
-                    <td style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{index + 1}</td>
+                  <tr key={rec.public_id} style={{ background: selectedIds.has(rec.public_id) ? 'var(--accent-subtle)' : undefined }}>
+                    <td style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 600 }}>{(safeCurrentPage - 1) * pageSize + index + 1}</td>
+                    <td style={{ textAlign: 'center' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(rec.public_id)}
+                        onChange={() => handleToggleSelect(rec.public_id)}
+                        aria-label={`Select ${nameDisplay}`}
+                      />
+                    </td>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
                         <div
@@ -1076,6 +1517,26 @@ function MastersWorkspace() {
                     {activeConfig.key === 'countries' && (
                       <td style={{ color: 'var(--text-secondary)' }}>
                         {String(raw.phone_code || '—')}
+                      </td>
+                    )}
+
+                    {activeConfig.key === 'countries' && (
+                      <td>
+                        {raw.default_currency ? (
+                          <span
+                            className="badge badge-info"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                          >
+                            <strong>{String((raw.default_currency as { code?: string }).code || '')}</strong>
+                            {(raw.default_currency as { symbol?: string }).symbol && (
+                              <span style={{ opacity: 0.85 }}>({String((raw.default_currency as { symbol?: string }).symbol)})</span>
+                            )}
+                          </span>
+                        ) : raw.default_currency_id ? (
+                          <span className="badge badge-neutral">ID #{String(raw.default_currency_id)}</span>
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)' }}>—</span>
+                        )}
                       </td>
                     )}
 
@@ -1165,25 +1626,42 @@ function MastersWorkspace() {
 
                     {/* Status Column with Quick Toggle Button */}
                     <td>
-                      <button
-                        id={`btn-toggle-status-${rec.public_id}`}
-                        type="button"
-                        onClick={() => handleToggleStatus(rec)}
-                        title={`Click to toggle status to ${rec.is_active ? 'Inactive' : 'Active'}`}
-                        style={{
-                          background: 'transparent',
-                          border: 'none',
-                          cursor: 'pointer',
-                          padding: '0.2rem',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '0.35rem',
-                        }}
-                      >
-                        <span className={`badge ${rec.is_active ? 'badge-success' : 'badge-danger'}`}>
-                          {rec.is_active ? 'Active' : 'Inactive'}
+                      {(rec as unknown as { is_deleted?: boolean }).is_deleted ? (
+                        <span
+                          className="badge"
+                          style={{
+                            background: 'rgba(239, 68, 68, 0.15)',
+                            color: '#ef4444',
+                            border: '1px solid rgba(239, 68, 68, 0.3)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.25rem',
+                          }}
+                        >
+                          <Trash2 size={11} />
+                          <span>Deleted</span>
                         </span>
-                      </button>
+                      ) : (
+                        <button
+                          id={`btn-toggle-status-${rec.public_id}`}
+                          type="button"
+                          onClick={() => handleToggleStatus(rec)}
+                          title={`Click to toggle status to ${rec.is_active ? 'Inactive' : 'Active'}`}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            cursor: 'pointer',
+                            padding: '0.2rem',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.35rem',
+                          }}
+                        >
+                          <span className={`badge ${rec.is_active ? 'badge-success' : 'badge-danger'}`}>
+                            {rec.is_active ? 'Active' : 'Inactive'}
+                          </span>
+                        </button>
+                      )}
                     </td>
 
                     {/* Actions Column */}
@@ -1200,27 +1678,64 @@ function MastersWorkspace() {
                           <Eye size={13} />
                           <span>View</span>
                         </button>
-                        <button
-                          id={`btn-edit-${rec.public_id}`}
-                          type="button"
-                          onClick={() => openEditModal(rec)}
-                          className="btn btn-secondary"
-                          style={{ padding: '0.35rem 0.6rem', fontSize: '0.75rem' }}
-                          title="Edit record details"
-                        >
-                          <Edit2 size={13} />
-                          <span>Edit</span>
-                        </button>
-                        <button
-                          id={`btn-delete-${rec.public_id}`}
-                          type="button"
-                          onClick={() => setDeletingRecord(rec)}
-                          className="btn btn-secondary"
-                          style={{ padding: '0.35rem 0.6rem', fontSize: '0.75rem', color: '#ef4444' }}
-                          title="Deactivate record"
-                        >
-                          <Trash2 size={13} />
-                        </button>
+                        {(rec as unknown as { is_deleted?: boolean }).is_deleted ? (
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                            {canRestore && (
+                              <button
+                                id={`btn-restore-${rec.public_id}`}
+                                type="button"
+                                onClick={() => setRestoreCandidate(rec)}
+                                className="btn btn-restore"
+                                style={{ padding: '0.35rem 0.6rem', fontSize: '0.75rem' }}
+                                title="Restore deactivated record"
+                              >
+                                <RotateCcw size={13} />
+                                <span>Restore</span>
+                              </button>
+                            )}
+                            <button
+                              id={`btn-purge-${rec.public_id}`}
+                              type="button"
+                              onClick={() => {
+                                setDeletingRecord(rec);
+                                setIsHardDelete(true);
+                              }}
+                              className="btn btn-danger"
+                              style={{ padding: '0.35rem 0.6rem', fontSize: '0.75rem' }}
+                              title="Permanently purge record from database"
+                            >
+                              <Trash2 size={13} />
+                              <span>Purge</span>
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <button
+                              id={`btn-edit-${rec.public_id}`}
+                              type="button"
+                              onClick={() => openEditModal(rec)}
+                              className="btn btn-secondary"
+                              style={{ padding: '0.35rem 0.6rem', fontSize: '0.75rem' }}
+                              title="Edit record details"
+                            >
+                              <Edit2 size={13} />
+                              <span>Edit</span>
+                            </button>
+                            <button
+                              id={`btn-delete-${rec.public_id}`}
+                              type="button"
+                              onClick={() => {
+                                setDeletingRecord(rec);
+                                setIsHardDelete(false);
+                              }}
+                              className="btn btn-secondary"
+                              style={{ padding: '0.35rem 0.6rem', fontSize: '0.75rem', color: '#ef4444' }}
+                              title="Deactivate / soft-delete record"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -1230,6 +1745,54 @@ function MastersWorkspace() {
           </tbody>
         </table>
       </div>
+
+      {/* Masters Table Pagination Footer */}
+      {filteredCount > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '1rem',
+            padding: '0.85rem 1.25rem',
+            background: 'var(--bg-card)',
+            borderRadius: 'var(--radius-lg)',
+            border: '1px solid var(--border-subtle)',
+            fontSize: '0.85rem',
+            color: 'var(--text-muted)',
+          }}
+        >
+          <div>
+            Showing <strong>{(safeCurrentPage - 1) * pageSize + 1}</strong> to{' '}
+            <strong>{Math.min(safeCurrentPage * pageSize, filteredCount)}</strong> of <strong>{filteredCount}</strong> records
+            {filteredCount !== totalCount && ` (filtered from ${totalCount} total in ${activeConfig.title})`}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={safeCurrentPage <= 1}
+              style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
+            >
+              Previous
+            </button>
+            <span style={{ padding: '0 0.5rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+              Page {safeCurrentPage} of {totalPages}
+            </span>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={safeCurrentPage >= totalPages}
+              style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* View Detail Modal (.detail-spec-table) */}
@@ -1414,15 +1977,35 @@ function MastersWorkspace() {
                   value={String(formData.name || '')}
                   onChange={(e) => {
                     const newName = e.target.value;
-                    const maxLen = activeConfig.key === 'countries' ? 2 : activeConfig.key === 'currencies' ? 3 : 30;
-                    const autoCode = generateMasterCode(newName, maxLen);
-                    setFormData((prev) => ({
-                      ...prev,
-                      name: newName,
-                      address_line1: newName,
-                      code: activeConfig.key === 'languages' ? autoCode.toLowerCase() : autoCode,
-                      ...(activeConfig.key === 'countries' ? { iso3_code: generateMasterCode(newName, 3) } : {}),
-                    }));
+                    if (isManualCodeMaster) {
+                      setFormData((prev) => ({
+                        ...prev,
+                        name: newName,
+                        address_line1: newName,
+                        ...(!isCustomCodeEntered
+                          ? {
+                              code:
+                                activeConfig.key === 'countries'
+                                  ? generateMasterCode(newName, 2)
+                                  : activeConfig.key === 'currencies'
+                                  ? generateMasterCode(newName, 3)
+                                  : generateMasterCode(newName, 10),
+                              ...(activeConfig.key === 'countries'
+                                ? { iso3_code: generateMasterCode(newName, 3) }
+                                : {}),
+                            }
+                          : {}),
+                      }));
+                    } else {
+                      const maxLen = 30;
+                      const autoCode = generateMasterCode(newName, maxLen);
+                      setFormData((prev) => ({
+                        ...prev,
+                        name: newName,
+                        address_line1: newName,
+                        code: activeConfig.key === 'languages' ? autoCode.toLowerCase() : autoCode,
+                      }));
+                    }
                   }}
                   placeholder={
                     activeConfig.key === 'time-zones'
@@ -1440,8 +2023,8 @@ function MastersWorkspace() {
                 )}
               </div>
 
-              {/* Code field if applicable - strictly read-only and auto-generated */}
-              {activeConfig.codeLabel && activeConfig.key !== 'time-zones' && (
+              {/* Code field if applicable - strictly read-only and auto-generated for non-manual masters */}
+              {activeConfig.codeLabel && activeConfig.key !== 'time-zones' && !isManualCodeMaster && (
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
                     <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
@@ -1470,79 +2053,219 @@ function MastersWorkspace() {
                 </div>
               )}
 
-              {/* Country specifics */}
-              {activeConfig.key === 'countries' && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
-                      <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                        ISO3 Alpha-3 Code
-                      </label>
-                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Auto-generated • Read-Only</span>
-                    </div>
-                    <input
-                      type="text"
-                      readOnly
-                      tabIndex={-1}
-                      className="input"
-                      value={String(formData.iso3_code || '')}
-                      placeholder="e.g. USA"
-                      style={{
-                        textTransform: 'uppercase',
-                        fontFamily: 'monospace',
-                        fontWeight: 600,
-                        background: 'var(--bg-app)',
-                        cursor: 'not-allowed',
-                        opacity: 0.85,
-                      }}
-                    />
+              {/* State specifics: Editable State Code */}
+              {activeConfig.key === 'states' && (
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                    <label htmlFor="input-create-state-code" style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                      State Code
+                    </label>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Abbreviation (e.g. CA, NY, KL)</span>
                   </div>
+                  <input
+                    id="input-create-state-code"
+                    type="text"
+                    maxLength={20}
+                    className={`input ${fieldErrors.code ? 'has-error' : ''}`}
+                    value={String(formData.code || '')}
+                    onChange={(e) => {
+                      setIsCustomCodeEntered(true);
+                      setFormData((prev) => ({ ...prev, code: e.target.value.toUpperCase() }));
+                    }}
+                    placeholder="e.g. CA or NY"
+                    style={{
+                      textTransform: 'uppercase',
+                      fontFamily: 'monospace',
+                      fontWeight: 600,
+                    }}
+                  />
+                  {fieldErrors.code && (
+                    <div className="field-error-text" role="alert">
+                      <AlertCircle size={13} style={{ flexShrink: 0 }} />
+                      <span>{fieldErrors.code}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Country specifics: Editable ISO Alpha-2, ISO Alpha-3, and Phone Prefix */}
+              {activeConfig.key === 'countries' && (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                        <label htmlFor="input-create-country-code" style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                          ISO Alpha-2 Code *
+                        </label>
+                        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>2 Letters (e.g. US)</span>
+                      </div>
+                      <input
+                        id="input-create-country-code"
+                        type="text"
+                        maxLength={2}
+                        className={`input ${fieldErrors.code ? 'has-error' : ''}`}
+                        value={String(formData.code || '')}
+                        onChange={(e) => {
+                          setIsCustomCodeEntered(true);
+                          setFormData((prev) => ({ ...prev, code: e.target.value.toUpperCase() }));
+                        }}
+                        placeholder="e.g. US"
+                        style={{
+                          textTransform: 'uppercase',
+                          fontFamily: 'monospace',
+                          fontWeight: 600,
+                        }}
+                      />
+                      {fieldErrors.code && (
+                        <div className="field-error-text" role="alert">
+                          <AlertCircle size={13} style={{ flexShrink: 0 }} />
+                          <span>{fieldErrors.code}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                        <label htmlFor="input-create-country-iso3" style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                          ISO3 Alpha-3 Code
+                        </label>
+                        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>3 Letters (Optional)</span>
+                      </div>
+                      <input
+                        id="input-create-country-iso3"
+                        type="text"
+                        maxLength={3}
+                        className={`input ${fieldErrors.iso3_code ? 'has-error' : ''}`}
+                        value={String(formData.iso3_code || '')}
+                        onChange={(e) => {
+                          setIsCustomCodeEntered(true);
+                          setFormData((prev) => ({ ...prev, iso3_code: e.target.value.toUpperCase() }));
+                        }}
+                        placeholder="e.g. USA"
+                        style={{
+                          textTransform: 'uppercase',
+                          fontFamily: 'monospace',
+                          fontWeight: 600,
+                        }}
+                      />
+                      {fieldErrors.iso3_code && (
+                        <div className="field-error-text" role="alert">
+                          <AlertCircle size={13} style={{ flexShrink: 0 }} />
+                          <span>{fieldErrors.iso3_code}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                    <label htmlFor="input-create-country-phone-code" style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
                       Phone Calling Prefix
                     </label>
                     <input
+                      id="input-create-country-phone-code"
                       type="text"
                       className="input"
                       value={String(formData.phone_code || '')}
                       onChange={(e) => setFormData((prev) => ({ ...prev, phone_code: e.target.value }))}
-                      placeholder="e.g. +1 or +971"
+                      placeholder="e.g. +1 or +91"
                     />
                   </div>
-                </div>
+
+                  <div>
+                    <label
+                      htmlFor="select-create-country-currency"
+                      style={{
+                        display: 'block',
+                        fontSize: '0.8125rem',
+                        fontWeight: 600,
+                        color: 'var(--text-secondary)',
+                        marginBottom: '0.35rem',
+                      }}
+                    >
+                      Default Currency
+                    </label>
+                    <SearchableSelect
+                      id="select-create-country-currency"
+                      options={[
+                        { value: '', label: 'None / Select Default Currency' },
+                        ...currencySelectOptions,
+                      ]}
+                      value={String(formData.default_currency_id || '')}
+                      onChange={(val) =>
+                        setFormData((prev) => ({ ...prev, default_currency_id: val ? Number(val) : '' }))
+                      }
+                      placeholder="Search currency by code or name..."
+                      searchPlaceholder="Search currency..."
+                    />
+                  </div>
+                </>
               )}
 
-              {/* Currency specifics */}
+              {/* Currency specifics: Editable ISO 4217 Code, Symbol, Decimal Places */}
               {activeConfig.key === 'currencies' && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <>
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
-                      Currency Symbol
-                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                      <label htmlFor="input-create-currency-code" style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                        ISO 4217 Currency Code *
+                      </label>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>3 Letters (e.g. USD, EUR, INR)</span>
+                    </div>
                     <input
-                      id="input-create-symbol"
+                      id="input-create-currency-code"
                       type="text"
-                      className="input"
-                      value={String(formData.symbol || '')}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, symbol: e.target.value }))}
-                      placeholder="e.g. $, €, ₹, د.إ"
+                      maxLength={3}
+                      className={`input ${fieldErrors.code ? 'has-error' : ''}`}
+                      value={String(formData.code || '')}
+                      onChange={(e) => {
+                        setIsCustomCodeEntered(true);
+                        setFormData((prev) => ({ ...prev, code: e.target.value.toUpperCase() }));
+                      }}
+                      placeholder="e.g. USD"
+                      style={{
+                        textTransform: 'uppercase',
+                        fontFamily: 'monospace',
+                        fontWeight: 600,
+                      }}
                     />
+                    {fieldErrors.code && (
+                      <div className="field-error-text" role="alert">
+                        <AlertCircle size={13} style={{ flexShrink: 0 }} />
+                        <span>{fieldErrors.code}</span>
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
-                      Decimal Precision
-                    </label>
-                    <input
-                      id="input-create-decimals"
-                      type="number"
-                      min={0}
-                      max={4}
-                      className="input"
-                      value={Number(formData.decimal_places ?? 2)}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, decimal_places: parseInt(e.target.value, 10) || 0 }))}
-                    />
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    <div>
+                      <label htmlFor="input-create-currency-symbol" style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                        Currency Symbol
+                      </label>
+                      <input
+                        id="input-create-currency-symbol"
+                        type="text"
+                        className="input"
+                        value={String(formData.symbol || '')}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, symbol: e.target.value }))}
+                        placeholder="e.g. $, €, ₹, £"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="input-create-currency-decimals" style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                        Decimal Precision
+                      </label>
+                      <input
+                        id="input-create-currency-decimals"
+                        type="number"
+                        min={0}
+                        max={4}
+                        className="input"
+                        value={Number(formData.decimal_places ?? 2)}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, decimal_places: parseInt(e.target.value, 10) || 0 }))}
+                      />
+                    </div>
                   </div>
-                </div>
+                </>
               )}
 
               {/* TimeZone specifics */}
@@ -1616,39 +2339,34 @@ function MastersWorkspace() {
                     <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
                       Category
                     </label>
-                    <select
-                      className="input"
+                    <SearchableSelect
+                      id="select-create-uom-category"
+                      options={uomCategorySelectOptions}
                       value={String(formData.category || 'Weight')}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, category: e.target.value }))}
-                    >
-                      <option value="Weight">Weight</option>
-                      <option value="Length">Length</option>
-                      <option value="Volume">Volume</option>
-                      <option value="Time">Time</option>
-                      <option value="Quantity">Quantity / Each</option>
-                    </select>
+                      onChange={(val) => setFormData((prev) => ({ ...prev, category: val || 'Weight' }))}
+                      placeholder="Select measurement category..."
+                      searchPlaceholder="Search category..."
+                    />
                   </div>
                 </div>
               )}
 
-              {/* State / City Country Selector */}
+              {/* State / City Country Selector (Select2 SearchableSelect) */}
               {activeConfig.hasCountry && (
                 <div>
                   <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
                     Parent Country *
                   </label>
-                  <select
-                    className={`input ${fieldErrors.country_id ? 'has-error' : ''}`}
+                  <SearchableSelect
+                    id="select-create-parent-country"
+                    options={countrySelectOptions}
                     value={String(formData.country_id || '')}
-                    onChange={(e) => handleCountryChangeInForm(e.target.value)}
-                  >
-                    <option value="">Select a country...</option>
-                    {countriesLookup.map((c) => (
-                      <option key={c.id || c.public_id} value={c.id}>
-                        {c.name} ({c.code})
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(val) => handleCountryChangeInForm(val)}
+                    placeholder="Select a country..."
+                    searchPlaceholder="Search country by name or code..."
+                    hasError={Boolean(fieldErrors.country_id)}
+                    clearable
+                  />
                   {fieldErrors.country_id && (
                     <div className="field-error-text" role="alert">
                       <AlertCircle size={13} style={{ flexShrink: 0 }} />
@@ -1658,24 +2376,21 @@ function MastersWorkspace() {
                 </div>
               )}
 
-              {/* City State Selector */}
+              {/* City State Selector (Select2 SearchableSelect) */}
               {activeConfig.hasState && (
                 <div>
                   <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
                     Parent State / Province (Optional)
                   </label>
-                  <select
-                    className="input"
+                  <SearchableSelect
+                    id="select-create-parent-state"
+                    options={stateSelectOptions}
                     value={String(formData.state_id || '')}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, state_id: Number(e.target.value) || '' }))}
-                  >
-                    <option value="">None / Federal Municipality</option>
-                    {statesLookup.map((s) => (
-                      <option key={s.id || s.public_id} value={s.id}>
-                        {s.name} {s.code ? `(${s.code})` : ''}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(val) => setFormData((prev) => ({ ...prev, state_id: val ? Number(val) : '' }))}
+                    placeholder="None / Federal Municipality"
+                    searchPlaceholder="Search state or province..."
+                    clearable
+                  />
                 </div>
               )}
 
@@ -1706,14 +2421,13 @@ function MastersWorkspace() {
                     <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
                       Calculation Type *
                     </label>
-                    <select
-                      className="input"
+                    <SearchableSelect
+                      id="select-create-tax-type"
+                      options={taxTypeSelectOptions}
                       value={String(formData.tax_type || 'percentage')}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, tax_type: e.target.value }))}
-                    >
-                      <option value="percentage">Percentage (%)</option>
-                      <option value="fixed">Fixed Levy</option>
-                    </select>
+                      onChange={(val) => setFormData((prev) => ({ ...prev, tax_type: val || 'percentage' }))}
+                      placeholder="Select calculation type..."
+                    />
                   </div>
                 </div>
               )}
@@ -1763,21 +2477,13 @@ function MastersWorkspace() {
                     <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
                       Address Type
                     </label>
-                    <select
-                      className="input"
+                    <SearchableSelect
+                      id="select-create-address-type"
+                      options={addressTypeSelectOptions}
                       value={String(formData.address_type_id || '1')}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, address_type_id: Number(e.target.value) || 1 }))}
-                    >
-                      {addressTypesLookup.length > 0 ? (
-                        addressTypesLookup.map((t) => (
-                          <option key={t.public_id} value={(t as unknown as { id: number }).id || 1}>
-                            {t.name} ({t.code})
-                          </option>
-                        ))
-                      ) : (
-                        <option value="1">Primary / Registered</option>
-                      )}
-                    </select>
+                      onChange={(val) => setFormData((prev) => ({ ...prev, address_type_id: Number(val) || 1 }))}
+                      placeholder="Select address classification..."
+                    />
                   </div>
                 </>
               )}
@@ -1896,7 +2602,24 @@ function MastersWorkspace() {
                   type="text"
                   className={`input ${fieldErrors.name ? 'has-error' : ''}`}
                   value={String(formData.name || '')}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value, address_line1: e.target.value }))}
+                  onChange={(e) => {
+                    const newName = e.target.value;
+                    const maxLen = activeConfig.key === 'titles' || activeConfig.key === 'languages' ? 10 : 30;
+                    const autoCode = generateMasterCode(newName, maxLen);
+                    setFormData((prev) => ({
+                      ...prev,
+                      name: newName,
+                      address_line1: newName,
+                      ...(activeConfig.codeLabel && !isManualCodeMaster && activeConfig.key !== 'time-zones'
+                        ? {
+                            code:
+                              activeConfig.key === 'languages'
+                                ? autoCode.toLowerCase()
+                                : autoCode.toUpperCase(),
+                          }
+                        : {}),
+                    }));
+                  }}
                 />
                 {fieldErrors.name && (
                   <div className="field-error-text" role="alert">
@@ -1906,8 +2629,8 @@ function MastersWorkspace() {
                 )}
               </div>
 
-              {/* Code field */}
-              {activeConfig.codeLabel && activeConfig.key !== 'time-zones' && (
+              {/* Code field for non-manual masters */}
+              {activeConfig.codeLabel && activeConfig.key !== 'time-zones' && !isManualCodeMaster && (
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
                     <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
@@ -1934,75 +2657,210 @@ function MastersWorkspace() {
                 </div>
               )}
 
-              {/* Specific fields */}
-              {activeConfig.key === 'countries' && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
-                      <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                        ISO3 Alpha-3 Code
-                      </label>
-                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>System Code • Read-Only</span>
-                    </div>
-                    <input
-                      type="text"
-                      readOnly
-                      tabIndex={-1}
-                      className="input"
-                      value={String(formData.iso3_code || '')}
-                      style={{
-                        textTransform: 'uppercase',
-                        fontFamily: 'monospace',
-                        fontWeight: 600,
-                        background: 'var(--bg-app)',
-                        cursor: 'not-allowed',
-                        opacity: 0.85,
-                      }}
-                    />
+              {/* State specifics: Editable State Code in Edit Modal */}
+              {activeConfig.key === 'states' && (
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                    <label htmlFor="input-edit-state-code" style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                      State Code
+                    </label>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Abbreviation (e.g. CA, NY, KL)</span>
                   </div>
+                  <input
+                    id="input-edit-state-code"
+                    type="text"
+                    maxLength={20}
+                    className={`input ${fieldErrors.code ? 'has-error' : ''}`}
+                    value={String(formData.code || '')}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))}
+                    placeholder="e.g. CA or NY"
+                    style={{
+                      textTransform: 'uppercase',
+                      fontFamily: 'monospace',
+                      fontWeight: 600,
+                    }}
+                  />
+                  {fieldErrors.code && (
+                    <div className="field-error-text" role="alert">
+                      <AlertCircle size={13} style={{ flexShrink: 0 }} />
+                      <span>{fieldErrors.code}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Country specifics: Editable ISO codes and phone prefix in Edit Modal */}
+              {activeConfig.key === 'countries' && (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                        <label htmlFor="input-edit-country-code" style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                          ISO Alpha-2 Code *
+                        </label>
+                        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>2 Letters</span>
+                      </div>
+                      <input
+                        id="input-edit-country-code"
+                        type="text"
+                        maxLength={2}
+                        className={`input ${fieldErrors.code ? 'has-error' : ''}`}
+                        value={String(formData.code || '')}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))}
+                        placeholder="e.g. US"
+                        style={{
+                          textTransform: 'uppercase',
+                          fontFamily: 'monospace',
+                          fontWeight: 600,
+                        }}
+                      />
+                      {fieldErrors.code && (
+                        <div className="field-error-text" role="alert">
+                          <AlertCircle size={13} style={{ flexShrink: 0 }} />
+                          <span>{fieldErrors.code}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                        <label htmlFor="input-edit-country-iso3" style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                          ISO3 Alpha-3 Code
+                        </label>
+                        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>3 Letters (Optional)</span>
+                      </div>
+                      <input
+                        id="input-edit-country-iso3"
+                        type="text"
+                        maxLength={3}
+                        className={`input ${fieldErrors.iso3_code ? 'has-error' : ''}`}
+                        value={String(formData.iso3_code || '')}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, iso3_code: e.target.value.toUpperCase() }))}
+                        placeholder="e.g. USA"
+                        style={{
+                          textTransform: 'uppercase',
+                          fontFamily: 'monospace',
+                          fontWeight: 600,
+                        }}
+                      />
+                      {fieldErrors.iso3_code && (
+                        <div className="field-error-text" role="alert">
+                          <AlertCircle size={13} style={{ flexShrink: 0 }} />
+                          <span>{fieldErrors.iso3_code}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                    <label htmlFor="input-edit-country-phone-code" style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
                       Phone Calling Prefix
                     </label>
                     <input
+                      id="input-edit-country-phone-code"
                       type="text"
                       className="input"
                       value={String(formData.phone_code || '')}
                       onChange={(e) => setFormData((prev) => ({ ...prev, phone_code: e.target.value }))}
+                      placeholder="e.g. +1 or +91"
                     />
                   </div>
-                </div>
+
+                  <div>
+                    <label
+                      htmlFor="select-edit-country-currency"
+                      style={{
+                        display: 'block',
+                        fontSize: '0.8125rem',
+                        fontWeight: 600,
+                        color: 'var(--text-secondary)',
+                        marginBottom: '0.35rem',
+                      }}
+                    >
+                      Default Currency
+                    </label>
+                    <SearchableSelect
+                      id="select-edit-country-currency"
+                      options={[
+                        { value: '', label: 'None / Select Default Currency' },
+                        ...currencySelectOptions,
+                      ]}
+                      value={String(formData.default_currency_id || '')}
+                      onChange={(val) =>
+                        setFormData((prev) => ({ ...prev, default_currency_id: val ? Number(val) : '' }))
+                      }
+                      placeholder="Search currency by code or name..."
+                      searchPlaceholder="Search currency..."
+                    />
+                  </div>
+                </>
               )}
 
+              {/* Currency specifics: Editable ISO 4217 Code, Symbol, Decimal Places */}
               {activeConfig.key === 'currencies' && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <>
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
-                      Symbol
-                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                      <label htmlFor="input-edit-currency-code" style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                        ISO 4217 Currency Code *
+                      </label>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>3 Letters (e.g. USD, EUR, INR)</span>
+                    </div>
                     <input
+                      id="input-edit-currency-code"
                       type="text"
-                      className="input"
-                      value={String(formData.symbol || '')}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, symbol: e.target.value }))}
+                      maxLength={3}
+                      className={`input ${fieldErrors.code ? 'has-error' : ''}`}
+                      value={String(formData.code || '')}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))}
+                      placeholder="e.g. USD"
+                      style={{
+                        textTransform: 'uppercase',
+                        fontFamily: 'monospace',
+                        fontWeight: 600,
+                      }}
                     />
+                    {fieldErrors.code && (
+                      <div className="field-error-text" role="alert">
+                        <AlertCircle size={13} style={{ flexShrink: 0 }} />
+                        <span>{fieldErrors.code}</span>
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
-                      Decimal Precision
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={4}
-                      className="input"
-                      value={Number(formData.decimal_places ?? 2)}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, decimal_places: parseInt(e.target.value, 10) || 0 }))}
-                    />
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    <div>
+                      <label htmlFor="input-edit-currency-symbol" style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                        Currency Symbol
+                      </label>
+                      <input
+                        id="input-edit-currency-symbol"
+                        type="text"
+                        className="input"
+                        value={String(formData.symbol || '')}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, symbol: e.target.value }))}
+                        placeholder="e.g. $, €, ₹, £"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="input-edit-currency-decimals" style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                        Decimal Precision
+                      </label>
+                      <input
+                        id="input-edit-currency-decimals"
+                        type="number"
+                        min={0}
+                        max={4}
+                        className="input"
+                        value={Number(formData.decimal_places ?? 2)}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, decimal_places: parseInt(e.target.value, 10) || 0 }))}
+                      />
+                    </div>
                   </div>
-                </div>
+                </>
               )}
 
+              {/* Time zone specifics */}
               {activeConfig.key === 'time-zones' && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                   <div>
@@ -2036,7 +2894,81 @@ function MastersWorkspace() {
                 </div>
               )}
 
-              {/* Tax specifics */}
+              {/* Unit of measure specifics (Select2 SearchableSelect) in Edit Modal */}
+              {activeConfig.key === 'units-of-measure' && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                      Symbol / Abbreviation
+                    </label>
+                    <input
+                      type="text"
+                      className="input"
+                      value={String(formData.symbol || '')}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, symbol: e.target.value }))}
+                      placeholder="e.g. kg, l, m"
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                      Category
+                    </label>
+                    <SearchableSelect
+                      id="select-edit-uom-category"
+                      options={uomCategorySelectOptions}
+                      value={String(formData.category || 'Weight')}
+                      onChange={(val) => setFormData((prev) => ({ ...prev, category: val || 'Weight' }))}
+                      placeholder="Select measurement category..."
+                      searchPlaceholder="Search category..."
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* State / City Country Selector (Select2 SearchableSelect) in Edit Modal */}
+              {activeConfig.hasCountry && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                    Parent Country *
+                  </label>
+                  <SearchableSelect
+                    id="select-edit-parent-country"
+                    options={countrySelectOptions}
+                    value={String(formData.country_id || '')}
+                    onChange={(val) => handleCountryChangeInForm(val)}
+                    placeholder="Select a country..."
+                    searchPlaceholder="Search country by name or code..."
+                    hasError={Boolean(fieldErrors.country_id)}
+                    clearable
+                  />
+                  {fieldErrors.country_id && (
+                    <div className="field-error-text" role="alert">
+                      <AlertCircle size={13} style={{ flexShrink: 0 }} />
+                      <span>{fieldErrors.country_id}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* City State Selector (Select2 SearchableSelect) in Edit Modal */}
+              {activeConfig.hasState && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                    Parent State / Province (Optional)
+                  </label>
+                  <SearchableSelect
+                    id="select-edit-parent-state"
+                    options={stateSelectOptions}
+                    value={String(formData.state_id || '')}
+                    onChange={(val) => setFormData((prev) => ({ ...prev, state_id: val ? Number(val) : '' }))}
+                    placeholder="None / Federal Municipality"
+                    searchPlaceholder="Search state or province..."
+                    clearable
+                  />
+                </div>
+              )}
+
+              {/* Tax specifics in Edit Modal */}
               {activeConfig.key === 'taxes' && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                   <div>
@@ -2062,19 +2994,18 @@ function MastersWorkspace() {
                     <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
                       Calculation Type
                     </label>
-                    <select
-                      className="input"
+                    <SearchableSelect
+                      id="select-edit-tax-type"
+                      options={taxTypeSelectOptions}
                       value={String(formData.tax_type || 'percentage')}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, tax_type: e.target.value }))}
-                    >
-                      <option value="percentage">Percentage (%)</option>
-                      <option value="fixed">Fixed Levy</option>
-                    </select>
+                      onChange={(val) => setFormData((prev) => ({ ...prev, tax_type: val || 'percentage' }))}
+                      placeholder="Select calculation type..."
+                    />
                   </div>
                 </div>
               )}
 
-              {/* Address specifics */}
+              {/* Address specifics in Edit Modal */}
               {activeConfig.key === 'addresses' && (
                 <>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
@@ -2110,6 +3041,18 @@ function MastersWorkspace() {
                       className="input"
                       value={String(formData.landmark || '')}
                       onChange={(e) => setFormData((prev) => ({ ...prev, landmark: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                      Address Type
+                    </label>
+                    <SearchableSelect
+                      id="select-edit-address-type"
+                      options={addressTypeSelectOptions}
+                      value={String(formData.address_type_id || '1')}
+                      onChange={(val) => setFormData((prev) => ({ ...prev, address_type_id: Number(val) || 1 }))}
+                      placeholder="Select address classification..."
                     />
                   </div>
                 </>
@@ -2191,22 +3134,120 @@ function MastersWorkspace() {
         isOpen={!!deletingRecord}
         onClose={() => setDeletingRecord(null)}
         onConfirm={handleDeleteConfirm}
-        title={`Deactivate ${activeConfig.singular}?`}
-        subtitle="This will change the operational state to inactive."
+        title={isHardDelete ? `Permanently Delete ${activeConfig.singular}?` : `Deactivate ${activeConfig.singular}?`}
+        subtitle={isHardDelete ? "This will permanently purge this record from the database." : "This will change the operational state to inactive."}
         message={
           deletingRecord ? (
+            isHardDelete ? (
+              <>
+                Are you sure you want to <strong>permanently purge</strong>{' '}
+                <strong style={{ color: 'var(--text-primary)' }}>
+                  {String(asDict(deletingRecord).name || asDict(deletingRecord).label || 'this record')}
+                </strong>
+                ? This action <strong>cannot be undone</strong> and will remove the record completely from the system.
+              </>
+            ) : (
+              <>
+                Are you sure you want to deactivate{' '}
+                <strong style={{ color: 'var(--text-primary)' }}>
+                  {String(asDict(deletingRecord).name || asDict(deletingRecord).label || 'this record')}
+                </strong>
+                ? Inactive master records can be restored or permanently purged later.
+              </>
+            )
+          ) : null
+        }
+        confirmLabel={isHardDelete ? "Permanently Delete" : "Confirm Deactivation"}
+        variant="danger"
+        isLoading={isSubmitting}
+      />
+
+      {/* Restore Confirmation Dialog */}
+      <ConfirmationModal
+        isOpen={!!restoreCandidate}
+        onClose={() => setRestoreCandidate(null)}
+        onConfirm={handleConfirmRestore}
+        title={`Restore ${activeConfig.singular}?`}
+        subtitle="This will restore the record back to active state."
+        message={
+          restoreCandidate ? (
             <>
-              Are you sure you want to deactivate{' '}
+              Are you sure you want to restore{' '}
               <strong style={{ color: 'var(--text-primary)' }}>
-                {String(asDict(deletingRecord).name || asDict(deletingRecord).label || 'this record')}
+                {String(asDict(restoreCandidate).name || asDict(restoreCandidate).label || 'this record')}
               </strong>
-              ? Inactive master records will no longer appear in operational dropdown selectors.
+              ? It will be reinstated and accessible across all system lookups.
             </>
           ) : null
         }
-        confirmLabel="Confirm Deactivation"
+        confirmLabel={`Restore ${activeConfig.singular}`}
+        variant="primary"
+        isLoading={isRestoring}
+      />
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <ConfirmationModal
+        isOpen={bulkDeleteConfirmOpen}
+        onClose={() => setBulkDeleteConfirmOpen(false)}
+        onConfirm={handleBulkDelete}
+        title={
+          bulkHardDeleteRequested
+            ? `Permanently Purge ${selectedIds.size} Selected ${activeConfig.singular}(s)?`
+            : `Soft Delete ${selectedIds.size} Selected ${activeConfig.singular}(s)?`
+        }
+        subtitle={`${selectedIds.size} record${selectedIds.size === 1 ? '' : 's'} selected`}
+        message={
+          <div>
+            <p>
+              {bulkHardDeleteRequested ? (
+                <>
+                  Are you sure you want to <strong>permanently purge</strong> the {selectedIds.size} selected {activeConfig.singular.toLowerCase()}(s) from the database? This action <strong>cannot be undone</strong>.
+                </>
+              ) : (
+                <>
+                  Are you sure you want to soft delete the {selectedIds.size} selected {activeConfig.singular.toLowerCase()}(s)? They will be moved to the <strong>Deleted</strong> tab, where they can be restored or permanently purged later.
+                </>
+              )}
+            </p>
+            {canHardDelete && statusFilter !== 'deleted' && (
+              <div style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <input
+                  type="checkbox"
+                  id="bulk_master_hard_delete_check"
+                  checked={bulkHardDeleteRequested}
+                  onChange={(e) => setBulkHardDeleteRequested(e.target.checked)}
+                />
+                <label htmlFor="bulk_master_hard_delete_check" style={{ fontSize: '0.82rem', color: 'var(--danger)', fontWeight: 600 }}>
+                  Permanently purge records immediately (Bypass Trash)
+                </label>
+              </div>
+            )}
+          </div>
+        }
+        confirmLabel={
+          bulkHardDeleteRequested
+            ? `Permanently Purge (${selectedIds.size})`
+            : `Soft Delete (${selectedIds.size})`
+        }
         variant="danger"
-        isLoading={isSubmitting}
+        isLoading={isBulkDeleting}
+      />
+
+      {/* Bulk Restore Confirmation Dialog */}
+      <ConfirmationModal
+        isOpen={bulkRestoreConfirmOpen}
+        onClose={() => setBulkRestoreConfirmOpen(false)}
+        onConfirm={handleBulkRestore}
+        title={`Restore ${selectedIds.size} Selected ${activeConfig.singular}(s)?`}
+        subtitle={`${selectedIds.size} record${selectedIds.size === 1 ? '' : 's'} selected`}
+        message={
+          <p>
+            Are you sure you want to restore the {selectedIds.size} selected {activeConfig.singular.toLowerCase()}(s) back to active status? They will immediately be visible across reference lookups.
+          </p>
+        }
+        confirmLabel={`Restore (${selectedIds.size})`}
+        variant="primary"
+        isLoading={isBulkRestoring}
       />
     </div>
   );

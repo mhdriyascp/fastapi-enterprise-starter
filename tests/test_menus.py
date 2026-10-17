@@ -257,8 +257,10 @@ async def test_menus_full_api_endpoints() -> None:
         assert my_resp.status_code == 200
         assert isinstance(my_resp.json(), list)
 
-        # 8. Delete Menu via DELETE /api/v1/menus/{menu_id}
-        del_resp = await client.delete(f"/api/v1/menus/{menu_id}", headers=headers)
+        # 8. Delete Menu via DELETE /api/v1/menus/{menu_id}?hard_delete=true
+        del_resp = await client.delete(
+            f"/api/v1/menus/{menu_id}?hard_delete=true", headers=headers
+        )
         assert del_resp.status_code == 204
 
         # 9. Verify deletion -> 404

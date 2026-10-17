@@ -15,10 +15,10 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.infrastructure.database.base import Base
-from app.infrastructure.database.models.base_entity import EntityBase
+from app.infrastructure.database.models.base_entity import AuditEntityBase
 
 
-class Menu(EntityBase):
+class Menu(AuditEntityBase):
     """Hierarchical navigation menu model with role and permission access controls."""
 
     __tablename__ = "menus"

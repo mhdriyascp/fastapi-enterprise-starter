@@ -11,10 +11,10 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.infrastructure.database.base import Base
-from app.infrastructure.database.models.base_entity import EntityBase
+from app.infrastructure.database.models.base_entity import AuditEntityBase
 
 
-class Role(EntityBase):
+class Role(AuditEntityBase):
     __tablename__ = "roles"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -52,7 +52,7 @@ class Role(EntityBase):
     )
 
 
-class Permission(EntityBase):
+class Permission(AuditEntityBase):
     __tablename__ = "permissions"
 
     id: Mapped[uuid.UUID] = mapped_column(

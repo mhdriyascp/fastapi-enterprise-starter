@@ -1,4 +1,5 @@
 import re
+from datetime import UTC, datetime
 from typing import Final
 from uuid import UUID
 
@@ -6,6 +7,7 @@ from sqlalchemy import case, delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.activity_logs.service import record_activity
 from app.modules.rbac.models import (
     Permission,
     Role,
@@ -139,6 +141,16 @@ class RoleService:
         try:
             await self.db.commit()
             await self.db.refresh(role)
+            await record_activity(
+                db=self.db,
+                module="rbac",
+                action="CREATE",
+                entity_type="Role",
+                entity_id=role.id,
+                entity_name=role.name,
+                details={"code": role.code, "description": role.description},
+            )
+            await self.db.commit()
         except IntegrityError as exc:
             await self.db.rollback()
             raise RoleAlreadyExistsError(
@@ -215,12 +227,33 @@ class RoleService:
                 "The active status of a system role cannot be changed."
             )
 
+        if role.is_system and "code" in changes and changes["code"] != role.code:
+            raise SystemRoleError("The code of a system role cannot be changed.")
+
+        if not role.is_system and "name" in changes and "code" not in changes:
+            base_code = re.sub(r"[^a-z0-9_]+", "_", changes["name"].lower()).strip("_")
+            if not base_code:
+                base_code = "role"
+            if not base_code[0].isalpha():
+                base_code = f"role_{base_code}"[:50]
+            changes["code"] = base_code[:50]
+
         for field, value in changes.items():
             setattr(role, field, value)
 
         try:
             await self.db.commit()
             await self.db.refresh(role)
+            await record_activity(
+                db=self.db,
+                module="rbac",
+                action="UPDATE",
+                entity_type="Role",
+                entity_id=role.id,
+                entity_name=role.name,
+                details={"updated_fields": list(changes.keys())},
+            )
+            await self.db.commit()
         except IntegrityError as exc:
             await self.db.rollback()
             raise RoleAlreadyExistsError(
@@ -232,6 +265,7 @@ class RoleService:
     async def delete_role(
         self,
         identifier: UUID | str,
+        hard_delete: bool = True,
     ) -> None:
         role = await self.get_role(identifier)
 
@@ -247,15 +281,64 @@ class RoleService:
                 "This role is assigned to users and cannot be deleted."
             )
 
-        await self.db.delete(role)
+        role_id = role.id
+        role_name = role.name
+
+        if hard_delete:
+            await self.db.delete(role)
+        else:
+            role.is_active = False
+            role.is_deleted = True
+            role.deleted_at = datetime.now(UTC)
 
         try:
+            await self.db.commit()
+            await record_activity(
+                db=self.db,
+                module="rbac",
+                action="DELETE" if hard_delete else "DEACTIVATE",
+                entity_type="Role",
+                entity_id=role_id,
+                entity_name=role_name,
+                details={"hard_delete": hard_delete, "is_active": False},
+            )
             await self.db.commit()
         except IntegrityError as exc:
             await self.db.rollback()
             raise RoleInUseError(
                 "This role cannot be deleted because it is referenced by another record."
             ) from exc
+
+    async def restore_role(
+        self,
+        identifier: UUID | str,
+    ) -> Role:
+        """Restores a deactivated role back to active status."""
+        role = await self.get_role(identifier)
+        role.is_active = True
+        role.is_deleted = False
+        role.deleted_at = None
+
+        try:
+            await self.db.commit()
+            await self.db.refresh(role)
+            await record_activity(
+                db=self.db,
+                module="rbac",
+                action="RESTORE",
+                entity_type="Role",
+                entity_id=role.id,
+                entity_name=role.name,
+                details={"is_active": True},
+            )
+            await self.db.commit()
+        except IntegrityError as exc:
+            await self.db.rollback()
+            raise RoleAlreadyExistsError(
+                "Restoring the role violates a database constraint."
+            ) from exc
+
+        return role
 
     # ========================================================
     # Role-Permission assignment methods
@@ -637,29 +720,76 @@ class PermissionService:
     async def delete_permission(
         self,
         identifier: UUID | str,
+        hard_delete: bool = True,
     ) -> None:
         permission = await self.get_permission(identifier)
 
         if permission.is_system:
             raise SystemPermissionError("System permissions cannot be deleted.")
 
-        result = await self.db.execute(
-            select(RolePermission.role_id)
-            .where(RolePermission.permission_id == permission.id)
-            .limit(1)
-        )
-
-        if result.scalar_one_or_none() is not None:
-            raise PermissionInUseError(
-                "This permission is assigned to roles and cannot be deleted."
+        if hard_delete:
+            result = await self.db.execute(
+                select(RolePermission.role_id)
+                .where(RolePermission.permission_id == permission.id)
+                .limit(1)
             )
 
-        await self.db.delete(permission)
+            if result.scalar_one_or_none() is not None:
+                raise PermissionInUseError(
+                    "This permission is assigned to roles and cannot be permanently deleted."
+                )
+
+            await self.db.delete(permission)
+        else:
+            permission.is_active = False
+            permission.is_deleted = True
+            permission.deleted_at = datetime.now(UTC)
 
         try:
+            await self.db.commit()
+            await record_activity(
+                db=self.db,
+                module="rbac",
+                action="DELETE" if hard_delete else "DEACTIVATE",
+                entity_type="Permission",
+                entity_id=permission.id,
+                entity_name=permission.name,
+                details={"hard_delete": hard_delete, "is_active": False},
+            )
             await self.db.commit()
         except IntegrityError as exc:
             await self.db.rollback()
             raise PermissionInUseError(
                 "This permission cannot be deleted because it is referenced by another record."
             ) from exc
+
+    async def restore_permission(
+        self,
+        identifier: UUID | str,
+    ) -> Permission:
+        """Restores a deactivated permission back to active status."""
+        permission = await self.get_permission(identifier)
+        permission.is_active = True
+        permission.is_deleted = False
+        permission.deleted_at = None
+
+        try:
+            await self.db.commit()
+            await self.db.refresh(permission)
+            await record_activity(
+                db=self.db,
+                module="rbac",
+                action="RESTORE",
+                entity_type="Permission",
+                entity_id=permission.id,
+                entity_name=permission.name,
+                details={"is_active": True},
+            )
+            await self.db.commit()
+        except IntegrityError as exc:
+            await self.db.rollback()
+            raise PermissionInUseError(
+                "Unable to restore permission due to a constraint violation."
+            ) from exc
+
+        return permission

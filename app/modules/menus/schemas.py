@@ -52,6 +52,8 @@ class MenuResponse(BaseSchema):
     icon: str | None = None
     sort_order: int
     is_active: bool
+    is_deleted: bool = False
+    deleted_at: datetime | None = None
     role_ids: list[UUID] = Field(default_factory=list)
     permission_ids: list[UUID] = Field(default_factory=list)
     created_at: datetime
@@ -68,4 +70,6 @@ class MenuTreeNode(BaseSchema):
     icon: str | None = None
     sort_order: int
     is_active: bool
+    is_deleted: bool = False
+    deleted_at: datetime | None = None
     children: list[MenuTreeNode] = Field(default_factory=list)

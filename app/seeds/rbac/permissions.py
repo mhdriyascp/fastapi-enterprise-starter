@@ -1,7 +1,7 @@
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.rbac.models import Permission
-from app.seeds.helpers import get_or_create
 
 PERMISSIONS = (
     # Role permissions.
@@ -33,11 +33,29 @@ PERMISSIONS = (
         "is_active": True,
     },
     {
-        "name": "Delete Roles",
+        "name": "Soft Delete Roles",
         "code": "role.delete",
-        "description": "Delete eligible roles.",
+        "description": "Soft-delete custom roles (marks entity as deleted/inactive, preserves historical assignments and audit trails, enables restoration).",
         "resource": "role",
         "action": "delete",
+        "is_system": True,
+        "is_active": True,
+    },
+    {
+        "name": "Hard Delete Roles",
+        "code": "role.hard_delete",
+        "description": "Hard-delete custom roles (permanently purges eligible roles from the database; irreversible physical deletion).",
+        "resource": "role",
+        "action": "hard_delete",
+        "is_system": True,
+        "is_active": True,
+    },
+    {
+        "name": "Restore Soft-Deleted Roles",
+        "code": "role.restore",
+        "description": "Restore soft-deleted custom roles back to active status in the system.",
+        "resource": "role",
+        "action": "restore",
         "is_system": True,
         "is_active": True,
     },
@@ -70,11 +88,29 @@ PERMISSIONS = (
         "is_active": True,
     },
     {
-        "name": "Delete Permissions",
+        "name": "Soft Delete Permissions",
         "code": "permission.delete",
-        "description": "Delete eligible permissions.",
+        "description": "Soft-delete custom permissions (deactivates privilege, preserves audit history, allows restoration).",
         "resource": "permission",
         "action": "delete",
+        "is_system": True,
+        "is_active": True,
+    },
+    {
+        "name": "Hard Delete Permissions",
+        "code": "permission.hard_delete",
+        "description": "Hard-delete custom permissions (permanently purges privilege from the database; irreversible physical deletion).",
+        "resource": "permission",
+        "action": "hard_delete",
+        "is_system": True,
+        "is_active": True,
+    },
+    {
+        "name": "Restore Soft-Deleted Permissions",
+        "code": "permission.restore",
+        "description": "Restore soft-deleted or inactive custom permissions back to active status.",
+        "resource": "permission",
+        "action": "restore",
         "is_system": True,
         "is_active": True,
     },
@@ -107,11 +143,29 @@ PERMISSIONS = (
         "is_active": True,
     },
     {
-        "name": "Delete Organizations",
+        "name": "Soft Delete Organizations",
         "code": "organization.delete",
-        "description": "Delete or archive organizations.",
+        "description": "Soft-delete organization records (marks entity as deleted, preserves full audit history, and allows restoration).",
         "resource": "organization",
         "action": "delete",
+        "is_system": True,
+        "is_active": True,
+    },
+    {
+        "name": "Hard Delete Organizations",
+        "code": "organization.hard_delete",
+        "description": "Hard-delete organization records (permanently purges tenant and related records from the database; irreversible physical deletion).",
+        "resource": "organization",
+        "action": "hard_delete",
+        "is_system": True,
+        "is_active": True,
+    },
+    {
+        "name": "Restore Soft-Deleted Organizations",
+        "code": "organization.restore",
+        "description": "Restore soft-deleted organization records back to active status.",
+        "resource": "organization",
+        "action": "restore",
         "is_system": True,
         "is_active": True,
     },
@@ -144,11 +198,29 @@ PERMISSIONS = (
         "is_active": True,
     },
     {
-        "name": "Delete Users",
+        "name": "Soft Delete Users",
         "code": "user.delete",
-        "description": "Delete or suspend user accounts.",
+        "description": "Soft-delete user accounts (deactivates credentials, preserves profile and historical audit trails, allows account restoration).",
         "resource": "user",
         "action": "delete",
+        "is_system": True,
+        "is_active": True,
+    },
+    {
+        "name": "Hard Delete Users",
+        "code": "user.hard_delete",
+        "description": "Hard-delete user accounts (permanently purges user account and identity from database; irreversible physical deletion).",
+        "resource": "user",
+        "action": "hard_delete",
+        "is_system": True,
+        "is_active": True,
+    },
+    {
+        "name": "Restore Soft-Deleted Users",
+        "code": "user.restore",
+        "description": "Restore soft-deleted or suspended user accounts back to active status.",
+        "resource": "user",
+        "action": "restore",
         "is_system": True,
         "is_active": True,
     },
@@ -181,11 +253,29 @@ PERMISSIONS = (
         "is_active": True,
     },
     {
-        "name": "Delete Master Records",
+        "name": "Soft Delete Master Records",
         "code": "masters:delete",
-        "description": "Deactivate master data records.",
+        "description": "Soft-delete master reference records (marks record as inactive/deleted with complete restore capability).",
         "resource": "masters",
         "action": "delete",
+        "is_system": True,
+        "is_active": True,
+    },
+    {
+        "name": "Hard Delete Master Records",
+        "code": "masters:hard_delete",
+        "description": "Hard-delete master reference records (permanently purges catalog data from the database; irreversible physical deletion).",
+        "resource": "masters",
+        "action": "hard_delete",
+        "is_system": True,
+        "is_active": True,
+    },
+    {
+        "name": "Restore Soft-Deleted Master Records",
+        "code": "masters:restore",
+        "description": "Restore soft-deleted or deactivated master reference records back to active status.",
+        "resource": "masters",
+        "action": "restore",
         "is_system": True,
         "is_active": True,
     },
@@ -218,11 +308,29 @@ PERMISSIONS = (
         "is_active": True,
     },
     {
-        "name": "Delete Menus",
+        "name": "Soft Delete Menus",
         "code": "menu.delete",
-        "description": "Delete navigation menu items.",
+        "description": "Soft-delete navigation menu items (hides menu item from navigation tree while preserving configuration for restore).",
         "resource": "menu",
         "action": "delete",
+        "is_system": True,
+        "is_active": True,
+    },
+    {
+        "name": "Hard Delete Menus",
+        "code": "menu.hard_delete",
+        "description": "Hard-delete navigation menu items (permanently purges menu records from the database; irreversible physical deletion).",
+        "resource": "menu",
+        "action": "hard_delete",
+        "is_system": True,
+        "is_active": True,
+    },
+    {
+        "name": "Restore Soft-Deleted Menus",
+        "code": "menu.restore",
+        "description": "Restore soft-deleted navigation menu items back to active status.",
+        "resource": "menu",
+        "action": "restore",
         "is_system": True,
         "is_active": True,
     },
@@ -255,11 +363,29 @@ PERMISSIONS = (
         "is_active": True,
     },
     {
-        "name": "Delete Notifications",
+        "name": "Soft Delete Notifications",
         "code": "notification.delete",
-        "description": "Delete or clear notifications.",
+        "description": "Soft-delete notification alerts (dismisses from user inbox while preserving audit trail).",
         "resource": "notification",
         "action": "delete",
+        "is_system": True,
+        "is_active": True,
+    },
+    {
+        "name": "Hard Delete Notifications",
+        "code": "notification.hard_delete",
+        "description": "Hard-delete notifications (permanently purges alert records from the database; irreversible physical deletion).",
+        "resource": "notification",
+        "action": "hard_delete",
+        "is_system": True,
+        "is_active": True,
+    },
+    {
+        "name": "Restore Soft-Deleted Notifications",
+        "code": "notification.restore",
+        "description": "Restore soft-deleted notification alerts back to active status.",
+        "resource": "notification",
+        "action": "restore",
         "is_system": True,
         "is_active": True,
     },
@@ -282,26 +408,72 @@ PERMISSIONS = (
         "is_system": True,
         "is_active": True,
     },
+    {
+        "name": "Manage System Settings",
+        "code": "settings.manage",
+        "description": "Full administrative control, ordering, and management of system and app configurations.",
+        "resource": "settings",
+        "action": "manage",
+        "is_system": True,
+        "is_active": True,
+    },
+    # System Activity Logs permissions
+    {
+        "name": "Read System Activity Logs",
+        "code": "activity_logs.read",
+        "description": "View system activity and audit logs.",
+        "resource": "activity_logs",
+        "action": "read",
+        "is_system": True,
+        "is_active": True,
+    },
+    {
+        "name": "Manage System Activity Logs",
+        "code": "activity_logs.manage",
+        "description": "Full administrative control and audit management of system activity logs.",
+        "resource": "activity_logs",
+        "action": "manage",
+        "is_system": True,
+        "is_active": True,
+    },
+    {
+        "name": "Delete System Activity Logs",
+        "code": "activity_logs.delete",
+        "description": "Permanently delete system activity and audit trail records.",
+        "resource": "activity_logs",
+        "action": "delete",
+        "is_system": True,
+        "is_active": True,
+    },
 )
 
 
 async def seed_permissions(db: AsyncSession) -> None:
     created = 0
+    updated = 0
     existing = 0
 
     for permission_data in PERMISSIONS:
-        _, was_created = await get_or_create(
-            db,
-            Permission,
-            lookup={"code": permission_data["code"]},
-            defaults={
-                key: value for key, value in permission_data.items() if key != "code"
-            },
-        )
+        stmt = select(Permission).where(Permission.code == permission_data["code"])
+        permission = (await db.execute(stmt)).scalar_one_or_none()
 
-        if was_created:
-            created += 1
+        if permission is not None:
+            # Synchronize name, description, and metadata
+            needs_update = False
+            for field in ["name", "description", "resource", "action"]:
+                if getattr(permission, field) != permission_data[field]:
+                    setattr(permission, field, permission_data[field])
+                    needs_update = True
+            if needs_update:
+                updated += 1
+            else:
+                existing += 1
         else:
-            existing += 1
+            permission = Permission(**permission_data)
+            db.add(permission)
+            await db.flush()
+            created += 1
 
-    print(f"Permissions: {created} created, {existing} already existed.")
+    print(
+        f"Permissions: {created} created, {updated} updated with descriptive definitions, {existing} unchanged."
+    )

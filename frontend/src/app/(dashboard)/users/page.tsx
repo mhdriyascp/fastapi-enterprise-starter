@@ -7,6 +7,7 @@ import { useToast } from '@/lib/toast-context';
 import { PagedResponse, User, UserUpdatePayload } from '@/lib/types';
 import { FormattedDate } from '@/components/ui/formatted-date';
 import { ConfirmationModal } from '@/components/ui/confirmation-modal';
+import { useDefaultPageSize } from '@/lib/use-page-size';
 import {
   ChevronLeft,
   ChevronRight,
@@ -28,6 +29,10 @@ import {
   CheckCircle2,
   XCircle,
   Plus,
+  CheckSquare,
+  Square,
+  MinusSquare,
+  RotateCcw,
 } from 'lucide-react';
 
 interface RoleOption {
@@ -58,7 +63,7 @@ export default function UsersPage() {
 
   const [data, setData] = useState<PagedResponse<User> | null>(null);
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(10);
+  const [pageSize] = useDefaultPageSize(15);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'suspended' | 'disabled' | 'pending'>('all');
@@ -104,19 +109,36 @@ export default function UsersPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [togglingUserId, setTogglingUserId] = useState<string | null>(null);
 
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isBulkDeleting, setIsBulkDeleting] = useState<boolean>(false);
+  const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState<boolean>(false);
+  const [bulkHardDeleteRequested, setBulkHardDeleteRequested] = useState<boolean>(false);
+  const [bulkRestoreConfirmOpen, setBulkRestoreConfirmOpen] = useState<boolean>(false);
+  const [isBulkRestoring, setIsBulkRestoring] = useState<boolean>(false);
+  const [restoreCandidate, setRestoreCandidate] = useState<User | null>(null);
+  const [isHardDelete, setIsHardDelete] = useState<boolean>(false);
+
   // Authority Flags
   const isCurrentSuperAdmin = useMemo(() => {
     return Boolean(
       currentUser?.is_super_admin ||
-      currentUser?.roles?.includes('super_admin') ||
-      currentUser?.email?.toLowerCase() === 'superadmin@gmail.com'
+      currentUser?.roles?.some((r) =>
+        ['super_admin', 'superadmin', 'admin', 'system_admin'].includes(r.toLowerCase())
+      )
     );
   }, [currentUser]);
+
+  const canRestore = Boolean(isCurrentSuperAdmin || currentUser?.permissions?.includes('user.restore') || currentUser?.permissions?.includes('*.manage'));
+  const canHardDelete = Boolean(isCurrentSuperAdmin || currentUser?.is_super_admin || currentUser?.permissions?.includes('user.hard_delete') || currentUser?.permissions?.includes('*.hard_delete'));
 
   const reloadUsers = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await apiFetch<PagedResponse<User>>(`/users?page=${page}&page_size=${pageSize}`);
+      const shouldIncludeDeleted = isCurrentSuperAdmin || canRestore || canHardDelete;
+      const url = shouldIncludeDeleted
+        ? `/users?page=${page}&page_size=${pageSize}&include_deleted=true`
+        : `/users?page=${page}&page_size=${pageSize}`;
+      const res = await apiFetch<PagedResponse<User>>(url);
       setData(res);
     } catch (err) {
       console.error('Failed to fetch users', err);
@@ -124,13 +146,17 @@ export default function UsersPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [page, pageSize, toast]);
+  }, [page, pageSize, toast, isCurrentSuperAdmin, canRestore, canHardDelete]);
 
   useEffect(() => {
     let ignore = false;
     async function initUsers() {
       try {
-        const res = await apiFetch<PagedResponse<User>>(`/users?page=${page}&page_size=${pageSize}`);
+        const shouldIncludeDeleted = isCurrentSuperAdmin || canRestore || canHardDelete;
+        const url = shouldIncludeDeleted
+          ? `/users?page=${page}&page_size=${pageSize}&include_deleted=true`
+          : `/users?page=${page}&page_size=${pageSize}`;
+        const res = await apiFetch<PagedResponse<User>>(url);
         if (!ignore) {
           setData(res);
           setIsLoading(false);
@@ -146,7 +172,7 @@ export default function UsersPage() {
     return () => {
       ignore = true;
     };
-  }, [page, pageSize]);
+  }, [page, pageSize, isCurrentSuperAdmin, canRestore, canHardDelete]);
 
   // Helper to determine if target user is super admin
   const isUserSuperAdmin = (u: User): boolean => {
@@ -399,11 +425,15 @@ export default function UsersPage() {
 
     setIsDeleting(true);
     try {
-      await apiFetch<void>(`/users/${deletingUser.id}`, {
+      await apiFetch<void>(`/users/${deletingUser.id}?hard_delete=${isHardDelete}`, {
         method: 'DELETE',
       });
 
-      toast.success(`User ${deletingUser.display_name || deletingUser.email} has been deleted.`);
+      toast.success(
+        isHardDelete
+          ? `User ${deletingUser.display_name || deletingUser.email} has been permanently deleted.`
+          : `User ${deletingUser.display_name || deletingUser.email} has been deactivated / soft-deleted.`
+      );
       setDeletingUser(null);
       if (viewingUser?.id === deletingUser.id) {
         setViewingUser(null);
@@ -415,6 +445,117 @@ export default function UsersPage() {
     } finally {
       setIsDeleting(false);
     }
+  };
+
+  const handleConfirmRestore = async () => {
+    if (!restoreCandidate) return;
+
+    try {
+      await apiFetch<User>(`/users/${restoreCandidate.id}/restore`, {
+        method: 'POST',
+      });
+
+      toast.success(`User ${restoreCandidate.display_name || restoreCandidate.email} has been restored.`);
+      setRestoreCandidate(null);
+      if (viewingUser?.id === restoreCandidate.id) {
+        setViewingUser(null);
+      }
+      reloadUsers();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to restore user.';
+      toast.error(msg);
+    }
+  };
+
+  const handleToggleSelectAll = (items: User[]) => {
+    if (selectedIds.size === items.length && items.length > 0) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(items.map((u) => u.id)));
+    }
+  };
+
+  const handleToggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    setIsBulkDeleting(true);
+    let successCount = 0;
+    const errors: string[] = [];
+
+    for (const userId of selectedIds) {
+      if (currentUser?.id === userId) {
+        errors.push('You cannot delete your own active account.');
+        continue;
+      }
+      try {
+        const query = bulkHardDeleteRequested ? '?hard_delete=true' : '?hard_delete=false';
+        await apiFetch(`/users/${userId}${query}`, {
+          method: 'DELETE',
+        });
+        successCount++;
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Unknown error';
+        errors.push(msg);
+      }
+    }
+
+    if (successCount > 0) {
+      toast.success(
+        bulkHardDeleteRequested
+          ? `Successfully purged ${successCount} user(s) permanently.`
+          : `Successfully soft-deleted ${successCount} user(s).`
+      );
+    }
+    if (errors.length > 0) {
+      toast.error(`Failed to delete ${errors.length} user(s): ${errors[0]}`);
+    }
+
+    setSelectedIds(new Set());
+    setBulkDeleteConfirmOpen(false);
+    setIsBulkDeleting(false);
+    reloadUsers();
+  };
+
+  const handleBulkRestore = async () => {
+    if (selectedIds.size === 0) return;
+    setIsBulkRestoring(true);
+    let successCount = 0;
+    const errors: string[] = [];
+
+    for (const userId of selectedIds) {
+      try {
+        await apiFetch(`/users/${userId}/restore`, {
+          method: 'POST',
+        });
+        successCount++;
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Unknown error';
+        errors.push(msg);
+      }
+    }
+
+    if (successCount > 0) {
+      toast.success(`Successfully restored ${successCount} user(s).`);
+    }
+    if (errors.length > 0) {
+      toast.error(`Failed to restore ${errors.length} user(s): ${errors[0]}`);
+    }
+
+    setSelectedIds(new Set());
+    setBulkRestoreConfirmOpen(false);
+    setIsBulkRestoring(false);
+    reloadUsers();
   };
 
   // Toggle role selection in edit form
@@ -455,6 +596,9 @@ export default function UsersPage() {
       }
 
       // Status filter
+      if (statusFilter === 'all' && u.status === 'disabled') {
+        return false;
+      }
       if (statusFilter !== 'all' && u.status !== statusFilter) {
         return false;
       }
@@ -462,6 +606,23 @@ export default function UsersPage() {
       return true;
     });
   }, [data?.items, search, statusFilter]);
+
+  const selectedUsers = useMemo(
+    () => (data?.items || []).filter((u) => selectedIds.has(u.id)),
+    [data?.items, selectedIds]
+  );
+  const allSelectedAreDisabled =
+    selectedUsers.length > 0 && selectedUsers.every((u) => u.status === 'disabled');
+
+  const userStatusCounts = useMemo(() => {
+    const all = data?.items || [];
+    return {
+      all: all.filter((u) => u.status !== 'disabled').length,
+      active: all.filter((u) => u.status === 'active').length,
+      suspended: all.filter((u) => u.status === 'suspended').length,
+      disabled: all.filter((u) => u.status === 'disabled').length,
+    };
+  }, [data?.items]);
 
   // Statistics Summary
   const stats = useMemo(() => {
@@ -483,6 +644,9 @@ export default function UsersPage() {
             <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
               User Administration
             </h1>
+            <span className="badge badge-neutral" style={{ fontWeight: 600, fontSize: '0.75rem' }}>
+              {data?.total ?? stats.total} Users
+            </span>
             {isCurrentSuperAdmin ? (
               <span className="badge badge-primary" title="You have Super Administrator authority">
                 <Shield size={12} style={{ marginRight: '4px' }} /> Super Admin Access
@@ -499,6 +663,54 @@ export default function UsersPage() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          {selectedIds.size > 0 && (statusFilter === 'disabled' || allSelectedAreDisabled) ? (
+            <>
+              {canRestore && (
+                <button
+                  type="button"
+                  onClick={() => setBulkRestoreConfirmOpen(true)}
+                  className="btn btn-restore"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.825rem' }}
+                  title={`Restore ${selectedIds.size} selected user(s)`}
+                >
+                  <RotateCcw size={14} />
+                  <span>Restore ({selectedIds.size})</span>
+                </button>
+              )}
+              {canHardDelete && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBulkHardDeleteRequested(true);
+                    setBulkDeleteConfirmOpen(true);
+                  }}
+                  className="btn btn-danger"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.825rem' }}
+                  title={`Permanently purge ${selectedIds.size} selected user(s)`}
+                >
+                  <Trash2 size={14} />
+                  <span>Purge ({selectedIds.size})</span>
+                </button>
+              )}
+            </>
+          ) : (
+            selectedIds.size > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setBulkHardDeleteRequested(false);
+                  setBulkDeleteConfirmOpen(true);
+                }}
+                className="btn btn-danger"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.825rem' }}
+                title={`Delete ${selectedIds.size} selected user(s)`}
+              >
+                <Trash2 size={14} />
+                <span>Delete ({selectedIds.size})</span>
+              </button>
+            )
+          )}
+
           <button
             type="button"
             onClick={() => setIsCreateModalOpen(true)}
@@ -617,24 +829,57 @@ export default function UsersPage() {
             )}
           </div>
 
-          {/* Status Filter */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            {(['all', 'active', 'suspended', 'disabled'] as const).map((st) => (
-              <button
-                key={st}
-                type="button"
-                onClick={() => setStatusFilter(st)}
-                className={`btn ${statusFilter === st ? 'btn-primary' : 'btn-secondary'}`}
-                style={{
-                  padding: '0.35rem 0.75rem',
-                  fontSize: '0.78rem',
-                  height: '34px',
-                  textTransform: 'capitalize',
-                }}
-              >
-                {st}
-              </button>
-            ))}
+          {/* Status Filter Segmented Control */}
+          <div
+            style={{
+              display: 'inline-flex',
+              padding: '2px',
+              background: 'var(--bg-input)',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--border-subtle)',
+            }}
+          >
+            {(['all', 'active', 'suspended', 'disabled'] as const).map((st) => {
+              const count = userStatusCounts[st];
+              return (
+                <button
+                  key={st}
+                  type="button"
+                  onClick={() => {
+                    setStatusFilter(st);
+                    setSelectedIds(new Set());
+                  }}
+                  style={{
+                    padding: '0.35rem 0.75rem',
+                    fontSize: '0.78rem',
+                    fontWeight: 600,
+                    textTransform: 'capitalize',
+                    border: 'none',
+                    borderRadius: 'calc(var(--radius-md) - 2px)',
+                    background: statusFilter === st ? 'var(--accent-primary)' : 'transparent',
+                    color: statusFilter === st ? '#ffffff' : 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    transition: 'var(--transition)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.35rem',
+                  }}
+                >
+                  <span>{st}</span>
+                  <span
+                    style={{
+                      fontSize: '0.7rem',
+                      opacity: 0.85,
+                      padding: '0 4px',
+                      borderRadius: '4px',
+                      background: statusFilter === st ? 'rgba(255,255,255,0.2)' : 'var(--bg-card)',
+                    }}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -648,6 +893,32 @@ export default function UsersPage() {
         <table className="data-table">
           <thead>
             <tr>
+              <th style={{ width: '45px', textAlign: 'center' }}>#</th>
+              <th style={{ width: '40px', textAlign: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => handleToggleSelectAll(filteredUsers)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: selectedIds.size > 0 ? 'var(--accent-primary)' : 'var(--text-muted)',
+                    padding: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  title={selectedIds.size === filteredUsers.length && filteredUsers.length > 0 ? 'Deselect all' : 'Select all'}
+                >
+                  {selectedIds.size === filteredUsers.length && filteredUsers.length > 0 ? (
+                    <CheckSquare size={16} />
+                  ) : selectedIds.size > 0 ? (
+                    <MinusSquare size={16} />
+                  ) : (
+                    <Square size={16} />
+                  )}
+                </button>
+              </th>
               <th>User Name &amp; Profile</th>
               <th>Contact Email</th>
               <th>Phone</th>
@@ -661,19 +932,46 @@ export default function UsersPage() {
             {isLoading ? (
               [...Array(5)].map((_, i) => (
                 <tr key={i}>
-                  <td colSpan={7}>
+                  <td colSpan={9}>
                     <div className="skeleton" style={{ height: '42px', width: '100%' }} />
                   </td>
                 </tr>
               ))
             ) : filteredUsers.length > 0 ? (
-              filteredUsers.map((user) => {
+              filteredUsers.map((user, index) => {
                 const isSuper = isUserSuperAdmin(user);
                 const { allowed: canEditOrDelete, reason: lockReason } = canModifyUser(user);
                 const isSelf = currentUser?.id === user.id;
 
                 return (
-                  <tr key={user.id} style={{ opacity: user.status === 'disabled' ? 0.6 : 1 }}>
+                  <tr key={user.id} style={{ opacity: user.status === 'disabled' ? 0.6 : 1, background: selectedIds.has(user.id) ? 'rgba(99, 102, 241, 0.06)' : undefined }}>
+                    {/* Sequence Number */}
+                    <td style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 600 }}>
+                      {(page - 1) * pageSize + index + 1}
+                    </td>
+
+                    {/* Selection Checkbox */}
+                    <td style={{ textAlign: 'center' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleSelect(user.id)}
+                        disabled={isSelf}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          cursor: isSelf ? 'not-allowed' : 'pointer',
+                          color: selectedIds.has(user.id) ? 'var(--accent-primary)' : 'var(--text-muted)',
+                          padding: 0,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          opacity: isSelf ? 0.4 : 1,
+                        }}
+                      >
+                        {selectedIds.has(user.id) ? <CheckSquare size={16} /> : <Square size={16} />}
+                      </button>
+                    </td>
+
                     {/* User Identity Column */}
                     <td>
                       <div
@@ -877,30 +1175,65 @@ export default function UsersPage() {
                           <span>Edit</span>
                         </button>
 
-                        {/* Delete Button */}
-                        <button
-                          type="button"
-                          onClick={() => openDeleteModal(user)}
-                          disabled={!canEditOrDelete || isSelf}
-                          className="btn btn-secondary"
-                          style={{
-                            padding: '0.35rem 0.6rem',
-                            fontSize: '0.75rem',
-                            color: canEditOrDelete && !isSelf ? '#ef4444' : 'var(--text-muted)',
-                            opacity: canEditOrDelete && !isSelf ? 1 : 0.45,
-                            cursor: canEditOrDelete && !isSelf ? 'pointer' : 'not-allowed',
-                          }}
-                          title={
-                            isSelf
-                              ? 'Cannot delete your own account'
-                              : canEditOrDelete
-                              ? 'Deactivate user account'
-                              : lockReason
-                          }
-                          id={`btn-delete-${user.id}`}
-                        >
-                          <Trash2 size={13} />
-                        </button>
+                        {user.status === 'disabled' ? (
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                            {canRestore && (
+                              <button
+                                type="button"
+                                onClick={() => setRestoreCandidate(user)}
+                                className="btn btn-restore"
+                                style={{ padding: '0.35rem 0.6rem', fontSize: '0.75rem' }}
+                                title="Restore user account to active status"
+                                id={`btn-restore-${user.id}`}
+                              >
+                                <RotateCcw size={13} />
+                                <span>Restore</span>
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDeletingUser(user);
+                                setIsHardDelete(true);
+                              }}
+                              disabled={!canEditOrDelete || isSelf}
+                              className="btn btn-danger"
+                              style={{ padding: '0.35rem 0.6rem', fontSize: '0.75rem' }}
+                              title="Permanently purge user account"
+                              id={`btn-purge-${user.id}`}
+                            >
+                              <Trash2 size={13} />
+                              <span>Purge</span>
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsHardDelete(false);
+                              openDeleteModal(user);
+                            }}
+                            disabled={!canEditOrDelete || isSelf}
+                            className="btn btn-secondary"
+                            style={{
+                              padding: '0.35rem 0.6rem',
+                              fontSize: '0.75rem',
+                              color: canEditOrDelete && !isSelf ? '#ef4444' : 'var(--text-muted)',
+                              opacity: canEditOrDelete && !isSelf ? 1 : 0.45,
+                              cursor: canEditOrDelete && !isSelf ? 'pointer' : 'not-allowed',
+                            }}
+                            title={
+                              isSelf
+                                ? 'Cannot delete your own account'
+                                : canEditOrDelete
+                                ? 'Deactivate / soft-delete user account'
+                                : lockReason
+                            }
+                            id={`btn-delete-${user.id}`}
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -908,7 +1241,7 @@ export default function UsersPage() {
               })
             ) : (
               <tr>
-                <td colSpan={8} style={{ textAlign: 'center', padding: '3.5rem', color: 'var(--text-muted)' }}>
+                <td colSpan={9} style={{ textAlign: 'center', padding: '3.5rem', color: 'var(--text-muted)' }}>
                   <AlertCircle size={32} style={{ margin: '0 auto 0.75rem auto', color: 'var(--text-muted)' }} />
                   <div style={{ fontSize: '0.95rem', fontWeight: 600 }}>No users found matching query.</div>
                   <div style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>Try refining your search keyword or status filter.</div>
@@ -919,7 +1252,7 @@ export default function UsersPage() {
         </table>
 
         {/* Pagination Controls */}
-        {data && data.total_pages > 1 && (
+        {data && (data.total ?? 0) > 0 && (
           <div
             style={{
               padding: '1rem 1.5rem',
@@ -1828,22 +2161,120 @@ export default function UsersPage() {
         isOpen={!!deletingUser}
         onClose={() => setDeletingUser(null)}
         onConfirm={handleConfirmDelete}
-        title="Confirm Account Deletion"
-        subtitle="This action performs a soft-deletion and disables account access."
+        title={isHardDelete ? "Permanently Delete User Account?" : "Confirm Account Deactivation"}
+        subtitle={isHardDelete ? "This action permanently purges the user from the database." : "This action performs a soft-deletion and disables account access."}
         message={
           deletingUser ? (
+            isHardDelete ? (
+              <>
+                Are you sure you want to <strong>permanently purge</strong> user{' '}
+                <strong style={{ color: 'var(--text-primary)' }}>
+                  {deletingUser.display_name || deletingUser.email}
+                </strong>{' '}
+                ({deletingUser.email})? This action <strong>cannot be undone</strong> and all role assignments and user data will be removed.
+              </>
+            ) : (
+              <>
+                Are you sure you want to deactivate user{' '}
+                <strong style={{ color: 'var(--text-primary)' }}>
+                  {deletingUser.display_name || deletingUser.email}
+                </strong>{' '}
+                ({deletingUser.email})? The user can be restored back to active state or permanently purged later.
+              </>
+            )
+          ) : null
+        }
+        confirmLabel={isHardDelete ? "Permanently Delete" : "Deactivate User"}
+        variant="danger"
+        isLoading={isDeleting}
+      />
+
+      {/* Restore Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={!!restoreCandidate}
+        onClose={() => setRestoreCandidate(null)}
+        onConfirm={handleConfirmRestore}
+        title="Restore User Account"
+        subtitle="Reactivates this user account and restores access."
+        message={
+          restoreCandidate ? (
             <>
-              Are you sure you want to deactivate and remove user{' '}
+              Are you sure you want to restore the user account for{' '}
               <strong style={{ color: 'var(--text-primary)' }}>
-                {deletingUser.display_name || deletingUser.email}
+                {restoreCandidate.display_name || restoreCandidate.email}
               </strong>{' '}
-              ({deletingUser.email})?
+              ({restoreCandidate.email})?
             </>
           ) : null
         }
-        confirmLabel="Delete User"
-        variant="danger"
+        confirmLabel="Restore User"
+        variant="primary"
         isLoading={isDeleting}
+      />
+
+      {/* Bulk Delete Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={bulkDeleteConfirmOpen}
+        onClose={() => setBulkDeleteConfirmOpen(false)}
+        onConfirm={handleBulkDelete}
+        title={
+          bulkHardDeleteRequested
+            ? `Permanently Purge ${selectedIds.size} Selected User(s)?`
+            : `Soft Delete ${selectedIds.size} Selected User(s)?`
+        }
+        subtitle={`${selectedIds.size} accounts selected`}
+        message={
+          <div>
+            <p>
+              {bulkHardDeleteRequested ? (
+                <>
+                  Are you sure you want to <strong>permanently purge</strong> the {selectedIds.size} selected user account(s) from the database? This action <strong>cannot be undone</strong>.
+                </>
+              ) : (
+                <>
+                  Are you sure you want to soft delete the {selectedIds.size} selected user account(s)? Their status will be set to <strong>disabled</strong>, where they can be restored or permanently purged later.
+                </>
+              )}
+            </p>
+            {canHardDelete && statusFilter !== 'disabled' && (
+              <div style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <input
+                  type="checkbox"
+                  id="bulk_hard_delete_check"
+                  checked={bulkHardDeleteRequested}
+                  onChange={(e) => setBulkHardDeleteRequested(e.target.checked)}
+                />
+                <label htmlFor="bulk_hard_delete_check" style={{ fontSize: '0.82rem', color: 'var(--danger)', fontWeight: 600 }}>
+                  Permanently purge records immediately (Bypass Trash)
+                </label>
+              </div>
+            )}
+          </div>
+        }
+        confirmLabel={
+          bulkHardDeleteRequested
+            ? `Permanently Purge (${selectedIds.size})`
+            : `Soft Delete (${selectedIds.size})`
+        }
+        variant="danger"
+        isLoading={isBulkDeleting}
+      />
+
+      {/* Bulk Restore Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={bulkRestoreConfirmOpen}
+        onClose={() => setBulkRestoreConfirmOpen(false)}
+        onConfirm={handleBulkRestore}
+        title={`Restore ${selectedIds.size} Selected User(s)?`}
+        subtitle={`${selectedIds.size} accounts selected`}
+        message={
+          <p>
+            Are you sure you want to restore the {selectedIds.size} selected user account(s) back to active status? They will immediately regain operational access.
+          </p>
+        }
+        confirmLabel={`Restore (${selectedIds.size})`}
+        variant="primary"
+        isLoading={isBulkRestoring}
       />
     </div>
   );

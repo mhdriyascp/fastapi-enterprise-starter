@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.inspection import inspect
 
 from app.infrastructure.database.models.system.setting import SystemSetting
+from app.modules.activity_logs.service import record_activity
 from app.modules.settings.schemas import BulkSettingsUpdate, SystemSettingUpdate
 
 logger = logging.getLogger(__name__)
@@ -64,16 +65,36 @@ class SystemSettingService:
         total = await self.db.scalar(select(func.count()).select_from(query.subquery()))
 
         mapper = inspect(SystemSetting)
-        sort_col_name = (
-            sort_by
-            if sort_by in mapper.columns
-            else ("category" if "category" in mapper.columns else "id")
-        )
+        if sort_by in mapper.columns and sort_by != "created_at":
+            sort_col_name = sort_by
+        elif sort_by == "created_at" and "sort_order" in mapper.columns:
+            sort_col_name = "sort_order"
+        else:
+            sort_col_name = "sort_order" if "sort_order" in mapper.columns else "id"
+
         sort_column = getattr(SystemSetting, sort_col_name)
-        order_clause = sort_column.asc() if sort_order == "asc" else sort_column.desc()
+        if sort_col_name == "sort_order" and sort_by == "created_at":
+            order_clause = sort_column.asc()
+        else:
+            order_clause = (
+                sort_column.asc() if sort_order == "asc" else sort_column.desc()
+            )
+
+        if sort_col_name != "sort_order":
+            order_by_args = [
+                order_clause,
+                SystemSetting.sort_order.asc(),
+                SystemSetting.id.asc(),
+            ]
+        else:
+            order_by_args = [
+                order_clause,
+                SystemSetting.category.asc(),
+                SystemSetting.id.asc(),
+            ]
 
         result = await self.db.scalars(
-            query.order_by(order_clause).offset(offset).limit(limit)
+            query.order_by(*order_by_args).offset(offset).limit(limit)
         )
         return list(result.all()), total or 0
 
@@ -166,15 +187,33 @@ class SystemSettingService:
             setting.label = payload.label.strip()
         if payload.description is not None:
             setting.description = payload.description.strip()
+        if payload.sort_order is not None:
+            setting.sort_order = payload.sort_order
         if updated_by_id:
             setting.updated_by_id = updated_by_id
 
         await self.db.commit()
         await self.db.refresh(setting)
+        await record_activity(
+            db=self.db,
+            module="settings",
+            action="UPDATE",
+            entity_type="SystemSetting",
+            entity_id=setting.public_id,
+            entity_name=setting.key,
+            details={
+                "key": setting.key,
+                "value": setting.value,
+                "sort_order": setting.sort_order,
+            },
+            user_id=updated_by_id,
+        )
+        await self.db.commit()
         logger.info(
-            "System setting updated: %s=%s [Operator: %s]",
+            "System setting updated: %s=%s (sort_order=%d) [Operator: %s]",
             setting.key,
             setting.value,
+            setting.sort_order,
             updated_by_id,
         )
         return setting
@@ -187,14 +226,21 @@ class SystemSettingService:
         """Atomically updates multiple system settings by key."""
         updated_settings: list[SystemSetting] = []
 
-        for key, new_value in payload.settings.items():
+        all_keys = set(payload.settings.keys())
+        if payload.sort_orders:
+            all_keys.update(payload.sort_orders.keys())
+
+        for key in all_keys:
             stmt = select(SystemSetting).where(
                 SystemSetting.key == key.strip(),
                 SystemSetting.is_deleted.is_(False),
             )
             setting = (await self.db.execute(stmt)).scalar_one_or_none()
             if setting:
-                setting.value = new_value
+                if key in payload.settings:
+                    setting.value = payload.settings[key]
+                if payload.sort_orders and key in payload.sort_orders:
+                    setting.sort_order = payload.sort_orders[key]
                 if updated_by_id:
                     setting.updated_by_id = updated_by_id
                 updated_settings.append(setting)
@@ -203,6 +249,20 @@ class SystemSettingService:
             await self.db.commit()
             for s in updated_settings:
                 await self.db.refresh(s)
+            await record_activity(
+                db=self.db,
+                module="settings",
+                action="UPDATE",
+                entity_type="SystemSetting",
+                entity_id="bulk",
+                entity_name="Bulk System Settings",
+                details={
+                    "updated_keys": list(payload.settings.keys()),
+                    "updated_sort_orders": list((payload.sort_orders or {}).keys()),
+                },
+                user_id=updated_by_id,
+            )
+            await self.db.commit()
 
         logger.info(
             "Bulk system settings updated (%d keys modified) [Operator: %s]",

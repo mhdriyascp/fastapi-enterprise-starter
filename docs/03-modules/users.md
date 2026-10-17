@@ -42,7 +42,25 @@ The User module encapsulates identity profiles, credentials, state management, a
 | `GET` | `/api/v1/users/{identifier}` | `user.read` | Get user details (dual-lookup: UUID id or UUID public_id) with assigned roles and permissions | `UserResponse` | Yes |
 | `PATCH` | `/api/v1/users/{identifier}` | `user.update` | Update profile, status, and assigned roles (dual-lookup) | `UserResponse` | Yes |
 | `POST` | `/api/v1/users/{identifier}/toggle-status` | `user.update` | Toggle user status (active <-> suspended, dual-lookup) | `UserResponse` | Yes |
-| `DELETE` | `/api/v1/users/{identifier}` | `user.delete` | Soft-delete user account (Super Admin protected, dual-lookup) | `204 No Content` | Yes |
+| `POST` | `/api/v1/users/{identifier}/restore` | `user.update` | Restore soft-deleted / disabled user account back to active | `UserResponse` | Yes |
+| `DELETE` | `/api/v1/users/{identifier}` | `user.delete` | Soft-delete user account (`status='disabled'`, Super Admin protected, dual-lookup) | `204 No Content` | Yes |
+| `DELETE` | `/api/v1/users/{identifier}?hard_delete=true` | `user.delete` | Permanently purge user account (Super Admin protected, dual-lookup) | `204 No Content` | Yes |
+
+---
+
+## User Lifecycle & Governance Cockpit (`frontend/src/app/(dashboard)/users/page.tsx`)
+
+1. **Segmented Status Tab Pills with Live Badge Counts**:
+   - `All (N)`: Active and suspended users (excludes disabled/soft-deleted users).
+   - `Active (N)`: Operable accounts (`status === 'active'`).
+   - `Suspended (N)`: Suspended accounts (`status === 'suspended'`).
+   - `Disabled (N)`: Soft-deleted accounts (`status === 'disabled'`).
+2. **Context-Aware Bulk Action Bar**:
+   - Selecting users in `All`, `Active`, or `Suspended` renders standard `Delete (N)`.
+   - Selecting users in `Disabled` renders `Restore (N)` (emerald `.btn-restore`) and `Purge (N)` (red `.btn-danger`) with explicit multi-user confirmation modals.
+3. **Restoration Workflow**:
+   - Single-user restore via row action icon or bulk restore via top action bar.
+   - Restores user account status back to `active`.
 
 ---
 

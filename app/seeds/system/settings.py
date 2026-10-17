@@ -77,6 +77,16 @@ DEFAULT_SETTINGS = [
     },
     {
         "category": "general",
+        "key": "default_page_size",
+        "value": 15,
+        "value_type": "integer",
+        "label": "Default Page Size",
+        "description": "Default number of records displayed per page across data tables and listing views.",
+        "is_public": True,
+        "is_system": True,
+    },
+    {
+        "category": "general",
         "key": "fiscal_year_start_month",
         "value": 1,
         "value_type": "integer",
@@ -176,6 +186,16 @@ DEFAULT_SETTINGS = [
         "is_public": False,
         "is_system": True,
     },
+    {
+        "category": "security",
+        "key": "administrator_roles",
+        "value": ["super_admin", "admin"],
+        "value_type": "array",
+        "label": "Authorized Administrator Roles",
+        "description": "Role codes recognized with administrative governance privileges by default.",
+        "is_public": False,
+        "is_system": True,
+    },
     # 3. Communications & Notifications
     {
         "category": "notifications",
@@ -215,6 +235,27 @@ DEFAULT_SETTINGS = [
         "label": "Enable Email Notifications",
         "description": "Dispatch automated transactional emails for critical alerts.",
         "is_public": False,
+        "is_system": True,
+    },
+    {
+        "category": "notifications",
+        "key": "notification_modules",
+        "value": [
+            "organizations",
+            "masters",
+            "rbac",
+            "users",
+            "settings",
+            "menus",
+            "activity_logs",
+            "security",
+            "system",
+            "deal",
+        ],
+        "value_type": "array",
+        "label": "Supported Notification Modules",
+        "description": "Standard operational modules permitted for notification dispatches and channel subscriptions.",
+        "is_public": True,
         "is_system": True,
     },
     # 4. Governance & Compliance
@@ -279,17 +320,69 @@ DEFAULT_SETTINGS = [
         "is_public": True,
         "is_system": True,
     },
+    {
+        "category": "features",
+        "key": "show_theme_toggle_in_header",
+        "value": True,
+        "value_type": "boolean",
+        "label": "Header Appearance & Theme Switcher",
+        "description": "Controls visibility of the dark/light/system appearance and theme switcher in the main navigation header.",
+        "is_public": True,
+        "is_system": True,
+    },
+    # 6. Data Retention & Deletion Policy
+    {
+        "category": "data_retention",
+        "key": "permanent_delete_roles",
+        "value": ["super_admin", "admin"],
+        "value_type": "array",
+        "label": "Permanent Delete Authorized Roles",
+        "description": "Enterprise roles permitted to permanently delete records from the database.",
+        "is_public": False,
+        "is_system": True,
+    },
+    {
+        "category": "data_retention",
+        "key": "soft_delete_only_for_non_admins",
+        "value": True,
+        "value_type": "boolean",
+        "label": "Soft Delete Only For Non-Administrators",
+        "description": "When enabled, delete requests by non-administrators perform soft-deletion.",
+        "is_public": False,
+        "is_system": True,
+    },
+    {
+        "category": "data_retention",
+        "key": "permanent_delete_exceptions",
+        "value": [],
+        "value_type": "array",
+        "label": "Permanent Delete Policy Exceptions",
+        "description": "Specific module exceptions allowing non-admin permanent deletion or enforcing admin soft-deletion.",
+        "is_public": False,
+        "is_system": True,
+    },
+    {
+        "category": "data_retention",
+        "key": "admin_view_all_statuses",
+        "value": True,
+        "value_type": "boolean",
+        "label": "Administrators View All Record Statuses",
+        "description": "When enabled, platform administrators view records across all statuses (active, inactive, deleted) on their listings.",
+        "is_public": False,
+        "is_system": True,
+    },
 ]
 
 
 async def seed_system_settings(db: AsyncSession) -> None:
     """Seeds default enterprise system settings and application configurations."""
-    for setting_data in DEFAULT_SETTINGS:
+    for idx, setting_data in enumerate(DEFAULT_SETTINGS):
         query = select(SystemSetting).where(
             SystemSetting.category == setting_data["category"],
             SystemSetting.key == setting_data["key"],
         )
         existing = (await db.execute(query)).scalar_one_or_none()
+        default_order = setting_data.get("sort_order", (idx + 1) * 10)
 
         if existing is None:
             new_setting = SystemSetting(
@@ -301,7 +394,10 @@ async def seed_system_settings(db: AsyncSession) -> None:
                 description=setting_data["description"],
                 is_public=setting_data["is_public"],
                 is_system=setting_data["is_system"],
+                sort_order=default_order,
             )
             db.add(new_setting)
+        elif existing.sort_order == 0:
+            existing.sort_order = default_order
 
     await db.commit()

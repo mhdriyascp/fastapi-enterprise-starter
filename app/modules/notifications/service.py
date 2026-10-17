@@ -5,6 +5,7 @@ from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.database.models.system.notification import Notification
+from app.infrastructure.database.models.system.setting import SystemSetting
 from app.modules.notifications.schemas import NotificationCreate
 
 
@@ -71,6 +72,37 @@ class NotificationService:
             )
         )
         return (await self.db.execute(stmt)).scalar_one()
+
+    async def get_supported_modules(self) -> list[str]:
+        """Fetches operational modules for notifications dynamically from System Settings."""
+        try:
+            stmt = select(SystemSetting.value).where(
+                SystemSetting.category == "notifications",
+                SystemSetting.key == "notification_modules",
+            )
+            res = (await self.db.execute(stmt)).scalar_one_or_none()
+            if isinstance(res, list):
+                configured_modules = [
+                    str(m).strip().lower() for m in res if str(m).strip()
+                ]
+                # Return strictly the administrator-configured modules
+                if configured_modules:
+                    return configured_modules
+        except Exception:
+            pass
+
+        return [
+            "organizations",
+            "masters",
+            "rbac",
+            "users",
+            "settings",
+            "menus",
+            "activity_logs",
+            "security",
+            "system",
+            "deal",
+        ]
 
     async def create_notification(self, data: NotificationCreate) -> Notification:
         """Creates and commits a new notification."""

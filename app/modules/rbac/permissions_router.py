@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies.permissions import require_permission
@@ -18,6 +18,7 @@ from app.modules.rbac.service import (
     SystemPermissionError,
 )
 from app.modules.users.models import User
+from app.shared.deletion_policy import is_user_authorized_for_hard_delete
 from app.shared.pagination import PaginationParams, get_pagination
 from app.shared.response import PagedResponse
 
@@ -180,6 +181,8 @@ async def update_permission(
 @permissions_router.delete(
     "/{identifier}",
     status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete or deactivate permission",
+    description="Soft-deletes or permanently purges a permission based on operator privileges.",
 )
 async def delete_permission(
     identifier: Annotated[
@@ -197,6 +200,12 @@ async def delete_permission(
         User,
         Depends(require_permission("permission.delete")),
     ],
+    hard_delete: Annotated[
+        bool | None,
+        Query(
+            description="Set true for permanent purge, false for soft-delete. Defaults based on user permissions.",
+        ),
+    ] = None,
 ) -> Response:
     str_val = identifier.strip() if identifier else ""
     if not str_val or str_val.lower() in ("null", "undefined", "none"):
@@ -204,10 +213,17 @@ async def delete_permission(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Permission identifier cannot be null or empty.",
         )
+    can_hard_delete = await is_user_authorized_for_hard_delete(db, current_user, "rbac")
+    if hard_delete is True and not can_hard_delete:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to permanently delete permissions. Only soft-deletion is permitted based on your RBAC permissions.",
+        )
+    effective_hard_delete = bool(hard_delete)
     service = PermissionService(db)
 
     try:
-        await service.delete_permission(str_val)
+        await service.delete_permission(str_val, hard_delete=effective_hard_delete)
     except PermissionNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -222,3 +238,51 @@ async def delete_permission(
     return Response(
         status_code=status.HTTP_204_NO_CONTENT,
     )
+
+
+@permissions_router.post(
+    "/{identifier}/restore",
+    response_model=PermissionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Restore soft-deleted or inactive permission",
+    description="Restores a previously deactivated permission back to active status.",
+)
+async def restore_permission(
+    identifier: Annotated[
+        str,
+        Path(
+            description="Unique identifier of the permission (UUID or code)",
+            examples=["user.read", "018f3a2b-c4d5-7e8f-9a0b-1c2d3e4f5a6b"],
+        ),
+    ],
+    db: Annotated[
+        AsyncSession,
+        Depends(get_db_session),
+    ],
+    current_user: Annotated[
+        User,
+        Depends(require_permission("permission.restore")),
+    ],
+) -> PermissionResponse:
+    str_val = identifier.strip() if identifier else ""
+    if not str_val or str_val.lower() in ("null", "undefined", "none"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Permission identifier cannot be null or empty.",
+        )
+    service = PermissionService(db)
+
+    try:
+        permission = await service.restore_permission(str_val)
+    except PermissionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except PermissionInUseError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+    return PermissionResponse.model_validate(permission)

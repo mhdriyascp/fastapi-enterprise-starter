@@ -97,6 +97,10 @@ export interface MenuItem {
   order_no?: number;
   /** Whether this menu item is currently enabled in navigation */
   is_active: boolean;
+  /** Whether this menu item has been soft-deleted */
+  is_deleted?: boolean;
+  /** UTC timestamp of soft deletion */
+  deleted_at?: string | null;
   /** Whether the route opens in a new external browser tab */
   is_external?: boolean;
   /** Optional visual badge tag (e.g., 'New', 'v2') */
@@ -212,6 +216,7 @@ export interface OrganizationCreateInput {
  */
 export interface OrganizationUpdateInput {
   name?: string;
+  code?: string;
   legal_name?: string | null;
   registration_number?: string | null;
   tax_registration_number?: string | null;
@@ -233,6 +238,8 @@ export interface Role {
   description: string | null;
   is_system: boolean;
   is_active: boolean;
+  is_deleted?: boolean;
+  deleted_at?: string | null;
   created_at: string;
   updated_at: string | null;
 }
@@ -250,6 +257,8 @@ export interface Permission {
   action: string;
   is_system: boolean;
   is_active: boolean;
+  is_deleted?: boolean;
+  deleted_at?: string | null;
   created_at: string;
   updated_at: string | null;
 }
@@ -262,6 +271,7 @@ export interface RoleCreateInput {
 
 export interface RoleUpdateInput {
   name?: string;
+  code?: string;
   description?: string | null;
   is_active?: boolean;
 }
@@ -295,8 +305,8 @@ export interface NotificationItem {
   title: string;
   /** Detailed content body */
   message: string;
-  /** Event taxonomy classification */
-  type: 'deal' | 'security' | 'tenant' | 'system';
+  /** Event module taxonomy classification */
+  type: string;
   /** Optional deep-link destination URL */
   link?: string | null;
   /** Read status flag */
@@ -342,6 +352,8 @@ export interface MasterCountry {
   iso3_code?: string | null;
   name: string;
   phone_code?: string | null;
+  default_currency_id?: number | null;
+  default_currency?: MasterCurrency | null;
   is_active: boolean;
 }
 
@@ -364,6 +376,7 @@ export interface MasterCity {
 }
 
 export interface MasterCurrency {
+  id?: number;
   public_id: string;
   code: string;
   name: string;
@@ -476,6 +489,7 @@ export interface SystemSetting {
   description?: string | null;
   is_public: boolean;
   is_system: boolean;
+  sort_order: number;
   created_at: string;
   updated_at?: string | null;
 }
@@ -484,14 +498,37 @@ export interface SystemSettingUpdatePayload {
   value: SettingValue;
   label?: string;
   description?: string;
+  sort_order?: number;
 }
 
 export interface BulkSettingsUpdatePayload {
   settings: Record<string, SettingValue>;
+  sort_orders?: Record<string, number>;
 }
 
 export interface PublicSettingsResponse {
   settings: Record<string, SettingValue>;
 }
+
+/**
+ * Activity log entry representing system-wide mutation audit records.
+ * Mirrored from FastAPI Pydantic schema: app/modules/activity_logs/schemas.py (ActivityLogResponse).
+ */
+export interface ActivityLog {
+  id: number;
+  public_id: string;
+  module: string;
+  action: string;
+  entity_type: string;
+  entity_id: string;
+  entity_name: string | null;
+  details: Record<string, unknown> | null;
+  user_id: string | null;
+  user_email: string | null;
+  ip_address: string | null;
+  request_id: string | null;
+  created_at: string;
+}
+
 
 

@@ -20,6 +20,7 @@ class SystemSettingResponse(BaseSchema):
     description: str | None = None
     is_public: bool
     is_system: bool
+    sort_order: int = 0
     created_at: datetime
     updated_at: datetime | None = None
 
@@ -30,6 +31,9 @@ class SystemSettingUpdate(BaseModel):
     value: Any = Field(description="The updated setting value matching its value_type")
     label: str | None = Field(default=None, max_length=150)
     description: str | None = Field(default=None, max_length=500)
+    sort_order: int | None = Field(
+        default=None, description="Display ordering priority", ge=0
+    )
 
 
 class BulkSettingsUpdate(BaseModel):
@@ -37,6 +41,10 @@ class BulkSettingsUpdate(BaseModel):
 
     settings: dict[str, Any] = Field(
         description="Key-value mapping of setting key to new value, e.g. {'company_name': 'Acme Corp'}"
+    )
+    sort_orders: dict[str, int] | None = Field(
+        default=None,
+        description="Optional key-to-sort_order priority mapping, e.g. {'company_name': 10}",
     )
 
 

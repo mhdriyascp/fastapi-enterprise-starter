@@ -470,6 +470,7 @@ export default function DashboardOverviewPage() {
             <table className="data-table">
               <thead>
                 <tr>
+                  <th style={{ width: '45px', textAlign: 'center' }}>#</th>
                   <th>Account Name</th>
                   <th>System Code</th>
                   <th>Tier & Status</th>
@@ -478,13 +479,16 @@ export default function DashboardOverviewPage() {
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td colSpan={3}>
+                    <td colSpan={4}>
                       <div className="skeleton" style={{ height: '35px', width: '100%' }} />
                     </td>
                   </tr>
                 ) : recentOrgs.length > 0 ? (
-                  recentOrgs.map((org) => (
+                  recentOrgs.map((org, index) => (
                     <tr key={org.id}>
+                      <td style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 600 }}>
+                        {index + 1}
+                      </td>
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
                           <div
@@ -521,7 +525,7 @@ export default function DashboardOverviewPage() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={3} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '1.5rem' }}>
+                    <td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '1.5rem' }}>
                       No organization accounts provisioned.
                     </td>
                   </tr>
@@ -552,6 +556,7 @@ export default function DashboardOverviewPage() {
             <table className="data-table">
               <thead>
                 <tr>
+                  <th style={{ width: '45px', textAlign: 'center' }}>#</th>
                   <th>Contact</th>
                   <th>Status</th>
                   <th>Joined</th>
@@ -560,13 +565,16 @@ export default function DashboardOverviewPage() {
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td colSpan={3}>
+                    <td colSpan={4}>
                       <div className="skeleton" style={{ height: '35px', width: '100%' }} />
                     </td>
                   </tr>
                 ) : recentUsers.length > 0 ? (
-                  recentUsers.map((u) => (
+                  recentUsers.map((u, index) => (
                     <tr key={u.id}>
+                      <td style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 600 }}>
+                        {index + 1}
+                      </td>
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
                           <div
@@ -608,7 +616,7 @@ export default function DashboardOverviewPage() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={3} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '1.5rem' }}>
+                    <td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '1.5rem' }}>
                       No contact records found.
                     </td>
                   </tr>

@@ -9,6 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import DeclarativeBase
 
+from app.modules.activity_logs.service import record_activity
+
 
 def generate_master_code(name_or_label: str, max_length: int = 30) -> str:
     """Generates an alphanumeric uppercase system code from a master name or label."""
@@ -39,6 +41,7 @@ async def list_records(
     sort_order: str = "desc",
     is_active: bool | None = None,
     filters: dict[str, Any] | None = None,
+    include_deleted: bool = False,
 ) -> tuple[list[Any], int]:
     query = select(model)
     mapper = inspect(model)
@@ -75,7 +78,7 @@ async def list_records(
                 or_(*(column.ilike(term) for column in searchable_columns))
             )
 
-    if "is_deleted" in mapper.columns:
+    if "is_deleted" in mapper.columns and not include_deleted:
         query = query.where(model.is_deleted.is_(False))
 
     if is_active is not None and "is_active" in mapper.columns:
@@ -103,6 +106,7 @@ async def get_record(
     identifier: int | UUID | str,
     *,
     include_inactive: bool = False,
+    include_deleted: bool = False,
 ) -> Any:
     if identifier is None:
         raise MasterValidationError(
@@ -137,7 +141,7 @@ async def get_record(
     else:
         query = query.where(model.public_id == resolved_id)
 
-    if "is_deleted" in mapper.columns:
+    if "is_deleted" in mapper.columns and not include_deleted:
         query = query.where(model.is_deleted.is_(False))
 
     if not include_inactive and "is_active" in mapper.columns:
@@ -166,6 +170,8 @@ async def resolve_foreign_keys(
     data.pop("state_public_id", None)
     data.pop("city_public_id", None)
     data.pop("address_type_public_id", None)
+    data.pop("currency_public_id", None)
+    data.pop("default_currency_public_id", None)
 
     # Clean up and retain only model columns
     return {k: v for k, v in data.items() if k in mapper.columns}
@@ -216,6 +222,18 @@ async def create_record(
     try:
         await db.commit()
         await db.refresh(record)
+        await record_activity(
+            db=db,
+            module="masters",
+            action="CREATE",
+            entity_type=model.__name__,
+            entity_id=getattr(record, "public_id", getattr(record, "id", "")),
+            entity_name=getattr(
+                record, "name", getattr(record, "label", getattr(record, "code", None))
+            ),
+            details={"code": getattr(record, "code", None)},
+        )
+        await db.commit()
     except IntegrityError as exc:
         await db.rollback()
         err_msg = str(getattr(exc, "orig", exc))
@@ -240,6 +258,28 @@ async def update_record(
     resolved_data = await resolve_foreign_keys(db, model, data)
     mapper = inspect(model)
 
+    manual_code_tables = {"countries", "states", "currencies"}
+    table_name = getattr(model, "__tablename__", "")
+    if (
+        table_name not in manual_code_tables
+        and "code" in mapper.columns
+        and "code" not in data
+        and any(k in resolved_data for k in ("name", "label", "title"))
+    ):
+        source_val = (
+            resolved_data.get("name")
+            or resolved_data.get("label")
+            or resolved_data.get("title")
+            or ""
+        )
+        if source_val:
+            col = mapper.columns["code"]
+            max_len = getattr(col.type, "length", 30) or 30
+            generated_code = generate_master_code(str(source_val), max_len)
+            if table_name == "languages":
+                generated_code = generated_code.lower()
+            resolved_data["code"] = generated_code
+
     for field, value in resolved_data.items():
         if field in mapper.columns:
             col = mapper.columns[field]
@@ -258,6 +298,18 @@ async def update_record(
     try:
         await db.commit()
         await db.refresh(record)
+        await record_activity(
+            db=db,
+            module="masters",
+            action="UPDATE",
+            entity_type=model.__name__,
+            entity_id=getattr(record, "public_id", getattr(record, "id", "")),
+            entity_name=getattr(
+                record, "name", getattr(record, "label", getattr(record, "code", None))
+            ),
+            details={"updated_fields": list(resolved_data.keys())},
+        )
+        await db.commit()
     except IntegrityError as exc:
         await db.rollback()
         err_msg = str(getattr(exc, "orig", exc))
@@ -276,23 +328,113 @@ async def deactivate_record(
     db: AsyncSession,
     model: type[DeclarativeBase],
     identifier: int | UUID | str,
+    *,
+    hard_delete: bool = False,
 ) -> None:
-    record = await get_record(db, model, identifier)
+    record = await get_record(
+        db,
+        model,
+        identifier,
+        include_inactive=True,
+        include_deleted=True,
+    )
 
-    if not hasattr(record, "is_active") and not hasattr(record, "is_deleted"):
+    if (
+        not hard_delete
+        and not hasattr(record, "is_active")
+        and not hasattr(record, "is_deleted")
+    ):
         raise MasterValidationError("This master does not support deactivation.")
 
-    if hasattr(record, "is_active"):
-        record.is_active = False
+    # Idempotent soft delete: if already soft-deleted and soft delete requested
+    if not hard_delete and getattr(record, "is_deleted", False):
+        if hasattr(record, "is_active") and record.is_active:
+            record.is_active = False
+            await db.commit()
+        return
 
-    if hasattr(record, "is_deleted"):
-        record.is_deleted = True
-        record.deleted_at = datetime.now(UTC)
+    entity_id = getattr(record, "public_id", getattr(record, "id", ""))
+    entity_name = getattr(
+        record, "name", getattr(record, "label", getattr(record, "code", None))
+    )
+
+    if hard_delete:
+        await db.delete(record)
+    else:
+        if hasattr(record, "is_active"):
+            record.is_active = False
+
+        if hasattr(record, "is_deleted"):
+            record.is_deleted = True
+            record.deleted_at = datetime.now(UTC)
 
     try:
+        await db.commit()
+        await record_activity(
+            db=db,
+            module="masters",
+            action="DELETE"
+            if (hard_delete or getattr(record, "is_deleted", False))
+            else "DEACTIVATE",
+            entity_type=model.__name__,
+            entity_id=entity_id,
+            entity_name=entity_name,
+            details={
+                "hard_delete": hard_delete,
+                "is_active": getattr(record, "is_active", False),
+            },
+        )
         await db.commit()
     except IntegrityError as exc:
         await db.rollback()
         raise MasterConflictError(
             f"A conflicting {model.__name__.lower()} record already exists."
         ) from exc
+
+
+async def restore_record(
+    db: AsyncSession,
+    model: type[DeclarativeBase],
+    identifier: int | UUID | str,
+) -> Any:
+    """Restores a deactivated or soft-deleted master record back to active state."""
+    record = await get_record(
+        db,
+        model,
+        identifier,
+        include_inactive=True,
+        include_deleted=True,
+    )
+
+    if hasattr(record, "is_deleted"):
+        record.is_deleted = False
+        record.deleted_at = None
+
+    if hasattr(record, "is_active"):
+        record.is_active = True
+
+    entity_id = getattr(record, "public_id", getattr(record, "id", ""))
+    entity_name = getattr(
+        record, "name", getattr(record, "label", getattr(record, "code", None))
+    )
+
+    try:
+        await db.commit()
+        await db.refresh(record)
+        await record_activity(
+            db=db,
+            module="masters",
+            action="RESTORE",
+            entity_type=model.__name__,
+            entity_id=entity_id,
+            entity_name=entity_name,
+            details={"is_deleted": False, "is_active": True},
+        )
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise MasterConflictError(
+            f"Restoring {model.__name__.lower()} violates a uniqueness constraint."
+        ) from exc
+
+    return record

@@ -1,7 +1,7 @@
 from typing import Any
 from uuid import UUID, uuid7
 
-from sqlalchemy import BigInteger, Boolean, Index, String, Uuid
+from sqlalchemy import BigInteger, Boolean, Index, Integer, String, Uuid
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -75,6 +75,13 @@ class SystemSetting(AuditEntityBase):
         Boolean,
         nullable=False,
         default=True,
+    )
+
+    sort_order: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        index=True,
     )
 
     __table_args__ = (

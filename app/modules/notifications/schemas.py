@@ -1,6 +1,5 @@
 import uuid
 from datetime import datetime
-from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -10,7 +9,12 @@ from app.shared.base_schema import BaseSchema
 class NotificationCreate(BaseModel):
     title: str = Field(min_length=2, max_length=150)
     message: str = Field(min_length=2, max_length=1000)
-    type: Literal["deal", "security", "tenant", "system"] = "system"
+    type: str = Field(
+        default="system",
+        min_length=1,
+        max_length=50,
+        description="Domain module or notification classification (e.g. organizations, masters, rbac, users, settings, menus, activity_logs, security, system, deal)",
+    )
     link: str | None = Field(default=None, max_length=255)
     user_id: uuid.UUID | None = None
 

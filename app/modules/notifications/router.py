@@ -68,6 +68,21 @@ async def get_unread_count(
     return UnreadCountResponse(unread_count=count)
 
 
+@router.get(
+    "/modules",
+    response_model=list[str],
+    status_code=status.HTTP_200_OK,
+    summary="List available notification modules",
+    description="Returns standard and active operational modules supported for notification dispatches.",
+)
+async def list_notification_modules(
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[User, Depends(require_permission("notification.read"))],
+) -> list[str]:
+    service = NotificationService(db)
+    return await service.get_supported_modules()
+
+
 @router.post(
     "",
     response_model=NotificationResponse,

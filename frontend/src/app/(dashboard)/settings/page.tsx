@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { apiFetch } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/lib/toast-context';
@@ -24,6 +25,7 @@ import {
   Loader2,
   Lock,
   Eye,
+  History,
   RotateCcw,
   Check,
   Copy,
@@ -36,9 +38,15 @@ import {
   Mail,
   Scale,
   ToggleLeft,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  LayoutGrid,
+  List,
+  Plus,
 } from 'lucide-react';
 
-type SettingCategory = 'all' | 'general' | 'security' | 'notifications' | 'governance' | 'features';
+type SettingCategory = 'all' | 'general' | 'security' | 'notifications' | 'governance' | 'data_retention' | 'features';
 
 interface CategoryTab {
   id: SettingCategory;
@@ -53,6 +61,7 @@ const CATEGORY_TABS: CategoryTab[] = [
   { id: 'security', label: 'Security & Access', icon: Shield, description: 'Authentication rules, session timeouts, and network access' },
   { id: 'notifications', label: 'Communications', icon: Bell, description: 'Transactional email, sender identities, and alert channels' },
   { id: 'governance', label: 'Governance & Compliance', icon: FileText, description: 'Retention windows, anonymization, and export roles' },
+  { id: 'data_retention', label: 'Data Retention & Policy', icon: Scale, description: 'Hard/soft delete rules, authorized roles, and exceptions' },
   { id: 'features', label: 'Feature Toggles', icon: Cpu, description: 'Platform capabilities, self-registration, and maintenance flags' },
 ];
 
@@ -86,7 +95,7 @@ const SETTING_SECTIONS: SettingSectionConfig[] = [
     icon: Clock,
     iconBg: 'rgba(99, 102, 241, 0.12)',
     iconColor: '#818cf8',
-    keys: ['default_timezone', 'default_locale', 'default_date_format', 'default_time_format'],
+    keys: ['default_timezone', 'default_locale', 'default_date_format', 'default_time_format', 'default_page_size'],
   },
   {
     id: 'security_auth',
@@ -106,17 +115,17 @@ const SETTING_SECTIONS: SettingSectionConfig[] = [
     icon: Network,
     iconBg: 'rgba(245, 158, 11, 0.12)',
     iconColor: '#f59e0b',
-    keys: ['max_login_attempts', 'lockout_duration_mins', 'session_timeout_mins', 'ip_whitelist'],
+    keys: ['max_login_attempts', 'lockout_duration_mins', 'session_timeout_mins', 'ip_whitelist', 'administrator_roles'],
   },
   {
     id: 'notifications_channels',
     category: 'notifications',
     title: 'Transactional Messaging & Alert Channels',
-    description: 'Outbound dispatch protocols, notification banners, and system sender identities.',
+    description: 'Outbound dispatch protocols, notification banners, system sender identities, and enabled modules.',
     icon: Mail,
     iconBg: 'rgba(16, 185, 129, 0.12)',
     iconColor: '#10b981',
-    keys: ['email_sender_name', 'email_sender_address', 'enable_in_app_notifications', 'enable_email_notifications'],
+    keys: ['email_sender_name', 'email_sender_address', 'enable_in_app_notifications', 'enable_email_notifications', 'notification_modules'],
   },
   {
     id: 'governance_compliance',
@@ -129,6 +138,16 @@ const SETTING_SECTIONS: SettingSectionConfig[] = [
     keys: ['audit_retention_days', 'gdpr_anonymize_on_delete', 'data_export_allowed_roles'],
   },
   {
+    id: 'data_retention_policy',
+    category: 'data_retention',
+    title: 'Data Retention & Deletion Policy',
+    description: 'Dynamic policies governing permanent hard purge vs. soft-deletion, allowed administrator roles, and exceptions.',
+    icon: Scale,
+    iconBg: 'rgba(239, 68, 68, 0.12)',
+    iconColor: '#ef4444',
+    keys: ['permanent_delete_roles', 'soft_delete_only_for_non_admins', 'permanent_delete_exceptions', 'admin_view_all_statuses'],
+  },
+  {
     id: 'features_operational',
     category: 'features',
     title: 'Platform Capabilities & Operational Flags',
@@ -136,56 +155,443 @@ const SETTING_SECTIONS: SettingSectionConfig[] = [
     icon: ToggleLeft,
     iconBg: 'rgba(14, 165, 233, 0.12)',
     iconColor: '#0ea5e9',
-    keys: ['maintenance_mode', 'allow_self_registration', 'multi_currency_enabled'],
+    keys: ['maintenance_mode', 'allow_self_registration', 'multi_currency_enabled', 'show_theme_toggle_in_header'],
   },
 ];
 
 /**
+ * Interactive array settings editor for dynamic chip addition and removal.
+ */
+function ArraySettingEditor({
+  setting,
+  canEdit,
+  handleValueChange,
+}: {
+  setting: SystemSetting;
+  canEdit: boolean;
+  handleValueChange: (id: number, val: SettingValue) => void;
+}) {
+  const [newChip, setNewChip] = useState<string>('');
+  const items = Array.isArray(setting.value) ? (setting.value as string[]) : [];
+
+  const handleRemove = (indexToRemove: number) => {
+    if (!canEdit) return;
+    const updated = items.filter((_, idx) => idx !== indexToRemove);
+    handleValueChange(setting.id, updated);
+  };
+
+  const handleAdd = () => {
+    if (!canEdit) return;
+    const val = newChip.trim().toLowerCase();
+    if (!val) return;
+    if (items.includes(val)) {
+      setNewChip('');
+      return;
+    }
+    const updated = [...items, val];
+    handleValueChange(setting.id, updated);
+    setNewChip('');
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', width: '100%', alignItems: 'flex-end' }}>
+      <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', justifyContent: 'flex-end', width: '100%' }}>
+        {items.length > 0 ? (
+          items.map((item, chipIdx) => (
+            <span
+              key={chipIdx}
+              style={{
+                background: 'rgba(99, 102, 241, 0.12)',
+                padding: '0.2rem 0.5rem',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: '0.75rem',
+                color: 'var(--text-primary)',
+                border: '1px solid rgba(99, 102, 241, 0.3)',
+                fontFamily: 'monospace',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.3rem',
+              }}
+            >
+              <span>{String(item)}</span>
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={() => handleRemove(chipIdx)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    color: 'var(--text-muted)',
+                    lineHeight: 1,
+                  }}
+                  title={`Remove ${item}`}
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </span>
+          ))
+        ) : (
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>None configured</span>
+        )}
+      </div>
+      {canEdit && (
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+          <input
+            type="text"
+            value={newChip}
+            onChange={(e) => setNewChip(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleAdd();
+              }
+            }}
+            placeholder="Add module (e.g. leads)..."
+            className="input-field"
+            style={{
+              padding: '0.2rem 0.5rem',
+              fontSize: '0.75rem',
+              height: '26px',
+              width: '160px',
+            }}
+          />
+          <button
+            type="button"
+            onClick={handleAdd}
+            className="btn btn-secondary"
+            style={{
+              padding: '0.2rem 0.5rem',
+              fontSize: '0.75rem',
+              height: '26px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.2rem',
+            }}
+          >
+            <Plus size={12} />
+            <span>Add</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Reusable typed form control renderer for system configuration parameters.
+ */
+function renderTypedInput(
+  setting: SystemSetting,
+  canEdit: boolean,
+  handleValueChange: (id: number, val: SettingValue) => void
+) {
+  if (setting.value_type === 'boolean') {
+    return (
+      <label
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '0.75rem',
+          cursor: canEdit ? 'pointer' : 'not-allowed',
+          userSelect: 'none',
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={Boolean(setting.value)}
+          disabled={!canEdit}
+          onChange={(e) => handleValueChange(setting.id, e.target.checked)}
+          style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }}
+        />
+        <div
+          style={{
+            width: 46,
+            height: 24,
+            borderRadius: 'var(--radius-full)',
+            background: setting.value ? 'var(--accent-primary)' : 'rgba(255, 255, 255, 0.12)',
+            border: '1px solid var(--border-subtle)',
+            position: 'relative',
+            transition: 'background 0.2s ease',
+            boxShadow: setting.value ? '0 0 10px rgba(99, 102, 241, 0.35)' : 'none',
+          }}
+        >
+          <div
+            style={{
+              width: 18,
+              height: 18,
+              borderRadius: '50%',
+              background: '#ffffff',
+              position: 'absolute',
+              top: 2,
+              left: setting.value ? 24 : 3,
+              transition: 'left 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.3)',
+            }}
+          />
+        </div>
+        <span
+          style={{
+            fontSize: '0.825rem',
+            fontWeight: 600,
+            color: setting.value ? 'var(--text-primary)' : 'var(--text-muted)',
+            minWidth: '55px',
+          }}
+        >
+          {setting.value ? 'Enabled' : 'Disabled'}
+        </span>
+      </label>
+    );
+  }
+
+  if (setting.value_type === 'integer') {
+    if (setting.key === 'fiscal_year_start_month') {
+      return (
+        <select
+          value={typeof setting.value === 'number' ? setting.value : Number(setting.value) || 1}
+          disabled={!canEdit}
+          onChange={(e) => handleValueChange(setting.id, parseInt(e.target.value, 10))}
+          className="input-field"
+          style={{ width: '100%' }}
+        >
+          <option value={1}>January (Month 1)</option>
+          <option value={2}>February (Month 2)</option>
+          <option value={3}>March (Month 3)</option>
+          <option value={4}>April (Month 4)</option>
+          <option value={5}>May (Month 5)</option>
+          <option value={6}>June (Month 6)</option>
+          <option value={7}>July (Month 7)</option>
+          <option value={8}>August (Month 8)</option>
+          <option value={9}>September (Month 9)</option>
+          <option value={10}>October (Month 10)</option>
+          <option value={11}>November (Month 11)</option>
+          <option value={12}>December (Month 12)</option>
+        </select>
+      );
+    }
+
+    return (
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          background: 'var(--bg-input)',
+          border: '1px solid var(--border-subtle)',
+          borderRadius: 'var(--radius-md)',
+          overflow: 'hidden',
+          width: '100%',
+          maxWidth: 170,
+        }}
+      >
+        <input
+          type="number"
+          value={typeof setting.value === 'number' ? setting.value : Number(setting.value) || 0}
+          disabled={!canEdit}
+          onChange={(e) => handleValueChange(setting.id, parseInt(e.target.value, 10) || 0)}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            outline: 'none',
+            color: 'var(--text-primary)',
+            fontSize: '0.875rem',
+            fontWeight: 600,
+            textAlign: 'right',
+            padding: '0.55rem 0.65rem',
+            width: '100%',
+          }}
+        />
+        <span
+          style={{
+            fontSize: '0.75rem',
+            color: 'var(--text-muted)',
+            paddingRight: '0.75rem',
+            paddingLeft: '0.25rem',
+            fontWeight: 500,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {setting.key.includes('mins')
+            ? 'mins'
+            : setting.key.includes('days')
+            ? 'days'
+            : setting.key.includes('length')
+            ? 'chars'
+            : setting.key.includes('attempts')
+            ? 'attempts'
+            : 'units'}
+        </span>
+      </div>
+    );
+  }
+
+  if (setting.value_type === 'string') {
+    if (setting.key === 'two_factor_policy') {
+      return (
+        <select
+          value={typeof setting.value === 'string' ? setting.value : String(setting.value ?? '')}
+          disabled={!canEdit}
+          onChange={(e) => handleValueChange(setting.id, e.target.value)}
+          className="input-field"
+          style={{ width: '100%' }}
+        >
+          <option value="disabled">Disabled</option>
+          <option value="optional">Optional for Users</option>
+          <option value="enforced">Enforced for All</option>
+        </select>
+      );
+    }
+    if (setting.key === 'default_time_format') {
+      return (
+        <select
+          value={typeof setting.value === 'string' ? setting.value : String(setting.value ?? '')}
+          disabled={!canEdit}
+          onChange={(e) => handleValueChange(setting.id, e.target.value)}
+          className="input-field"
+          style={{ width: '100%' }}
+        >
+          <option value="12h">12-Hour (AM/PM Standard)</option>
+          <option value="24h">24-Hour (ISO Military)</option>
+        </select>
+      );
+    }
+    if (setting.key === 'default_date_format') {
+      return (
+        <select
+          value={typeof setting.value === 'string' ? setting.value : String(setting.value ?? '')}
+          disabled={!canEdit}
+          onChange={(e) => handleValueChange(setting.id, e.target.value)}
+          className="input-field"
+          style={{ width: '100%' }}
+        >
+          <option value="YYYY-MM-DD">YYYY-MM-DD (ISO 8601)</option>
+          <option value="DD/MM/YYYY">DD/MM/YYYY (European)</option>
+          <option value="MM/DD/YYYY">MM/DD/YYYY (US Standard)</option>
+        </select>
+      );
+    }
+    if (setting.key === 'default_currency') {
+      return (
+        <select
+          value={typeof setting.value === 'string' ? setting.value : String(setting.value ?? '')}
+          disabled={!canEdit}
+          onChange={(e) => handleValueChange(setting.id, e.target.value)}
+          className="input-field"
+          style={{ width: '100%' }}
+        >
+          <option value="USD">USD ($ - US Dollar)</option>
+          <option value="EUR">EUR (€ - Euro)</option>
+          <option value="GBP">GBP (£ - British Pound)</option>
+          <option value="CAD">CAD ($ - Canadian Dollar)</option>
+          <option value="AUD">AUD ($ - Australian Dollar)</option>
+          <option value="JPY">JPY (¥ - Japanese Yen)</option>
+          <option value="INR">INR (₹ - Indian Rupee)</option>
+        </select>
+      );
+    }
+    return (
+      <input
+        type="text"
+        value={typeof setting.value === 'string' || typeof setting.value === 'number' ? setting.value : ''}
+        disabled={!canEdit}
+        onChange={(e) => handleValueChange(setting.id, e.target.value)}
+        className="input-field"
+        style={{ width: '100%' }}
+      />
+    );
+  }
+
+  if (setting.value_type === 'array') {
+    return (
+      <ArraySettingEditor
+        setting={setting}
+        canEdit={canEdit}
+        handleValueChange={handleValueChange}
+      />
+    );
+  }
+
+  return (
+    <input
+      type="text"
+      value={typeof setting.value === 'string' ? setting.value : JSON.stringify(setting.value ?? '')}
+      disabled={!canEdit}
+      onChange={(e) => handleValueChange(setting.id, e.target.value)}
+      className="input-field"
+      style={{ width: '100%' }}
+    />
+  );
+}
+
+/**
  * Enterprise System Settings & App Configurations Workspace.
- *
- * Implements high-end enterprise SaaS administration:
- * - Grouped logical fieldset panels with section-level descriptions
- * - Dynamic category filtering & real-time search
- * - Single-setting undo and atomic bulk saving
- * - Keyboard shortcut (Cmd/Ctrl + S) for fast workflows
- * - Dual-identifier audit trail with microsecond-free ISO UTC formatting
  */
 export default function SystemSettingsPage() {
-  const { hasPermission } = useAuth();
+  const router = useRouter();
+  const { user, hasPermission, isLoading: isAuthLoading } = useAuth();
   const { toast } = useToast();
 
   const [settings, setSettings] = useState<SystemSetting[]>([]);
   const [originalSettings, setOriginalSettings] = useState<SystemSetting[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isDataLoading, setIsDataLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [activeCategory, setActiveCategory] = useState<SettingCategory>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
-  const canEdit = hasPermission('settings.update') || hasPermission('super_admin');
+  // Sorting and view presentation
+  const [sortBy, setSortBy] = useState<'sort_order' | 'key' | 'label' | 'category'>('sort_order');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [viewMode, setViewMode] = useState<'sections' | 'table'>('sections');
+
+  // Strict Enterprise Administrator check (restricted by default)
+  const isAdmin = useMemo(() => {
+    if (!user) return false;
+    if (user.is_super_admin) return true;
+    if (user.roles?.some((r) => ['super_admin', 'superadmin', 'admin', 'system_admin'].includes(r))) return true;
+    return hasPermission('settings.manage') || hasPermission('settings.read') || hasPermission('settings.update');
+  }, [user, hasPermission]);
+
+  const isLoading = isAuthLoading || (isAdmin && isDataLoading);
+
+  const canEdit = Boolean(
+    isAdmin &&
+      (hasPermission('settings.update') ||
+        hasPermission('settings.manage') ||
+        user?.is_super_admin ||
+        user?.roles?.some((r) => ['super_admin', 'superadmin', 'admin'].includes(r)))
+  );
 
   const fetchSettings = useCallback(async () => {
+    if (!isAdmin) return;
     setIsRefreshing(true);
     try {
-      const response = await apiFetch<PagedResponse<SystemSetting>>('/settings?limit=100&sort_by=category&sort_order=asc');
+      const response = await apiFetch<PagedResponse<SystemSetting>>('/settings?limit=100&sort_by=sort_order&sort_order=asc');
       setSettings(response.items);
       setOriginalSettings(response.items);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to load system settings.';
       toast.error(message);
     } finally {
-      setIsLoading(false);
+      setIsDataLoading(false);
       setIsRefreshing(false);
     }
-  }, [toast]);
+  }, [isAdmin, toast]);
 
   useEffect(() => {
     let isMounted = true;
 
+    if (!isAdmin) {
+      return;
+    }
+
     async function init() {
       try {
-        const response = await apiFetch<PagedResponse<SystemSetting>>('/settings?limit=100&sort_by=category&sort_order=asc');
+        const response = await apiFetch<PagedResponse<SystemSetting>>('/settings?limit=100&sort_by=sort_order&sort_order=asc');
         if (isMounted) {
           setSettings(response.items);
           setOriginalSettings(response.items);
@@ -197,7 +603,7 @@ export default function SystemSettingsPage() {
         }
       } finally {
         if (isMounted) {
-          setIsLoading(false);
+          setIsDataLoading(false);
           setIsRefreshing(false);
         }
       }
@@ -208,7 +614,7 @@ export default function SystemSettingsPage() {
     return () => {
       isMounted = false;
     };
-  }, [toast]);
+  }, [isAdmin, toast]);
 
   // Compute dirty pending changes
   const pendingChanges = useMemo(() => {
@@ -222,7 +628,26 @@ export default function SystemSettingsPage() {
     return changes;
   }, [settings, originalSettings]);
 
-  const hasDirtyChanges = Object.keys(pendingChanges).length > 0;
+  const pendingSortOrders = useMemo(() => {
+    const orders: Record<string, number> = {};
+    for (const curr of settings) {
+      const orig = originalSettings.find((s) => s.id === curr.id);
+      if (orig && (orig.sort_order ?? 0) !== (curr.sort_order ?? 0)) {
+        orders[curr.key] = curr.sort_order;
+      }
+    }
+    return orders;
+  }, [settings, originalSettings]);
+
+  const totalDirtyCount = useMemo(() => {
+    const dirtyKeySet = new Set([
+      ...Object.keys(pendingChanges),
+      ...Object.keys(pendingSortOrders),
+    ]);
+    return dirtyKeySet.size;
+  }, [pendingChanges, pendingSortOrders]);
+
+  const hasDirtyChanges = totalDirtyCount > 0;
 
   // Single field update
   const handleValueChange = (settingId: number, newValue: SettingValue) => {
@@ -231,12 +656,23 @@ export default function SystemSettingsPage() {
     );
   };
 
+  // Sort order priority update
+  const handleSortOrderChange = (settingId: number, newOrder: number) => {
+    setSettings((prev) =>
+      prev.map((s) => (s.id === settingId ? { ...s, sort_order: Math.max(0, newOrder) } : s))
+    );
+  };
+
   // Revert single field change
   const handleRevertSingle = (settingId: number) => {
     const original = originalSettings.find((s) => s.id === settingId);
     if (!original) return;
     setSettings((prev) =>
-      prev.map((s) => (s.id === settingId ? { ...s, value: original.value } : s))
+      prev.map((s) =>
+        s.id === settingId
+          ? { ...s, value: original.value, sort_order: original.sort_order }
+          : s
+      )
     );
   };
 
@@ -255,7 +691,10 @@ export default function SystemSettingsPage() {
     try {
       const updated = await apiFetch<SystemSetting[]>('/settings/bulk', {
         method: 'PATCH',
-        body: JSON.stringify({ settings: pendingChanges }),
+        body: JSON.stringify({
+          settings: pendingChanges,
+          sort_orders: pendingSortOrders,
+        }),
       });
 
       // Update state with confirmed server values
@@ -272,7 +711,10 @@ export default function SystemSettingsPage() {
         })
       );
 
-      toast.success(`Successfully saved ${Object.keys(pendingChanges).length} configuration parameter(s).`);
+      toast.success(`Successfully saved ${totalDirtyCount} configuration parameter change(s).`);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('crm-settings-updated'));
+      }
     } catch (err: unknown) {
       setSettings(rollback);
       const message = err instanceof Error ? err.message : 'Failed to update system settings.';
@@ -280,7 +722,7 @@ export default function SystemSettingsPage() {
     } finally {
       setIsSaving(false);
     }
-  }, [hasDirtyChanges, isSaving, settings, pendingChanges, toast]);
+  }, [hasDirtyChanges, isSaving, settings, pendingChanges, pendingSortOrders, totalDirtyCount, toast]);
 
   // Global keyboard shortcut: Cmd+S / Ctrl+S
   useEffect(() => {
@@ -315,9 +757,9 @@ export default function SystemSettingsPage() {
     return { total, publicCount, protectedCount };
   }, [settings]);
 
-  // Filtered settings list
+  // Filtered settings list with dynamic sorting
   const filteredSettings = useMemo(() => {
-    return settings.filter((s) => {
+    const filtered = settings.filter((s) => {
       const matchesCategory = activeCategory === 'all' || s.category === activeCategory;
       const q = searchQuery.trim().toLowerCase();
       const matchesSearch =
@@ -327,14 +769,29 @@ export default function SystemSettingsPage() {
         (s.description && s.description.toLowerCase().includes(q));
       return matchesCategory && matchesSearch;
     });
-  }, [settings, activeCategory, searchQuery]);
+
+    return [...filtered].sort((a, b) => {
+      let comparison = 0;
+      if (sortBy === 'sort_order') {
+        comparison = (a.sort_order ?? 0) - (b.sort_order ?? 0);
+        if (comparison === 0) comparison = (a.id ?? 0) - (b.id ?? 0);
+      } else if (sortBy === 'key') {
+        comparison = a.key.localeCompare(b.key);
+      } else if (sortBy === 'label') {
+        comparison = a.label.localeCompare(b.label);
+      } else if (sortBy === 'category') {
+        comparison = a.category.localeCompare(b.category);
+      }
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [settings, activeCategory, searchQuery, sortBy, sortDirection]);
 
   // Group filtered settings into structured sections
   const visibleSections = useMemo(() => {
     const filteredKeySet = new Set(filteredSettings.map((s) => s.key));
 
-    return SETTING_SECTIONS.map((section) => {
-      const sectionSettings = settings.filter(
+    const standardSections = SETTING_SECTIONS.map((section) => {
+      const sectionSettings = filteredSettings.filter(
         (s) => section.keys.includes(s.key) && filteredKeySet.has(s.key)
       );
       return {
@@ -345,7 +802,68 @@ export default function SystemSettingsPage() {
       const matchesCategory = activeCategory === 'all' || section.category === activeCategory;
       return matchesCategory && section.settings.length > 0;
     });
-  }, [settings, filteredSettings, activeCategory]);
+
+    const coveredKeys = new Set(SETTING_SECTIONS.flatMap((s) => s.keys));
+    const extraSettings = filteredSettings.filter((s) => !coveredKeys.has(s.key));
+    if (extraSettings.length > 0) {
+      standardSections.push({
+        id: 'other_parameters',
+        category: 'features',
+        title: 'Additional System Parameters',
+        description: 'Dynamically registered system configurations and modular extensions.',
+        icon: Sliders,
+        iconBg: 'rgba(99, 102, 241, 0.12)',
+        iconColor: '#818cf8',
+        keys: extraSettings.map((s) => s.key),
+        settings: extraSettings,
+      });
+    }
+
+    return standardSections;
+  }, [filteredSettings, activeCategory]);
+
+  // Enterprise Access Restricted View for non-administrators
+  if (!isLoading && !isAdmin) {
+    return (
+      <div style={{ maxWidth: 640, margin: '4rem auto', padding: '0 1rem' }}>
+        <Card style={{ padding: '3.5rem 2rem', textAlign: 'center', border: '1px solid rgba(239, 68, 68, 0.25)', background: 'linear-gradient(180deg, rgba(239, 68, 68, 0.05) 0%, rgba(15, 23, 42, 0.6) 100%)' }}>
+          <div
+            style={{
+              width: 64,
+              height: 64,
+              borderRadius: '50%',
+              background: 'rgba(239, 68, 68, 0.12)',
+              color: '#ef4444',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 1.5rem',
+              border: '1px solid rgba(239, 68, 68, 0.2)',
+            }}
+          >
+            <Shield size={32} />
+          </div>
+          <Badge variant="danger" style={{ marginBottom: '1rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Administrator Access Only
+          </Badge>
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '0.75rem', letterSpacing: '-0.02em' }}>
+            System Settings Restricted
+          </h2>
+          <p style={{ color: 'var(--text-secondary)', lineHeight: 1.6, fontSize: '0.925rem', marginBottom: '2rem' }}>
+            System configurations and platform parameters are strictly restricted to system administrators by default. Your account does not possess the administrative privileges required (<code style={{ color: '#ef4444' }}>settings.read</code> or <code style={{ color: '#ef4444' }}>settings.manage</code>).
+          </p>
+          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+            <Button variant="secondary" onClick={() => router.push('/')}>
+              Return to Dashboard
+            </Button>
+            <Button variant="secondary" onClick={() => router.push('/profile')}>
+              View My Profile
+            </Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', paddingBottom: hasDirtyChanges ? '6rem' : '3rem' }}>
@@ -369,9 +887,14 @@ export default function SystemSettingsPage() {
               <SlidersHorizontal size={22} />
             </div>
             <div>
-              <h1 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.025em', margin: 0 }}>
-                System Configurations
-              </h1>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <h1 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.025em', margin: 0 }}>
+                  System Configurations
+                </h1>
+                <Badge variant="neutral" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem' }}>
+                  <Lock size={11} /> Admin Restricted
+                </Badge>
+              </div>
               <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginTop: '0.2rem' }}>
                 Govern platform-wide defaults, security thresholds, localization rules, and feature flags.
               </p>
@@ -381,6 +904,15 @@ export default function SystemSettingsPage() {
 
         {/* Global Toolbar Actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => router.push('/system-logs')}
+            icon={<History size={15} />}
+          >
+            System Activity
+          </Button>
+
           <Button
             type="button"
             variant="secondary"
@@ -592,9 +1124,121 @@ export default function SystemSettingsPage() {
             </button>
           </div>
         )}
+
+        {/* Sorting & Presentation Toolbar */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '0.75rem',
+            paddingTop: '0.65rem',
+            borderTop: '1px solid var(--border-subtle)',
+          }}
+        >
+          {/* Left: Dynamic Sort Criteria */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+              <ArrowUpDown size={14} style={{ color: 'var(--accent-primary)' }} />
+              <span style={{ fontWeight: 600 }}>Sort By:</span>
+            </div>
+
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as 'sort_order' | 'key' | 'label' | 'category')}
+              className="input-field"
+              style={{
+                padding: '0.35rem 0.75rem',
+                fontSize: '0.8125rem',
+                width: 'auto',
+                minWidth: '170px',
+                borderRadius: 'var(--radius-sm)',
+              }}
+            >
+              <option value="sort_order">Sort Order Priority</option>
+              <option value="key">Configuration Key</option>
+              <option value="label">Display Label</option>
+              <option value="category">Category Domain</option>
+            </select>
+
+            <button
+              type="button"
+              onClick={() => setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'))}
+              title={`Toggle direction: Currently ${sortDirection.toUpperCase()}`}
+              className="btn btn-secondary"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                padding: '0.35rem 0.75rem',
+                fontSize: '0.8125rem',
+              }}
+            >
+              {sortDirection === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />}
+              <span>{sortDirection === 'asc' ? 'Ascending' : 'Descending'}</span>
+            </button>
+          </div>
+
+          {/* Right: View Mode Toggle */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.25rem',
+              background: 'rgba(255, 255, 255, 0.04)',
+              padding: '0.2rem',
+              borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--border-subtle)',
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setViewMode('sections')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                padding: '0.3rem 0.7rem',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: '0.78rem',
+                fontWeight: viewMode === 'sections' ? 600 : 500,
+                background: viewMode === 'sections' ? 'var(--accent-primary)' : 'transparent',
+                color: viewMode === 'sections' ? '#ffffff' : 'var(--text-muted)',
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'var(--transition)',
+              }}
+            >
+              <LayoutGrid size={13} />
+              <span>Grouped Sections</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('table')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                padding: '0.3rem 0.7rem',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: '0.78rem',
+                fontWeight: viewMode === 'table' ? 600 : 500,
+                background: viewMode === 'table' ? 'var(--accent-primary)' : 'transparent',
+                color: viewMode === 'table' ? '#ffffff' : 'var(--text-muted)',
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'var(--transition)',
+              }}
+            >
+              <List size={13} />
+              <span>Ordered Table</span>
+            </button>
+          </div>
+        </div>
       </Card>
 
-      {/* Main Settings Sections */}
+      {/* Main Settings Body */}
       {isLoading ? (
         <Card padding="4rem" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
           <Loader2 size={36} className="animate-spin" style={{ color: 'var(--accent-primary)' }} />
@@ -605,7 +1249,7 @@ export default function SystemSettingsPage() {
             Fetching parameters from secure database partition.
           </p>
         </Card>
-      ) : visibleSections.length === 0 ? (
+      ) : (viewMode === 'table' ? filteredSettings.length === 0 : visibleSections.length === 0) ? (
         <Card padding="3.5rem" style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <div
             style={{
@@ -640,7 +1284,181 @@ export default function SystemSettingsPage() {
             Clear Filters
           </Button>
         </Card>
+      ) : viewMode === 'table' ? (
+        /* Ordered Table View */
+        <Card padding="0" style={{ overflow: 'hidden' }}>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
+              <thead>
+                <tr style={{ background: 'rgba(255, 255, 255, 0.02)', borderBottom: '1px solid var(--border-subtle)' }}>
+                  <th style={{ padding: '0.85rem 1rem', width: '45px', textAlign: 'center' }}>#</th>
+                  <th style={{ padding: '0.85rem 1rem', width: '110px' }}>Sort Order</th>
+                  <th style={{ padding: '0.85rem 1rem', minWidth: '240px' }}>Parameter Key & Label</th>
+                  <th style={{ padding: '0.85rem 1rem', width: '120px' }}>Category</th>
+                  <th style={{ padding: '0.85rem 1rem', width: '110px' }}>Visibility</th>
+                  <th style={{ padding: '0.85rem 1rem', minWidth: '280px' }}>Configured Value</th>
+                  <th style={{ padding: '0.85rem 1rem', width: '80px', textAlign: 'right' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredSettings.map((setting, idx) => {
+                  const isValueDirty = pendingChanges[setting.key] !== undefined;
+                  const isOrderDirty = pendingSortOrders[setting.key] !== undefined;
+                  const isDirty = isValueDirty || isOrderDirty;
+                  const isLast = idx === filteredSettings.length - 1;
+
+                  return (
+                    <tr
+                      key={setting.id}
+                      style={{
+                        borderBottom: isLast ? 'none' : '1px solid var(--border-subtle)',
+                        background: isDirty ? 'rgba(245, 158, 11, 0.03)' : 'transparent',
+                        borderLeft: isDirty ? '3px solid var(--accent-warning)' : '3px solid transparent',
+                      }}
+                    >
+                      <td style={{ padding: '0.85rem 1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 600 }}>
+                        {idx + 1}
+                      </td>
+                      {/* Sort Order Input */}
+                      <td style={{ padding: '0.85rem 1rem' }}>
+                        <div
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.3rem',
+                            background: 'rgba(255, 255, 255, 0.04)',
+                            padding: '0.15rem 0.45rem',
+                            borderRadius: 'var(--radius-sm)',
+                            border: isOrderDirty ? '1px solid var(--accent-warning)' : '1px solid var(--border-subtle)',
+                          }}
+                          title="Sort Order Priority (Lower numbers appear first)"
+                        >
+                          <span style={{ fontSize: '0.75rem', color: isOrderDirty ? 'var(--accent-warning)' : 'var(--text-muted)', fontWeight: 700 }}>
+                            #
+                          </span>
+                          <input
+                            type="number"
+                            min={0}
+                            value={setting.sort_order ?? 0}
+                            disabled={!canEdit}
+                            onChange={(e) => handleSortOrderChange(setting.id, parseInt(e.target.value, 10) || 0)}
+                            style={{
+                              width: '45px',
+                              background: 'transparent',
+                              border: 'none',
+                              outline: 'none',
+                              color: isOrderDirty ? 'var(--accent-warning)' : 'var(--text-primary)',
+                              fontWeight: 700,
+                              fontSize: '0.8rem',
+                              textAlign: 'center',
+                              padding: 0,
+                            }}
+                          />
+                        </div>
+                      </td>
+
+                      {/* Parameter Info */}
+                      <td style={{ padding: '0.85rem 1rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{setting.label}</span>
+                          {isDirty && (
+                            <Badge variant="warning">
+                              {isValueDirty && isOrderDirty ? 'Modified & Reordered' : isOrderDirty ? 'Reordered' : 'Modified'}
+                            </Badge>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyKey(setting.key)}
+                            title="Click to copy key"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.3rem',
+                              background: 'rgba(255, 255, 255, 0.04)',
+                              padding: '0.1rem 0.45rem',
+                              borderRadius: 'var(--radius-sm)',
+                              color: 'var(--text-secondary)',
+                              fontFamily: 'monospace',
+                              fontSize: '0.72rem',
+                              border: '1px solid var(--border-subtle)',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <span>{setting.key}</span>
+                            {copiedKey === setting.key ? (
+                              <Check size={11} style={{ color: 'var(--accent-success)' }} />
+                            ) : (
+                              <Copy size={11} style={{ color: 'var(--text-muted)' }} />
+                            )}
+                          </button>
+                        </div>
+                        {setting.description && (
+                          <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '0.2rem', marginBottom: 0 }}>
+                            {setting.description}
+                          </p>
+                        )}
+                      </td>
+
+                      {/* Category */}
+                      <td style={{ padding: '0.85rem 1rem' }}>
+                        <Badge variant="neutral">{setting.category}</Badge>
+                      </td>
+
+                      {/* Visibility */}
+                      <td style={{ padding: '0.85rem 1rem' }}>
+                        {setting.is_public ? (
+                          <Badge variant="primary" icon={<Eye size={11} style={{ marginRight: 3 }} />}>
+                            Public
+                          </Badge>
+                        ) : (
+                          <Badge variant="neutral" icon={<Lock size={11} style={{ marginRight: 3 }} />}>
+                            Protected
+                          </Badge>
+                        )}
+                      </td>
+
+                      {/* Form Control */}
+                      <td style={{ padding: '0.85rem 1rem' }}>
+                        <div style={{ maxWidth: 320 }}>
+                          {renderTypedInput(setting, canEdit, handleValueChange)}
+                        </div>
+                      </td>
+
+                      {/* Revert Single Action */}
+                      <td style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
+                        {isDirty && (
+                          <button
+                            type="button"
+                            onClick={() => handleRevertSingle(setting.id)}
+                            title="Revert this parameter to saved value"
+                            style={{
+                              background: 'rgba(245, 158, 11, 0.1)',
+                              border: '1px solid rgba(245, 158, 11, 0.25)',
+                              color: '#f59e0b',
+                              borderRadius: 'var(--radius-sm)',
+                              padding: '0.45rem',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              transition: 'var(--transition)',
+                            }}
+                          >
+                            <RotateCcw size={13} />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       ) : (
+        /* Grouped Sections View */
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
           {visibleSections.map((section) => {
             const SectionIcon = section.icon;
@@ -702,7 +1520,9 @@ export default function SystemSettingsPage() {
                 {/* Section Settings Rows */}
                 <div>
                   {section.settings.map((setting, idx) => {
-                    const isDirty = pendingChanges[setting.key] !== undefined;
+                    const isValueDirty = pendingChanges[setting.key] !== undefined;
+                    const isOrderDirty = pendingSortOrders[setting.key] !== undefined;
+                    const isDirty = isValueDirty || isOrderDirty;
                     const isLast = idx === section.settings.length - 1;
 
                     return (
@@ -724,13 +1544,53 @@ export default function SystemSettingsPage() {
                         {/* Left: Metadata & Documentation */}
                         <div style={{ flex: '1 1 360px', minWidth: 280 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+                            {/* Sort Order Priority Input */}
+                            <div
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.3rem',
+                                background: 'rgba(255, 255, 255, 0.04)',
+                                padding: '0.15rem 0.45rem',
+                                borderRadius: 'var(--radius-sm)',
+                                border: isOrderDirty ? '1px solid var(--accent-warning)' : '1px solid var(--border-subtle)',
+                              }}
+                              title="Sort Order Priority: Lower numbers appear first"
+                            >
+                              <span style={{ fontSize: '0.72rem', color: isOrderDirty ? 'var(--accent-warning)' : 'var(--text-muted)', fontWeight: 700 }}>
+                                #
+                              </span>
+                              <input
+                                type="number"
+                                min={0}
+                                value={setting.sort_order ?? 0}
+                                disabled={!canEdit}
+                                onChange={(e) => handleSortOrderChange(setting.id, parseInt(e.target.value, 10) || 0)}
+                                style={{
+                                  width: '42px',
+                                  background: 'transparent',
+                                  border: 'none',
+                                  outline: 'none',
+                                  color: isOrderDirty ? 'var(--accent-warning)' : 'var(--text-primary)',
+                                  fontWeight: 700,
+                                  fontSize: '0.75rem',
+                                  textAlign: 'center',
+                                  padding: 0,
+                                }}
+                              />
+                            </div>
+
                             <span style={{ fontSize: '0.925rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                               {setting.label}
                             </span>
 
                             {isDirty && (
                               <Badge variant="warning">
-                                Modified
+                                {isValueDirty && isOrderDirty
+                                  ? 'Modified & Reordered'
+                                  : isOrderDirty
+                                  ? 'Reordered'
+                                  : 'Modified'}
                               </Badge>
                             )}
 
@@ -785,238 +1645,11 @@ export default function SystemSettingsPage() {
                           </div>
                         </div>
 
-                        {/* Right: Typed Form Control */}
-                        <div style={{ flex: '0 0 auto', minWidth: 260, maxWidth: 320, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.65rem' }}>
-                          {/* Boolean Toggle Control */}
-                          {setting.value_type === 'boolean' && (
-                            <label
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '0.75rem',
-                                cursor: canEdit ? 'pointer' : 'not-allowed',
-                                userSelect: 'none',
-                              }}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={Boolean(setting.value)}
-                                disabled={!canEdit}
-                                onChange={(e) => handleValueChange(setting.id, e.target.checked)}
-                                style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }}
-                              />
-                              <div
-                                style={{
-                                  width: 46,
-                                  height: 24,
-                                  borderRadius: 'var(--radius-full)',
-                                  background: setting.value ? 'var(--accent-primary)' : 'rgba(255, 255, 255, 0.12)',
-                                  border: '1px solid var(--border-subtle)',
-                                  position: 'relative',
-                                  transition: 'background 0.2s ease',
-                                  boxShadow: setting.value ? '0 0 10px rgba(99, 102, 241, 0.35)' : 'none',
-                                }}
-                              >
-                                <div
-                                  style={{
-                                    width: 18,
-                                    height: 18,
-                                    borderRadius: '50%',
-                                    background: '#ffffff',
-                                    position: 'absolute',
-                                    top: 2,
-                                    left: setting.value ? 24 : 3,
-                                    transition: 'left 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.3)',
-                                  }}
-                                />
-                              </div>
-                              <span
-                                style={{
-                                  fontSize: '0.825rem',
-                                  fontWeight: 600,
-                                  color: setting.value ? 'var(--text-primary)' : 'var(--text-muted)',
-                                  minWidth: '55px',
-                                }}
-                              >
-                                {setting.value ? 'Enabled' : 'Disabled'}
-                              </span>
-                            </label>
-                          )}
-
-                          {/* Integer Stepper Control */}
-                          {setting.value_type === 'integer' && (
-                            <div style={{ width: '100%', display: 'flex', justifyContent: 'flex-end' }}>
-                              {setting.key === 'fiscal_year_start_month' ? (
-                                <select
-                                  value={typeof setting.value === 'number' ? setting.value : Number(setting.value) || 1}
-                                  disabled={!canEdit}
-                                  onChange={(e) => handleValueChange(setting.id, parseInt(e.target.value, 10))}
-                                  className="input-field"
-                                  style={{ width: '100%' }}
-                                >
-                                  <option value={1}>January (Month 1)</option>
-                                  <option value={2}>February (Month 2)</option>
-                                  <option value={3}>March (Month 3)</option>
-                                  <option value={4}>April (Month 4)</option>
-                                  <option value={5}>May (Month 5)</option>
-                                  <option value={6}>June (Month 6)</option>
-                                  <option value={7}>July (Month 7)</option>
-                                  <option value={8}>August (Month 8)</option>
-                                  <option value={9}>September (Month 9)</option>
-                                  <option value={10}>October (Month 10)</option>
-                                  <option value={11}>November (Month 11)</option>
-                                  <option value={12}>December (Month 12)</option>
-                                </select>
-                              ) : (
-                                <div
-                                  style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    background: 'var(--bg-input)',
-                                    border: '1px solid var(--border-subtle)',
-                                    borderRadius: 'var(--radius-md)',
-                                    overflow: 'hidden',
-                                    width: '100%',
-                                    maxWidth: 170,
-                                  }}
-                                >
-                                  <input
-                                    type="number"
-                                    value={typeof setting.value === 'number' ? setting.value : Number(setting.value) || 0}
-                                    disabled={!canEdit}
-                                    onChange={(e) => handleValueChange(setting.id, parseInt(e.target.value, 10) || 0)}
-                                    style={{
-                                      background: 'transparent',
-                                      border: 'none',
-                                      outline: 'none',
-                                      color: 'var(--text-primary)',
-                                      fontSize: '0.875rem',
-                                      fontWeight: 600,
-                                      textAlign: 'right',
-                                      padding: '0.55rem 0.65rem',
-                                      width: '100%',
-                                    }}
-                                  />
-                                  <span
-                                    style={{
-                                      fontSize: '0.75rem',
-                                      color: 'var(--text-muted)',
-                                      paddingRight: '0.75rem',
-                                      paddingLeft: '0.25rem',
-                                      fontWeight: 500,
-                                      whiteSpace: 'nowrap',
-                                    }}
-                                  >
-                                    {setting.key.includes('mins')
-                                      ? 'mins'
-                                      : setting.key.includes('days')
-                                      ? 'days'
-                                      : setting.key.includes('length')
-                                      ? 'chars'
-                                      : setting.key.includes('attempts')
-                                      ? 'attempts'
-                                      : 'units'}
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                          )}
-
-                          {/* String & Select Controls */}
-                          {setting.value_type === 'string' && (
-                            <div style={{ width: '100%' }}>
-                              {setting.key === 'two_factor_policy' ? (
-                                <select
-                                  value={typeof setting.value === 'string' ? setting.value : String(setting.value ?? '')}
-                                  disabled={!canEdit}
-                                  onChange={(e) => handleValueChange(setting.id, e.target.value)}
-                                  className="input-field"
-                                  style={{ width: '100%' }}
-                                >
-                                  <option value="disabled">Disabled</option>
-                                  <option value="optional">Optional for Users</option>
-                                  <option value="enforced">Enforced for All</option>
-                                </select>
-                              ) : setting.key === 'default_time_format' ? (
-                                <select
-                                  value={typeof setting.value === 'string' ? setting.value : String(setting.value ?? '')}
-                                  disabled={!canEdit}
-                                  onChange={(e) => handleValueChange(setting.id, e.target.value)}
-                                  className="input-field"
-                                  style={{ width: '100%' }}
-                                >
-                                  <option value="12h">12-Hour (AM/PM Standard)</option>
-                                  <option value="24h">24-Hour (ISO Military)</option>
-                                </select>
-                              ) : setting.key === 'default_date_format' ? (
-                                <select
-                                  value={typeof setting.value === 'string' ? setting.value : String(setting.value ?? '')}
-                                  disabled={!canEdit}
-                                  onChange={(e) => handleValueChange(setting.id, e.target.value)}
-                                  className="input-field"
-                                  style={{ width: '100%' }}
-                                >
-                                  <option value="YYYY-MM-DD">YYYY-MM-DD (ISO 8601)</option>
-                                  <option value="DD/MM/YYYY">DD/MM/YYYY (European)</option>
-                                  <option value="MM/DD/YYYY">MM/DD/YYYY (US Standard)</option>
-                                </select>
-                              ) : setting.key === 'default_currency' ? (
-                                <select
-                                  value={typeof setting.value === 'string' ? setting.value : String(setting.value ?? '')}
-                                  disabled={!canEdit}
-                                  onChange={(e) => handleValueChange(setting.id, e.target.value)}
-                                  className="input-field"
-                                  style={{ width: '100%' }}
-                                >
-                                  <option value="USD">USD ($ - US Dollar)</option>
-                                  <option value="EUR">EUR (€ - Euro)</option>
-                                  <option value="GBP">GBP (£ - British Pound)</option>
-                                  <option value="CAD">CAD ($ - Canadian Dollar)</option>
-                                  <option value="AUD">AUD ($ - Australian Dollar)</option>
-                                  <option value="JPY">JPY (¥ - Japanese Yen)</option>
-                                  <option value="INR">INR (₹ - Indian Rupee)</option>
-                                </select>
-                              ) : (
-                                <input
-                                  type="text"
-                                  value={typeof setting.value === 'string' || typeof setting.value === 'number' ? setting.value : ''}
-                                  disabled={!canEdit}
-                                  onChange={(e) => handleValueChange(setting.id, e.target.value)}
-                                  className="input-field"
-                                  style={{ width: '100%' }}
-                                />
-                              )}
-                            </div>
-                          )}
-
-                          {/* Array Chips Display */}
-                          {setting.value_type === 'array' && (
-                            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', justifyContent: 'flex-end', width: '100%' }}>
-                              {Array.isArray(setting.value) && setting.value.length > 0 ? (
-                                setting.value.map((item, chipIdx) => (
-                                  <span
-                                    key={chipIdx}
-                                    style={{
-                                      background: 'rgba(255, 255, 255, 0.06)',
-                                      padding: '0.2rem 0.55rem',
-                                      borderRadius: 'var(--radius-sm)',
-                                      fontSize: '0.75rem',
-                                      color: 'var(--text-primary)',
-                                      border: '1px solid var(--border-subtle)',
-                                      fontFamily: 'monospace',
-                                    }}
-                                  >
-                                    {String(item)}
-                                  </span>
-                                ))
-                              ) : (
-                                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                                  None configured
-                                </span>
-                              )}
-                            </div>
-                          )}
+                        {/* Right: Typed Form Control & Revert Button */}
+                        <div style={{ flex: '0 0 auto', minWidth: 260, maxWidth: 340, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.65rem' }}>
+                          <div style={{ width: '100%' }}>
+                            {renderTypedInput(setting, canEdit, handleValueChange)}
+                          </div>
 
                           {/* Single Setting Revert Button */}
                           {isDirty && (
@@ -1031,7 +1664,7 @@ export default function SystemSettingsPage() {
                                 borderRadius: 'var(--radius-sm)',
                                 padding: '0.45rem',
                                 cursor: 'pointer',
-                                display: 'flex',
+                                display: 'inline-flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
                                 transition: 'var(--transition)',

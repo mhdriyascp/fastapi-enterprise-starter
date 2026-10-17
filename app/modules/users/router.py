@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Path, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies.permissions import require_permission
@@ -8,6 +8,10 @@ from app.infrastructure.database.session import get_db_session
 from app.modules.users.models import User
 from app.modules.users.schemas import UserCreate, UserResponse, UserUpdate
 from app.modules.users.service import UserService
+from app.shared.deletion_policy import (
+    is_user_authorized_for_hard_delete,
+    should_user_view_all_statuses,
+)
 from app.shared.pagination import PaginationParams, get_pagination
 from app.shared.response import PagedResponse
 
@@ -52,12 +56,20 @@ async def list_users(
     db: Annotated[AsyncSession, Depends(get_db_session)],
     pagination: Annotated[PaginationParams, Depends(get_pagination)],
     current_user: Annotated[User, Depends(require_permission("user.read"))],
+    status_filter: str | None = None,
+    include_deleted: bool | None = None,
 ) -> PagedResponse[UserResponse]:
-    """Lists users with pagination and role data."""
+    """Lists users with pagination, status filtering, and role data."""
     service = UserService(db)
+    view_all = await should_user_view_all_statuses(db, current_user)
+    effective_include_deleted = (
+        include_deleted if include_deleted is not None else view_all
+    )
     items, total = await service.list_users(
         offset=pagination.offset,
         limit=pagination.page_size,
+        include_deleted=effective_include_deleted,
+        status=status_filter,
     )
     return PagedResponse.build(
         items=items,
@@ -93,7 +105,8 @@ async def get_user(
             detail="User identifier cannot be null or empty.",
         )
     service = UserService(db)
-    user = await service.get_by_id(str_val)
+    view_all = await should_user_view_all_statuses(db, current_user)
+    user = await service.get_by_id(str_val, include_deleted=view_all)
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -194,7 +207,7 @@ async def toggle_status(
     "/{identifier}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete user",
-    description="Soft-deletes a user from the platform.",
+    description="Deletes or disables a user account (soft or hard delete based on permissions and options).",
 )
 async def delete_user(
     identifier: Annotated[
@@ -206,6 +219,12 @@ async def delete_user(
     ],
     db: Annotated[AsyncSession, Depends(get_db_session)],
     current_user: Annotated[User, Depends(require_permission("user.delete"))],
+    hard_delete: Annotated[
+        bool | None,
+        Query(
+            description="Set true for permanent purge, false for soft-delete. Defaults based on user permissions.",
+        ),
+    ] = None,
 ) -> None:
     """Deletes a user account with Super Administrator protection."""
     str_val = identifier.strip() if identifier else ""
@@ -214,15 +233,27 @@ async def delete_user(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="User identifier cannot be null or empty.",
         )
+    can_hard_delete = await is_user_authorized_for_hard_delete(
+        db, current_user, "users"
+    )
+    if hard_delete is True and not can_hard_delete:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to permanently delete user accounts. Only soft-deletion is permitted based on your RBAC permissions.",
+        )
+    effective_hard_delete = bool(hard_delete)
+
     service = UserService(db)
-    user = await service.get_by_id(str_val)
+    user = await service.get_by_id(str_val, include_deleted=True)
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"User with identifier '{str_val}' not found.",
         )
+    if not effective_hard_delete and (user.is_deleted or user.status == "disabled"):
+        return None
     try:
-        await service.delete_user(user, current_user)
+        await service.delete_user(user, current_user, hard_delete=effective_hard_delete)
     except PermissionError as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -233,3 +264,40 @@ async def delete_user(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
         ) from exc
+
+
+@router.post(
+    "/{identifier}/restore",
+    response_model=UserResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Restore soft-deleted user",
+    description="Restores a previously soft-deleted or disabled user account back to active status.",
+)
+async def restore_user(
+    identifier: Annotated[
+        str,
+        Path(
+            description="Unique identifier of the user (UUID ID or public_id)",
+            examples=["018f3a2b-c4d5-7e8f-9a0b-1c2d3e4f5a6b"],
+        ),
+    ],
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[User, Depends(require_permission("user.restore"))],
+) -> UserResponse:
+    """Restores a soft-deleted or disabled user account."""
+    str_val = identifier.strip() if identifier else ""
+    if not str_val or str_val.lower() in ("null", "undefined", "none"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User identifier cannot be null or empty.",
+        )
+
+    service = UserService(db)
+    user = await service.get_by_id(str_val, include_deleted=True)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"User with identifier '{str_val}' not found.",
+        )
+
+    return await service.restore_user(user, current_user)

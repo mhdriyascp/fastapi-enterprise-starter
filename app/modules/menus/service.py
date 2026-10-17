@@ -1,5 +1,6 @@
 import logging
 import re
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import delete, func, select
@@ -7,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.modules.activity_logs.service import record_activity
 from app.modules.menus.models import Menu, MenuPermission, MenuRole
 from app.modules.menus.schemas import (
     MenuCreate,
@@ -62,6 +64,8 @@ class MenuService:
             icon=menu.icon,
             sort_order=menu.sort_order,
             is_active=menu.is_active,
+            is_deleted=bool(getattr(menu, "is_deleted", False)),
+            deleted_at=getattr(menu, "deleted_at", None),
             role_ids=role_ids,
             permission_ids=permission_ids,
             created_at=menu.created_at,
@@ -84,7 +88,11 @@ class MenuService:
         except ValueError, TypeError:
             return None
 
-    async def get_menu_by_id(self, identifier: int | UUID | str) -> Menu | None:
+    async def get_menu_by_id(
+        self,
+        identifier: int | UUID | str,
+        include_deleted: bool = False,
+    ) -> Menu | None:
         """Fetches a menu by either its internal integer ID or public UUIDv7."""
         clause = self._build_identifier_clause(identifier)
         if clause is None:
@@ -98,6 +106,8 @@ class MenuService:
             )
             .where(clause)
         )
+        if not include_deleted:
+            stmt = stmt.where(Menu.is_deleted.is_(False))
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -171,6 +181,16 @@ class MenuService:
 
         try:
             await self.db.commit()
+            await record_activity(
+                db=self.db,
+                module="menus",
+                action="CREATE",
+                entity_type="Menu",
+                entity_id=menu.public_id,
+                entity_name=menu.title,
+                details={"code": menu.code, "path": menu.path},
+            )
+            await self.db.commit()
         except IntegrityError as exc:
             await self.db.rollback()
             logger.warning("Integrity error creating menu: %s", exc)
@@ -188,6 +208,7 @@ class MenuService:
         pagination: PaginationParams,
         parent_id: int | UUID | str | None = None,
         is_active: bool | None = None,
+        include_deleted: bool = False,
     ) -> tuple[list[Menu], int]:
         """Lists menus with pagination and filtering."""
         query = select(Menu).options(
@@ -196,8 +217,14 @@ class MenuService:
         )
         count_stmt = select(func.count(Menu.id))
 
+        if not include_deleted:
+            query = query.where(Menu.is_deleted.is_(False))
+            count_stmt = count_stmt.where(Menu.is_deleted.is_(False))
+
         if parent_id is not None:
-            parent = await self.get_menu_by_id(parent_id)
+            parent = await self.get_menu_by_id(
+                parent_id, include_deleted=include_deleted
+            )
             resolved_parent_id = parent.id if parent else -1
             query = query.where(Menu.parent_id == resolved_parent_id)
             count_stmt = count_stmt.where(Menu.parent_id == resolved_parent_id)
@@ -271,19 +298,91 @@ class MenuService:
                 self.db.add(MenuPermission(menu_id=menu.id, permission_id=perm_id))
 
         await self.db.commit()
+        await record_activity(
+            db=self.db,
+            module="menus",
+            action="UPDATE",
+            entity_type="Menu",
+            entity_id=menu.public_id,
+            entity_name=menu.title,
+            details={"code": menu.code, "path": menu.path, "is_active": menu.is_active},
+        )
+        await self.db.commit()
         loaded = await self.get_menu_by_id(menu.id)
         if not loaded:
             raise MenuNotFoundError("Failed to retrieve updated menu.")
         return loaded
 
-    async def delete_menu(self, identifier: int | UUID | str) -> None:
-        """Deletes a menu item and its cascaded children and assignments."""
-        menu = await self.get_menu_by_id(identifier)
+    async def delete_menu(
+        self,
+        identifier: int | UUID | str,
+        hard_delete: bool = False,
+    ) -> None:
+        """Deletes a menu item and its cascaded children and assignments.
+
+        Args:
+            identifier: Menu ID, public UUID, or code.
+            hard_delete: If True, permanently deletes menu and child links; else soft-deactivates.
+        """
+        menu = await self.get_menu_by_id(identifier, include_deleted=True)
         if not menu:
             raise MenuNotFoundError("Menu not found.")
 
-        await self.db.delete(menu)
+        menu_public_id = menu.public_id
+        menu_title = menu.title
+
+        if hard_delete:
+            await self.db.delete(menu)
+        else:
+            menu.is_active = False
+            menu.is_deleted = True
+            menu.deleted_at = datetime.now(UTC)
+
         await self.db.commit()
+        await record_activity(
+            db=self.db,
+            module="menus",
+            action="DELETE" if hard_delete else "DEACTIVATE",
+            entity_type="Menu",
+            entity_id=menu_public_id,
+            entity_name=menu_title,
+            details={"hard_delete": hard_delete, "is_active": False},
+        )
+        await self.db.commit()
+
+    async def restore_menu(
+        self,
+        identifier: int | UUID | str,
+    ) -> Menu:
+        """Restores a deactivated navigation menu item back to active state.
+
+        Args:
+            identifier: Menu ID, public UUID, or code.
+
+        Returns:
+            The restored Menu entity.
+        """
+        menu = await self.get_menu_by_id(identifier, include_deleted=True)
+        if not menu:
+            raise MenuNotFoundError("Menu not found.")
+
+        menu.is_active = True
+        menu.is_deleted = False
+        menu.deleted_at = None
+        await self.db.commit()
+        await self.db.refresh(menu)
+
+        await record_activity(
+            db=self.db,
+            module="menus",
+            action="RESTORE",
+            entity_type="Menu",
+            entity_id=menu.public_id,
+            entity_name=menu.title,
+            details={"is_active": True},
+        )
+        await self.db.commit()
+        return menu
 
     async def set_menu_roles(
         self, identifier: int | UUID | str, role_ids: list[UUID]
@@ -455,6 +554,8 @@ class MenuService:
                 icon=m.icon,
                 sort_order=m.sort_order,
                 is_active=m.is_active,
+                is_deleted=bool(getattr(m, "is_deleted", False)),
+                deleted_at=getattr(m, "deleted_at", None),
                 children=[],
             )
 

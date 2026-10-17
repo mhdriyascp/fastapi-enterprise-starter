@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.security import hash_password, verify_password
+from app.modules.activity_logs.service import record_activity
 from app.modules.identity.exceptions import AccountLockedError
 from app.modules.rbac.models import Permission, Role, RolePermission, UserRole
 from app.modules.users.models import User
@@ -57,6 +58,17 @@ class UserService:
 
         await self.db.commit()
         await self.db.refresh(user)
+
+        await record_activity(
+            db=self.db,
+            module="users",
+            action="CREATE",
+            entity_type="User",
+            entity_id=user.public_id,
+            entity_name=user.email,
+            details={"email": user.email, "status": user.status},
+        )
+        await self.db.commit()
 
         if data.role_codes:
             await self.assign_roles(user.id, data.role_codes)
@@ -259,24 +271,27 @@ class UserService:
             permissions=permissions,
         )
 
-    async def get_by_id(self, identifier: UUID | str) -> User | None:
-        """Fetches an active user by either primary UUID or public UUIDv7."""
+    async def get_by_id(
+        self, identifier: UUID | str, include_deleted: bool = False
+    ) -> User | None:
+        """Fetches a user by either primary UUID or public UUIDv7."""
+        conditions = []
         if isinstance(identifier, UUID):
-            stmt = select(User).where(
-                (User.id == identifier) | (User.public_id == identifier),
-                User.deleted_at.is_(None),
-            )
+            conditions.append((User.id == identifier) | (User.public_id == identifier))
         else:
             str_val = str(identifier).strip()
             try:
                 parsed_uuid = UUID(str_val)
-                stmt = select(User).where(
-                    (User.id == parsed_uuid) | (User.public_id == parsed_uuid),
-                    User.deleted_at.is_(None),
+                conditions.append(
+                    (User.id == parsed_uuid) | (User.public_id == parsed_uuid)
                 )
             except ValueError, TypeError:
                 return None
 
+        if not include_deleted:
+            conditions.append(User.deleted_at.is_(None))
+
+        stmt = select(User).where(*conditions)
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -284,28 +299,35 @@ class UserService:
         self,
         offset: int = 0,
         limit: int = 50,
+        include_deleted: bool = False,
+        status: str | None = None,
     ) -> tuple[list[UserResponse], int]:
-        """Lists active users with pagination and enriched roles.
+        """Lists users with pagination, status filtering, and enriched roles.
 
         Args:
             offset: Number of items to skip.
             limit: Maximum number of items to return.
+            include_deleted: If True, includes soft-deleted users.
+            status: Optional status string filter.
 
         Returns:
             A tuple of (UserResponse items, total_count).
         """
-        count_result = await self.db.execute(
-            select(func.count()).select_from(User).where(User.deleted_at.is_(None))
-        )
-        total = count_result.scalar_one()
+        count_query = select(func.count()).select_from(User)
+        query = select(User)
 
-        query = (
-            select(User)
-            .where(User.deleted_at.is_(None))
-            .order_by(User.created_at.desc())
-            .offset(offset)
-            .limit(limit)
-        )
+        if not include_deleted:
+            count_query = count_query.where(User.deleted_at.is_(None))
+            query = query.where(User.deleted_at.is_(None))
+
+        if status and status.strip():
+            clean_status = status.strip().lower()
+            count_query = count_query.where(func.lower(User.status) == clean_status)
+            query = query.where(func.lower(User.status) == clean_status)
+
+        total = (await self.db.execute(count_query)).scalar_one()
+
+        query = query.order_by(User.created_at.desc()).offset(offset).limit(limit)
         result = await self.db.execute(query)
         users = list(result.scalars().all())
 
@@ -376,14 +398,32 @@ class UserService:
 
         await self.db.commit()
         await self.db.refresh(user)
+        await record_activity(
+            db=self.db,
+            module="users",
+            action="UPDATE",
+            entity_type="User",
+            entity_id=user.public_id,
+            entity_name=user.email,
+            details={"updated_fields": list(update_data.keys())},
+            user_id=current_user.id,
+            user_email=current_user.email,
+        )
+        await self.db.commit()
         return await self.build_user_response(user)
 
-    async def delete_user(self, user: User, current_user: User) -> None:
-        """Soft-deletes a user with Super Administrator safety checks.
+    async def delete_user(
+        self,
+        user: User,
+        current_user: User,
+        hard_delete: bool = False,
+    ) -> None:
+        """Deletes a user account with Super Administrator safety checks.
 
         Args:
             user: The user entity to delete.
             current_user: The authenticated operator initiating deletion.
+            hard_delete: If True, permanently purges user and assignments; else soft-deletes.
         """
         if user.id == current_user.id:
             raise ValueError("You cannot delete your own account.")
@@ -396,9 +436,62 @@ class UserService:
                 "A Super Administrator account cannot be deleted by anyone other than a Super Administrator."
             )
 
-        user.deleted_at = datetime.now(UTC)
-        user.status = "disabled"
+        user_public_id = user.public_id
+        user_email = user.email
+
+        if hard_delete:
+            await self.db.execute(delete(UserRole).where(UserRole.user_id == user.id))
+            await self.db.delete(user)
+        else:
+            user.deleted_at = datetime.now(UTC)
+            user.status = "disabled"
+
         await self.db.commit()
+        await record_activity(
+            db=self.db,
+            module="users",
+            action="DELETE",
+            entity_type="User",
+            entity_id=user_public_id,
+            entity_name=user_email,
+            details={
+                "hard_delete": hard_delete,
+                "status": "disabled" if not hard_delete else "deleted",
+            },
+            user_id=current_user.id,
+            user_email=current_user.email,
+        )
+        await self.db.commit()
+
+    async def restore_user(self, user: User, current_user: User) -> UserResponse:
+        """Restores a soft-deleted or disabled user account back to active status.
+
+        Args:
+            user: The user entity to restore.
+            current_user: The authenticated operator initiating the restoration.
+
+        Returns:
+            The enriched restored user response.
+        """
+        user.deleted_at = None
+        user.status = "active"
+
+        await self.db.commit()
+        await self.db.refresh(user)
+
+        await record_activity(
+            db=self.db,
+            module="users",
+            action="RESTORE",
+            entity_type="User",
+            entity_id=user.public_id,
+            entity_name=user.email,
+            details={"status": "active", "deleted_at": None},
+            user_id=current_user.id,
+            user_email=current_user.email,
+        )
+        await self.db.commit()
+        return await self.enrich_user_response(user)
 
     async def toggle_user_status(self, user: User, current_user: User) -> UserResponse:
         """Toggles user active status with Super Administrator safety checks.
@@ -424,4 +517,16 @@ class UserService:
         user.status = "suspended" if user.status == "active" else "active"
         await self.db.commit()
         await self.db.refresh(user)
+        await record_activity(
+            db=self.db,
+            module="users",
+            action="STATUS_CHANGE",
+            entity_type="User",
+            entity_id=user.public_id,
+            entity_name=user.email,
+            details={"status": user.status},
+            user_id=current_user.id,
+            user_email=current_user.email,
+        )
+        await self.db.commit()
         return await self.build_user_response(user)

@@ -113,3 +113,79 @@ async def test_roles_and_permissions_paged_response_api() -> None:
         # null identifier rejection
         res_bad = await client.get("/api/v1/roles/null", headers=headers)
         assert res_bad.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_permission_soft_delete_and_restore() -> None:
+    """Verifies that Permission supports soft-deletion (deactivation) and restoration."""
+    import uuid
+
+    from httpx import ASGITransport, AsyncClient
+    from sqlalchemy import select
+
+    from app.core.config import settings
+    from app.core.security import create_access_token
+    from app.main import app
+    from app.modules.users.models import User
+
+    async with SessionFactory() as db:
+        res = await db.execute(
+            select(User).where(User.email == settings.seed_super_admin_email)
+        )
+        super_admin = res.scalar_one()
+        token = create_access_token(super_admin.id)
+
+    headers = {"Authorization": f"Bearer {token}"}
+    test_resource = f"res_{uuid.uuid4().hex[:6]}"
+    test_action = "inspect"
+    test_code = f"{test_resource}.{test_action}"
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as client:
+        # 1. Create custom permission
+        create_res = await client.post(
+            "/api/v1/permissions",
+            json={
+                "name": "Test Permission",
+                "code": test_code,
+                "resource": test_resource,
+                "action": test_action,
+                "description": "Permission for soft delete test",
+            },
+            headers=headers,
+        )
+        assert create_res.status_code == 201, create_res.text
+        perm_id = create_res.json()["id"]
+
+        # 2. Soft-delete permission
+        soft_del_res = await client.delete(
+            f"/api/v1/permissions/{perm_id}?hard_delete=false",
+            headers=headers,
+        )
+        assert soft_del_res.status_code == 204
+
+        # 3. Verify it is inactive
+        get_res = await client.get(f"/api/v1/permissions/{perm_id}", headers=headers)
+        assert get_res.status_code == 200
+        assert get_res.json()["is_active"] is False
+
+        # 4. Restore permission
+        restore_res = await client.post(
+            f"/api/v1/permissions/{perm_id}/restore",
+            headers=headers,
+        )
+        assert restore_res.status_code == 200
+        assert restore_res.json()["is_active"] is True
+
+        # 5. Hard delete permission
+        hard_del_res = await client.delete(
+            f"/api/v1/permissions/{perm_id}?hard_delete=true",
+            headers=headers,
+        )
+        assert hard_del_res.status_code == 204
+
+        # Verify not found
+        get_after = await client.get(f"/api/v1/permissions/{perm_id}", headers=headers)
+        assert get_after.status_code == 404

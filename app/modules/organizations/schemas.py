@@ -21,6 +21,9 @@ class OrganizationCreate(BaseModel):
 
 class OrganizationUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=2, max_length=150)
+    code: str | None = Field(
+        default=None, min_length=2, max_length=30, pattern=r"^[A-Za-z0-9_-]+$"
+    )
     legal_name: str | None = Field(default=None, max_length=200)
     registration_number: str | None = Field(default=None, max_length=100)
     tax_registration_number: str | None = Field(default=None, max_length=100)

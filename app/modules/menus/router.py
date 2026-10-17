@@ -22,6 +22,10 @@ from app.modules.menus.service import (
     MenuService,
 )
 from app.modules.users.models import User
+from app.shared.deletion_policy import (
+    is_user_authorized_for_hard_delete,
+    should_user_view_all_statuses,
+)
 from app.shared.pagination import PaginationParams, get_pagination
 from app.shared.response import PagedResponse
 
@@ -99,11 +103,11 @@ async def create_menu(
     status_code=status.HTTP_200_OK,
     summary="List navigation menu items",
     description="Returns a paginated list of menu items with optional filtering by parent_id or active status.",
-    dependencies=[Depends(require_permission("menu.read"))],
 )
 async def list_menus(
     db: Annotated[AsyncSession, Depends(get_db_session)],
     pagination: Annotated[PaginationParams, Depends(get_pagination)],
+    current_user: Annotated[User, Depends(require_permission("menu.read"))],
     parent_id: Annotated[
         str | None,
         Query(description="Filter by parent menu ID or public UUIDv7"),
@@ -112,12 +116,26 @@ async def list_menus(
         bool | None,
         Query(description="Filter by active status"),
     ] = None,
+    include_deleted: Annotated[
+        bool | None,
+        Query(
+            description="Filter by deleted status. Defaults to False unless user is authorized to view all.",
+        ),
+    ] = None,
 ) -> PagedResponse[MenuResponse]:
     service = MenuService(db)
+    view_all = await should_user_view_all_statuses(db, current_user)
+    effective_is_active = (
+        is_active if is_active is not None else (None if view_all else True)
+    )
+    effective_include_deleted = (
+        include_deleted if include_deleted is not None else view_all
+    )
     items, total = await service.list_menus(
         pagination=pagination,
         parent_id=parent_id,
-        is_active=is_active,
+        is_active=effective_is_active,
+        include_deleted=effective_include_deleted,
     )
     responses = [service.to_response(m) for m in items]
     return PagedResponse[MenuResponse].build(
@@ -145,6 +163,7 @@ async def get_menu(
         ),
     ],
     db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[User, Depends(require_permission("menu.read"))],
 ) -> MenuResponse:
     str_val = identifier.strip() if identifier else ""
     if not str_val or str_val.lower() in ("null", "undefined", "none"):
@@ -154,7 +173,8 @@ async def get_menu(
         )
 
     service = MenuService(db)
-    menu = await service.get_menu_by_id(str_val)
+    view_all = await should_user_view_all_statuses(db, current_user)
+    menu = await service.get_menu_by_id(str_val, include_deleted=view_all)
     if not menu:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -221,8 +241,7 @@ async def update_menu(
     "/{identifier}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete menu item",
-    description="Deletes a menu item, cascading to child items and access assignments.",
-    dependencies=[Depends(require_permission("menu.delete"))],
+    description="Deletes a menu item, cascading to child items and access assignments (soft or hard delete based on permissions and options).",
 )
 async def delete_menu(
     identifier: Annotated[
@@ -233,7 +252,59 @@ async def delete_menu(
         ),
     ],
     db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[User, Depends(require_permission("menu.delete"))],
+    hard_delete: Annotated[
+        bool | None,
+        Query(
+            description="Set true for permanent purge, false for soft-delete. Defaults based on user permissions.",
+        ),
+    ] = None,
 ) -> None:
+    str_val = identifier.strip() if identifier else ""
+    if not str_val or str_val.lower() in ("null", "undefined", "none"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Menu identifier cannot be null or empty.",
+        )
+
+    can_hard_delete = await is_user_authorized_for_hard_delete(
+        db, current_user, "menus"
+    )
+    if hard_delete is True and not can_hard_delete:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to permanently delete menu items. Only soft-deletion is permitted based on your RBAC permissions.",
+        )
+    effective_hard_delete = bool(hard_delete)
+
+    service = MenuService(db)
+    try:
+        await service.delete_menu(str_val, hard_delete=effective_hard_delete)
+    except MenuNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/{identifier}/restore",
+    response_model=MenuResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Restore soft-deleted menu item",
+    description="Restores a previously deactivated menu item back to active state.",
+)
+async def restore_menu(
+    identifier: Annotated[
+        str,
+        Path(
+            description="Unique identifier of the menu item (internal ID or public UUIDv7)",
+            examples=["1", "018f3a2b-c4d5-7e8f-9a0b-1c2d3e4f5a6b"],
+        ),
+    ],
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[User, Depends(require_permission("menu.restore"))],
+) -> MenuResponse:
     str_val = identifier.strip() if identifier else ""
     if not str_val or str_val.lower() in ("null", "undefined", "none"):
         raise HTTPException(
@@ -243,7 +314,8 @@ async def delete_menu(
 
     service = MenuService(db)
     try:
-        await service.delete_menu(str_val)
+        restored = await service.restore_menu(str_val)
+        return service.to_response(restored)
     except MenuNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

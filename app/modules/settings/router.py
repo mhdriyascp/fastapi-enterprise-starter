@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies.auth import get_current_user
-from app.api.dependencies.permissions import require_permission
+from app.api.dependencies.permissions import require_admin, require_permission
 from app.infrastructure.database.session import get_db_session
 from app.modules.settings.schemas import (
     BulkSettingsUpdate,
@@ -44,8 +44,11 @@ async def get_public_settings(
     response_model=PagedResponse[SystemSettingResponse],
     status_code=status.HTTP_200_OK,
     summary="List all system settings",
-    description="Retrieves a paginated and filtered list of system settings. Requires settings.read permission.",
-    dependencies=[Depends(require_permission("settings.read"))],
+    description="Retrieves a paginated and filtered list of system settings. Restricted to administrators with settings.read.",
+    dependencies=[
+        Depends(require_admin()),
+        Depends(require_permission("settings.read")),
+    ],
 )
 async def list_settings(
     db: Annotated[AsyncSession, Depends(get_db_session)],
@@ -90,7 +93,10 @@ async def list_settings(
     status_code=status.HTTP_200_OK,
     summary="Get all settings as key-value map",
     description="Returns a consolidated dictionary of all system configuration keys and values.",
-    dependencies=[Depends(require_permission("settings.read"))],
+    dependencies=[
+        Depends(require_admin()),
+        Depends(require_permission("settings.read")),
+    ],
 )
 async def get_all_settings_map(
     db: Annotated[AsyncSession, Depends(get_db_session)],
@@ -104,8 +110,11 @@ async def get_all_settings_map(
     response_model=list[SystemSettingResponse],
     status_code=status.HTTP_200_OK,
     summary="Bulk update system settings",
-    description="Atomically updates multiple system setting values by key. Requires settings.update permission.",
-    dependencies=[Depends(require_permission("settings.update"))],
+    description="Atomically updates multiple system setting values by key. Restricted to administrators with settings.update.",
+    dependencies=[
+        Depends(require_admin()),
+        Depends(require_permission("settings.update")),
+    ],
 )
 async def bulk_update_settings(
     payload: BulkSettingsUpdate,
@@ -123,7 +132,10 @@ async def bulk_update_settings(
     status_code=status.HTTP_200_OK,
     summary="Get system setting details",
     description="Fetches a specific system setting by internal integer ID, UUIDv7 public_id, or configuration key.",
-    dependencies=[Depends(require_permission("settings.read"))],
+    dependencies=[
+        Depends(require_admin()),
+        Depends(require_permission("settings.read")),
+    ],
 )
 async def get_setting(
     identifier: Annotated[
@@ -160,8 +172,11 @@ async def get_setting(
     response_model=SystemSettingResponse,
     status_code=status.HTTP_200_OK,
     summary="Update system setting",
-    description="Updates a single system setting value and metadata. Requires settings.update permission.",
-    dependencies=[Depends(require_permission("settings.update"))],
+    description="Updates a single system setting value and metadata. Restricted to administrators with settings.update.",
+    dependencies=[
+        Depends(require_admin()),
+        Depends(require_permission("settings.update")),
+    ],
 )
 async def update_setting(
     identifier: Annotated[

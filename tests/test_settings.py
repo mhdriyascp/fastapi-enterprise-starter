@@ -184,3 +184,109 @@ async def test_get_all_settings_map():
         assert isinstance(data, dict)
         assert "default_timezone" in data
         assert "password_min_length" in data
+
+
+@pytest.mark.asyncio
+async def test_settings_sort_order_and_sorting():
+    """Verify sort_order can be queried, sorted by, and updated."""
+    token = await get_admin_token()
+    headers = {"Authorization": f"Bearer {token}"}
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # 1. Update sort_order for company_name
+        patch_res = await client.patch(
+            "/api/v1/settings/company_name",
+            json={"value": "Acme Updated", "sort_order": 5},
+            headers=headers,
+        )
+        assert patch_res.status_code == 200
+        assert patch_res.json()["sort_order"] == 5
+
+        # 2. Bulk update sort orders
+        bulk_res = await client.patch(
+            "/api/v1/settings/bulk",
+            json={
+                "settings": {"company_name": "Acme Final"},
+                "sort_orders": {"company_name": 1, "support_email": 2},
+            },
+            headers=headers,
+        )
+        assert bulk_res.status_code == 200
+
+        # 3. List ordered by sort_order ascending
+        list_res = await client.get(
+            "/api/v1/settings?sort_by=sort_order&sort_order=asc",
+            headers=headers,
+        )
+        assert list_res.status_code == 200
+        items = list_res.json()["items"]
+        assert len(items) >= 2
+        # Verify first item is company_name with sort_order 1
+        assert items[0]["key"] == "company_name"
+        assert items[0]["sort_order"] == 1
+        assert items[1]["key"] == "support_email"
+        assert items[1]["sort_order"] == 2
+
+
+@pytest.mark.asyncio
+async def test_settings_restricted_to_administrators():
+    """Verify that non-admin users cannot access administrative system settings endpoints."""
+    # Create non-admin user
+    async with SessionFactory() as db:
+        user = User(
+            first_name="Regular",
+            last_name="Member",
+            display_name="Regular Member",
+            email="regular_member_settings_test@example.com",
+            password_hash="mock_hash",
+            status="active",
+        )
+        existing = (
+            await db.scalars(
+                select(User).where(
+                    User.email == "regular_member_settings_test@example.com"
+                )
+            )
+        ).first()
+        if existing:
+            await db.delete(existing)
+            await db.commit()
+
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+        non_admin_token = create_access_token(user.id)
+        user_id = user.id
+
+    headers = {"Authorization": f"Bearer {non_admin_token}"}
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # 1. Non-admin accessing /api/v1/settings returns 403 Forbidden
+        list_res = await client.get("/api/v1/settings", headers=headers)
+        assert list_res.status_code == 403
+        assert "restricted" in list_res.json().get("detail", "").lower()
+
+        # 2. Non-admin accessing /api/v1/settings/map returns 403 Forbidden
+        map_res = await client.get("/api/v1/settings/map", headers=headers)
+        assert map_res.status_code == 403
+
+        # 3. Non-admin modifying /api/v1/settings/bulk returns 403 Forbidden
+        bulk_res = await client.patch(
+            "/api/v1/settings/bulk",
+            json={"settings": {"company_name": "Hacked"}},
+            headers=headers,
+        )
+        assert bulk_res.status_code == 403
+
+        # 4. Public endpoint remains accessible for non-admin and guests
+        public_res = await client.get("/api/v1/settings/public", headers=headers)
+        assert public_res.status_code == 200
+
+    # Cleanup test user
+    async with SessionFactory() as db:
+        user_to_delete = await db.get(User, user_id)
+        if user_to_delete:
+            await db.delete(user_to_delete)
+            await db.commit()

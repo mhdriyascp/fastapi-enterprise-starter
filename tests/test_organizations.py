@@ -2,7 +2,7 @@ import uuid
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from app.core.config import settings
 from app.core.security import create_access_token
@@ -272,9 +272,9 @@ async def test_organization_dual_lookup_api() -> None:
         assert res_patch.status_code == 200
         assert res_patch.json()["is_active"] is False
 
-        # 4. Delete by UUID public_id
+        # 4. Delete by UUID public_id (permanent hard delete)
         res_del = await client.delete(
-            f"/api/v1/organizations/{public_id_str}",
+            f"/api/v1/organizations/{public_id_str}?hard_delete=true",
             headers=headers,
         )
         assert res_del.status_code == 204
@@ -286,17 +286,33 @@ async def test_organization_dual_lookup_api() -> None:
         )
         assert res_404.status_code == 404
 
-        # 6. Verify database record has is_deleted=True and deleted_at populated
+        # 6. Verify database record has been permanently deleted for administrator
         async with SessionFactory() as db:
-            soft_deleted = await db.scalar(
+            purged = await db.scalar(
                 select(Organization).where(Organization.id == org_id)
             )
-            assert soft_deleted is not None
-            assert soft_deleted.is_deleted is True
-            assert soft_deleted.deleted_at is not None
+            assert purged is None
+
+            # 7. Test soft delete behavior when hard_delete=False (non-admin flow)
+            soft_org = await OrganizationService(db).create(
+                OrganizationCreate(
+                    name="Soft Delete Corp",
+                    code=f"SOFT_{uuid.uuid4().hex[:6].upper()}",
+                )
+            )
+            soft_id = soft_org.id
+            await OrganizationService(db).delete(soft_org, hard_delete=False)
+
+            # Record must still exist in DB with soft delete flags
+            soft_record = await db.scalar(
+                select(Organization).where(Organization.id == soft_id)
+            )
+            assert soft_record is not None
+            assert soft_record.is_deleted is True
+            assert soft_record.deleted_at is not None
 
             # Hard cleanup
-            await db.delete(soft_deleted)
+            await db.delete(soft_record)
             await db.commit()
 
 
@@ -327,3 +343,237 @@ async def test_organization_audit_entity_base_columns() -> None:
 
         # Cleanup
         await service.delete(created, hard_delete=True)
+
+
+@pytest.mark.asyncio
+async def test_organization_soft_vs_hard_delete_rbac() -> None:
+    """Verifies that administrators can choose soft or hard delete, while non-admins are restricted to soft-delete by RBAC."""
+    from app.core.security import hash_password
+    from app.modules.rbac.models import Permission, Role, RolePermission, UserRole
+
+    async with SessionFactory() as db:
+        admin_res = await db.execute(
+            select(User).where(User.email == settings.seed_super_admin_email)
+        )
+        super_admin = admin_res.scalar_one()
+        admin_token = create_access_token(super_admin.id)
+
+        # 1. Create a non-admin role with ONLY organization.delete (NO organization.hard_delete)
+        role = Role(
+            name="Soft Delete Only Role",
+            code=f"SOFT_ONLY_{uuid.uuid4().hex[:6].upper()}",
+            description="Role with only soft-delete permission",
+            is_active=True,
+            is_system=False,
+        )
+        db.add(role)
+        await db.flush()
+
+        del_perm = (
+            await db.execute(
+                select(Permission).where(Permission.code == "organization.delete")
+            )
+        ).scalar_one()
+        read_perm = (
+            await db.execute(
+                select(Permission).where(Permission.code == "organization.read")
+            )
+        ).scalar_one()
+        db.add(RolePermission(role_id=role.id, permission_id=del_perm.id))
+        db.add(RolePermission(role_id=role.id, permission_id=read_perm.id))
+
+        # 2. Create non-admin user
+        test_username = f"nonadmin_{uuid.uuid4().hex[:6]}"
+        non_admin_user = User(
+            email=f"{test_username}@example.com",
+            password_hash=hash_password("ComplexPass!123"),
+            first_name="Non Admin",
+            last_name="Operator",
+            display_name="Non Admin Operator",
+            username=test_username,
+            status="active",
+        )
+        db.add(non_admin_user)
+        await db.flush()
+        db.add(UserRole(user_id=non_admin_user.id, role_id=role.id))
+        await db.commit()
+        non_admin_token = create_access_token(non_admin_user.id)
+
+        # Create 2 test organizations
+        service = OrganizationService(db)
+        org1 = await service.create(
+            OrganizationCreate(
+                name="Admin Soft/Hard Org",
+                code=f"ADMIN_ORG_{uuid.uuid4().hex[:6].upper()}",
+            )
+        )
+        org1_public_id = str(org1.public_id)
+        org1_id = org1.id
+
+        org2 = await service.create(
+            OrganizationCreate(
+                name="NonAdmin Target Org",
+                code=f"NONADMIN_ORG_{uuid.uuid4().hex[:6].upper()}",
+            )
+        )
+        org2_public_id = str(org2.public_id)
+        org2_id = org2.id
+
+    admin_headers = {"Authorization": f"Bearer {admin_token}"}
+    non_admin_headers = {"Authorization": f"Bearer {non_admin_token}"}
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as client:
+        # A. Admin executes SOFT delete explicitly (hard_delete=false)
+        res_soft = await client.delete(
+            f"/api/v1/organizations/{org1_public_id}?hard_delete=false",
+            headers=admin_headers,
+        )
+        assert res_soft.status_code == 204
+
+        async with SessionFactory() as db:
+            soft_record = await db.scalar(
+                select(Organization).where(Organization.id == org1_id)
+            )
+            assert soft_record is not None
+            assert soft_record.is_deleted is True
+            assert soft_record.deleted_at is not None
+
+        # B. Admin executes HARD delete explicitly (hard_delete=true) on soft-deleted org
+        res_hard = await client.delete(
+            f"/api/v1/organizations/{org1_public_id}?hard_delete=true",
+            headers=admin_headers,
+        )
+        assert res_hard.status_code == 204
+
+        async with SessionFactory() as db:
+            hard_record = await db.scalar(
+                select(Organization).where(Organization.id == org1_id)
+            )
+            assert hard_record is None
+
+        # C. Non-admin attempts HARD delete without organization.hard_delete permission -> 403 Forbidden
+        res_forbidden = await client.delete(
+            f"/api/v1/organizations/{org2_public_id}?hard_delete=true",
+            headers=non_admin_headers,
+        )
+        assert res_forbidden.status_code == 403
+        assert "permission to permanently delete" in res_forbidden.json()["detail"]
+
+        # D. Non-admin executes SOFT delete -> 204 No Content
+        res_nonadmin_soft = await client.delete(
+            f"/api/v1/organizations/{org2_public_id}?hard_delete=false",
+            headers=non_admin_headers,
+        )
+        assert res_nonadmin_soft.status_code == 204
+
+        async with SessionFactory() as db:
+            soft_org2 = await db.scalar(
+                select(Organization).where(Organization.id == org2_id)
+            )
+            assert soft_org2 is not None
+            assert soft_org2.is_deleted is True
+
+            # Cleanup
+            await db.delete(soft_org2)
+            await db.execute(
+                delete(UserRole).where(UserRole.user_id == non_admin_user.id)
+            )
+            await db.execute(
+                delete(RolePermission).where(RolePermission.role_id == role.id)
+            )
+            await db.delete(non_admin_user)
+            await db.delete(role)
+            await db.commit()
+
+
+@pytest.mark.asyncio
+async def test_two_stage_delete_lifecycle_and_restore() -> None:
+    """Verifies that deletions default to soft-delete first, enabling restore or permanent purge."""
+    async with SessionFactory() as db:
+        res = await db.execute(
+            select(User).where(User.email == settings.seed_super_admin_email)
+        )
+        super_admin = res.scalar_one()
+        token = create_access_token(super_admin.id)
+
+    headers = {"Authorization": f"Bearer {token}"}
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as client:
+        # 1. Create test organization
+        unique_code = f"2STAGE_{uuid.uuid4().hex[:6].upper()}"
+        res_create = await client.post(
+            "/api/v1/organizations",
+            headers=headers,
+            json={
+                "name": "Two Stage Lifecycle Org",
+                "code": unique_code,
+                "email": "lifecycle@test.com",
+            },
+        )
+        assert res_create.status_code == 201
+        org_id = res_create.json()["id"]
+        public_id = res_create.json()["public_id"]
+
+        # 2. Stage 1: Soft delete by default (no hard_delete query param)
+        res_soft = await client.delete(
+            f"/api/v1/organizations/{public_id}",
+            headers=headers,
+        )
+        assert res_soft.status_code == 204
+
+        # Verify DB still has record with is_deleted=True and is_active=False
+        async with SessionFactory() as db:
+            soft_rec = await db.scalar(
+                select(Organization).where(Organization.id == org_id)
+            )
+            assert soft_rec is not None
+            assert soft_rec.is_deleted is True
+            assert soft_rec.is_active is False
+            assert soft_rec.deleted_at is not None
+
+        # Verify calling soft delete again on already soft-deleted record is idempotent (204)
+        res_soft_repeat = await client.delete(
+            f"/api/v1/organizations/{public_id}",
+            headers=headers,
+        )
+        assert res_soft_repeat.status_code == 204
+
+        # 3. Restore back to active
+        res_restore = await client.post(
+            f"/api/v1/organizations/{public_id}/restore",
+            headers=headers,
+        )
+        assert res_restore.status_code == 200
+        assert res_restore.json()["is_deleted"] is False
+
+        # Verify DB shows is_deleted=False
+        async with SessionFactory() as db:
+            restored_rec = await db.scalar(
+                select(Organization).where(Organization.id == org_id)
+            )
+            assert restored_rec is not None
+            assert restored_rec.is_deleted is False
+            assert restored_rec.deleted_at is None
+
+        # 4. Stage 2: Soft delete again, then permanently purge with hard_delete=true
+        await client.delete(
+            f"/api/v1/organizations/{public_id}",
+            headers=headers,
+        )
+        res_hard = await client.delete(
+            f"/api/v1/organizations/{public_id}?hard_delete=true",
+            headers=headers,
+        )
+        assert res_hard.status_code == 204
+
+        # Verify physically deleted from database
+        async with SessionFactory() as db:
+            purged_rec = await db.scalar(
+                select(Organization).where(Organization.id == org_id)
+            )
+            assert purged_rec is None

@@ -17,6 +17,12 @@ import {
   Trash2,
   RefreshCw,
   Radio,
+  PlusCircle,
+  Database,
+  Sliders,
+  Menu,
+  History,
+  User,
 } from 'lucide-react';
 import { apiFetch } from '@/lib/api-client';
 import { NotificationItem, PagedResponse } from '@/lib/types';
@@ -24,21 +30,63 @@ import { useToast } from '@/lib/toast-context';
 import { useAuth } from '@/lib/auth-context';
 import { formatDateTime, formatRelativeTime } from '@/lib/date-utils';
 import { ConfirmationModal } from '@/components/ui/confirmation-modal';
+import { useDefaultPageSize } from '@/lib/use-page-size';
 
 export default function NotificationsPage() {
   const { toast } = useToast();
-  const { hasPermission } = useAuth();
-  const canDelete = hasPermission('notification.delete');
+  const { user, hasPermission } = useAuth();
+  const canDelete = Boolean(hasPermission('notification.delete') || hasPermission('notification.manage') || user?.is_super_admin);
 
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [availableModules, setAvailableModules] = useState<string[]>([
+    'organizations',
+    'masters',
+    'rbac',
+    'users',
+    'settings',
+    'menus',
+    'activity_logs',
+    'security',
+    'system',
+    'deal',
+  ]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isDismissing, setIsDismissing] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedType, setSelectedType] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'unread' | 'read'>('all');
+  const [pageSize] = useDefaultPageSize(15);
+  const [currentPage, setCurrentPage] = useState<number>(1);
   const [viewingNotification, setViewingNotification] = useState<NotificationItem | null>(null);
   const [clearAllConfirmOpen, setClearAllConfirmOpen] = useState<boolean>(false);
   const [deleteCandidateNotification, setDeleteCandidateNotification] = useState<NotificationItem | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string | number>>(new Set());
+  const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState<boolean>(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState<boolean>(false);
+
+  // Create Notification Modal State
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [newTitle, setNewTitle] = useState<string>('');
+  const [newMessage, setNewMessage] = useState<string>('');
+  const [newType, setNewType] = useState<string>('organizations');
+  const [customType, setCustomType] = useState<string>('');
+  const [newLink, setNewLink] = useState<string>('');
+
+  useEffect(() => {
+    let isMounted = true;
+    apiFetch<string[]>('/notifications/modules')
+      .then((mods) => {
+        if (isMounted && Array.isArray(mods) && mods.length > 0) {
+          setAvailableModules(mods);
+          setNewType((prev) => (mods.includes(prev) ? prev : mods[0]));
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const refreshNotifications = async () => {
     try {
@@ -143,6 +191,56 @@ export default function NotificationsPage() {
     }
   };
 
+  const handleToggleSelectAll = (items: NotificationItem[]) => {
+    if (selectedIds.size === items.length && items.length > 0) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(items.map((n) => n.id)));
+    }
+  };
+
+  const handleToggleSelect = (id: string | number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    setIsBulkDeleting(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const notifId of selectedIds) {
+      try {
+        await apiFetch(`/notifications/${notifId}`, {
+          method: 'DELETE',
+        });
+        successCount++;
+      } catch {
+        failCount++;
+      }
+    }
+
+    if (successCount > 0) {
+      toast.success(`Successfully deleted ${successCount} notification(s).`);
+    }
+    if (failCount > 0) {
+      toast.error(`Failed to delete ${failCount} notification(s).`);
+    }
+
+    setSelectedIds(new Set());
+    setBulkDeleteConfirmOpen(false);
+    setIsBulkDeleting(false);
+    await refreshNotifications();
+  };
+
   // KPI Calculations
   const stats = useMemo(() => {
     const total = notifications.length;
@@ -150,6 +248,14 @@ export default function NotificationsPage() {
     const security = notifications.filter((n) => n.type === 'security').length;
     const commercial = notifications.filter((n) => n.type === 'deal').length;
     return { total, unread, security, commercial };
+  }, [notifications]);
+
+  const notificationCounts = useMemo(() => {
+    return {
+      all: notifications.length,
+      unread: notifications.filter((n) => !n.is_read).length,
+      read: notifications.filter((n) => n.is_read).length,
+    };
   }, [notifications]);
 
   // Filtering
@@ -172,33 +278,91 @@ export default function NotificationsPage() {
     });
   }, [notifications, selectedType, statusFilter, searchQuery]);
 
-  function getNotificationIcon(type: NotificationItem['type']) {
-    switch (type) {
-      case 'deal':
-        return <DollarSign size={16} color="#10b981" />;
-      case 'security':
-        return <Shield size={16} color="#f59e0b" />;
-      case 'tenant':
-        return <Building2 size={16} color="#818cf8" />;
-      case 'system':
-      default:
-        return <CheckCircle2 size={16} color="#38bdf8" />;
-    }
+  const totalRecords = stats.total;
+  const filteredCount = filteredNotifications.length;
+  const totalPages = Math.max(1, Math.ceil(filteredCount / pageSize));
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+  const paginatedNotifications = useMemo(() => {
+    const start = (safeCurrentPage - 1) * pageSize;
+    return filteredNotifications.slice(start, start + pageSize);
+  }, [filteredNotifications, safeCurrentPage, pageSize]);
+
+  function formatModuleLabel(type: string): string {
+    const clean = type.toLowerCase();
+    const map: Record<string, string> = {
+      organizations: 'Organizations',
+      masters: 'Master Data',
+      rbac: 'Access Control',
+      users: 'Users & Teams',
+      settings: 'System Settings',
+      menus: 'Menu Architecture',
+      activity_logs: 'System Activity',
+      security: 'Security & Auth',
+      system: 'System Maintenance',
+      deal: 'Commercial Deals',
+      tenant: 'Tenant Partition',
+    };
+    return map[clean] || clean.charAt(0).toUpperCase() + clean.slice(1);
   }
 
-  function getTypeBadge(type: NotificationItem['type']) {
-    switch (type) {
-      case 'deal':
-        return <span className="badge badge-success">Deal / ARR</span>;
-      case 'security':
-        return <span className="badge badge-warning">Security &amp; RBAC</span>;
-      case 'tenant':
-        return <span className="badge badge-primary">Tenant Partition</span>;
-      case 'system':
-      default:
-        return <span className="badge badge-neutral">System Maintenance</span>;
-    }
+  function getNotificationIcon(type: string) {
+    const clean = type.toLowerCase();
+    if (clean === 'organizations') return <Building2 size={16} color="#3b82f6" />;
+    if (clean === 'masters') return <Database size={16} color="#8b5cf6" />;
+    if (clean === 'rbac' || clean === 'security') return <Shield size={16} color="#f59e0b" />;
+    if (clean === 'users') return <User size={16} color="#06b6d4" />;
+    if (clean === 'settings') return <Sliders size={16} color="#6366f1" />;
+    if (clean === 'menus') return <Menu size={16} color="#ec4899" />;
+    if (clean === 'activity_logs') return <History size={16} color="#f97316" />;
+    if (clean === 'deal' || clean === 'deals') return <DollarSign size={16} color="#10b981" />;
+    if (clean === 'tenant') return <Building2 size={16} color="#818cf8" />;
+    return <CheckCircle2 size={16} color="#38bdf8" />;
   }
+
+  function getTypeBadge(type: string) {
+    const clean = type.toLowerCase();
+    const label = formatModuleLabel(clean);
+    let badgeClass = 'badge badge-neutral';
+    if (clean === 'deal' || clean === 'deals') badgeClass = 'badge badge-success';
+    else if (clean === 'security' || clean === 'rbac') badgeClass = 'badge badge-warning';
+    else if (clean === 'organizations' || clean === 'tenant') badgeClass = 'badge badge-primary';
+    else if (clean === 'users' || clean === 'activity_logs') badgeClass = 'badge badge-info';
+    return <span className={badgeClass}>{label}</span>;
+  }
+
+  const handleCreateNotification = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTitle.trim() || !newMessage.trim()) {
+      toast.error('Title and message are required.');
+      return;
+    }
+    const finalModule = newType === '__custom__' ? (customType.trim() || 'system') : newType;
+    setIsSubmitting(true);
+    try {
+      const created = await apiFetch<NotificationItem>('/notifications', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: newTitle.trim(),
+          message: newMessage.trim(),
+          type: finalModule.toLowerCase(),
+          link: newLink.trim() || null,
+        }),
+      });
+      setNotifications((prev) => [created, ...prev]);
+      toast.success(`Notification for ${finalModule} dispatched successfully`);
+      setIsCreateModalOpen(false);
+      setNewTitle('');
+      setNewMessage('');
+      setNewType('organizations');
+      setCustomType('');
+      setNewLink('');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to dispatch notification';
+      toast.error(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
@@ -231,6 +395,9 @@ export default function NotificationsPage() {
             <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)' }}>
               Notifications &amp; Activity Stream
             </h1>
+            <span className="badge badge-neutral" style={{ fontWeight: 600, fontSize: '0.75rem' }}>
+              {filteredCount === totalRecords ? `${totalRecords} Total Alerts` : `${filteredCount} of ${totalRecords} Alerts`}
+            </span>
           </div>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
             Live platform audit stream, security advisories, commercial deals, and system broadcast notifications.
@@ -258,6 +425,23 @@ export default function NotificationsPage() {
             >
               <CheckCheck size={15} color="var(--accent-primary)" />
               <span>Mark All Read</span>
+            </button>
+          )}
+          {selectedIds.size > 0 && canDelete && (
+            <button
+              type="button"
+              onClick={() => setBulkDeleteConfirmOpen(true)}
+              className="btn btn-secondary"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.45rem',
+                color: 'var(--danger)',
+                borderColor: 'rgba(239, 68, 68, 0.4)',
+              }}
+            >
+              <Trash2 size={14} />
+              <span>Delete ({selectedIds.size})</span>
             </button>
           )}
           {notifications.length > 0 && canDelete && (
@@ -394,11 +578,12 @@ export default function NotificationsPage() {
             className="select-field"
             style={{ height: '40px', fontSize: '0.85rem' }}
           >
-            <option value="all">All Classifications</option>
-            <option value="deal">Commercial Deals (ARR)</option>
-            <option value="security">Security &amp; RBAC</option>
-            <option value="tenant">Tenant Partitions</option>
-            <option value="system">System Maintenance</option>
+            <option value="all">All Modules &amp; Classifications</option>
+            {availableModules.map((mod) => (
+              <option key={mod} value={mod}>
+                {formatModuleLabel(mod)}
+              </option>
+            ))}
           </select>
 
           {/* Status Segmented Buttons */}
@@ -411,27 +596,48 @@ export default function NotificationsPage() {
               border: '1px solid var(--border-subtle)',
             }}
           >
-            {(['all', 'unread', 'read'] as const).map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => setStatusFilter(s)}
-                style={{
-                  padding: '0.35rem 0.85rem',
-                  fontSize: '0.8125rem',
-                  fontWeight: 600,
-                  border: 'none',
-                  borderRadius: 'var(--radius-sm)',
-                  cursor: 'pointer',
-                  background: statusFilter === s ? 'var(--accent-glow)' : 'transparent',
-                  color: statusFilter === s ? 'var(--accent-primary)' : 'var(--text-muted)',
-                  transition: 'var(--transition)',
-                  textTransform: 'capitalize',
-                }}
-              >
-                {s}
-              </button>
-            ))}
+            {(['all', 'unread', 'read'] as const).map((s) => {
+              const count = notificationCounts[s];
+              return (
+                <button
+                  key={s}
+                  id={`btn-filter-status-${s}`}
+                  type="button"
+                  onClick={() => {
+                    setStatusFilter(s);
+                    setCurrentPage(1);
+                  }}
+                  style={{
+                    padding: '0.35rem 0.75rem',
+                    fontSize: '0.78rem',
+                    fontWeight: 600,
+                    textTransform: 'capitalize',
+                    border: 'none',
+                    borderRadius: 'calc(var(--radius-md) - 2px)',
+                    background: statusFilter === s ? 'var(--accent-primary)' : 'transparent',
+                    color: statusFilter === s ? '#ffffff' : 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    transition: 'var(--transition)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.35rem',
+                  }}
+                >
+                  <span>{s}</span>
+                  <span
+                    style={{
+                      fontSize: '0.7rem',
+                      opacity: 0.85,
+                      padding: '0 4px',
+                      borderRadius: '4px',
+                      background: statusFilter === s ? 'rgba(255,255,255,0.2)' : 'var(--bg-card)',
+                    }}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -441,10 +647,19 @@ export default function NotificationsPage() {
         <table className="data-table">
           <thead>
             <tr>
-              <th style={{ width: '15%' }}>Classification</th>
-              <th style={{ width: '38%' }}>Title &amp; Message Summary</th>
-              <th style={{ width: '16%' }}>Audience</th>
-              <th style={{ width: '12%' }}>Status</th>
+              <th style={{ width: '45px', textAlign: 'center' }}>#</th>
+              <th style={{ width: '38px', textAlign: 'center' }}>
+                <input
+                  type="checkbox"
+                  checked={selectedIds.size === filteredNotifications.length && filteredNotifications.length > 0}
+                  onChange={() => handleToggleSelectAll(filteredNotifications)}
+                  aria-label="Select all notifications"
+                />
+              </th>
+              <th style={{ width: '14%' }}>Classification</th>
+              <th style={{ width: '34%' }}>Title &amp; Message Summary</th>
+              <th style={{ width: '15%' }}>Audience</th>
+              <th style={{ width: '11%' }}>Status</th>
               <th style={{ width: '11%' }}>Created</th>
               <th style={{ width: '8%', textAlign: 'right' }}>Action</th>
             </tr>
@@ -452,7 +667,7 @@ export default function NotificationsPage() {
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={6} style={{ padding: '3rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                <td colSpan={8} style={{ padding: '3rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem' }}>
                     <Loader2 size={18} className="animate-spin" />
                     <span>Loading platform notification stream...</span>
@@ -461,7 +676,7 @@ export default function NotificationsPage() {
               </tr>
             ) : filteredNotifications.length === 0 ? (
               <tr>
-                <td colSpan={6} style={{ padding: '3.5rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                <td colSpan={8} style={{ padding: '3.5rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
                     <Bell size={28} style={{ opacity: 0.35 }} />
                     <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
@@ -474,15 +689,26 @@ export default function NotificationsPage() {
                 </td>
               </tr>
             ) : (
-              filteredNotifications.map((n) => (
+              paginatedNotifications.map((n, index) => (
                 <tr
                   key={n.id}
                   style={{
-                    background: !n.is_read ? 'var(--accent-glow)' : undefined,
+                    background: selectedIds.has(n.id) ? 'var(--accent-subtle)' : (!n.is_read ? 'var(--accent-glow)' : undefined),
                     cursor: 'pointer',
                   }}
                   onClick={() => setViewingNotification(n)}
                 >
+                  <td style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 600 }}>
+                    {(safeCurrentPage - 1) * pageSize + index + 1}
+                  </td>
+                  <td style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(n.id)}
+                      onChange={() => handleToggleSelect(n.id)}
+                      aria-label={`Select notification ${n.title}`}
+                    />
+                  </td>
                   {/* Taxonomy */}
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -592,6 +818,54 @@ export default function NotificationsPage() {
           </tbody>
         </table>
       </div>
+
+      {/* Notifications Pagination Footer */}
+      {filteredCount > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '1rem',
+            padding: '0.85rem 1.25rem',
+            background: 'var(--bg-card)',
+            borderRadius: 'var(--radius-lg)',
+            border: '1px solid var(--border-subtle)',
+            fontSize: '0.85rem',
+            color: 'var(--text-muted)',
+          }}
+        >
+          <div>
+            Showing <strong>{(safeCurrentPage - 1) * pageSize + 1}</strong> to{' '}
+            <strong>{Math.min(safeCurrentPage * pageSize, filteredCount)}</strong> of <strong>{filteredCount}</strong> alerts
+            {filteredCount !== totalRecords && ` (filtered from ${totalRecords} total)`}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={safeCurrentPage <= 1}
+              style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
+            >
+              Previous
+            </button>
+            <span style={{ padding: '0 0.5rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+              Page {safeCurrentPage} of {totalPages}
+            </span>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={safeCurrentPage >= totalPages}
+              style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Formatted Key-Value Detail Specification Modal */}
       {viewingNotification && (
@@ -822,6 +1096,188 @@ export default function NotificationsPage() {
         confirmLabel="Dismiss"
         variant="danger"
       />
+
+      {/* Bulk Delete Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={bulkDeleteConfirmOpen}
+        onClose={() => setBulkDeleteConfirmOpen(false)}
+        onConfirm={handleBulkDelete}
+        isLoading={isBulkDeleting}
+        title={`Dismiss ${selectedIds.size} Selected Notifications?`}
+        subtitle="This action will remove the selected notifications from your inbox."
+        message={`Are you sure you want to dismiss the ${selectedIds.size} selected notifications? Once cleared, these records cannot be recovered.`}
+        confirmLabel={`Dismiss ${selectedIds.size} Notifications`}
+        variant="danger"
+      />
+
+      {/* Dispatch / Create Notification Modal */}
+      {isCreateModalOpen && (
+        <div
+          className="modal-backdrop"
+          onClick={() => setIsCreateModalOpen(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.65)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '1rem',
+          }}
+        >
+          <div
+            className="glass-panel"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxWidth: 520,
+              width: '100%',
+              borderRadius: 'var(--radius-lg)',
+              padding: '1.75rem',
+              boxShadow: '0 20px 40px rgba(0, 0, 0, 0.4)',
+              border: '1px solid var(--border-glow)',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <span
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: 'var(--radius-md)',
+                    background: 'var(--accent-glow)',
+                    color: 'var(--accent-primary)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <PlusCircle size={18} />
+                </span>
+                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  Dispatch System Notification
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCreateModalOpen(false)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--text-muted)',
+                  cursor: 'pointer',
+                  padding: '4px',
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateNotification} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                  Target Domain Module *
+                </label>
+                <select
+                  value={newType}
+                  onChange={(e) => setNewType(e.target.value)}
+                  className="select-field"
+                  style={{ width: '100%', height: '40px', fontSize: '0.875rem' }}
+                >
+                  {availableModules.map((mod) => (
+                    <option key={mod} value={mod}>
+                      {formatModuleLabel(mod)} ({mod})
+                    </option>
+                  ))}
+                  <option value="__custom__">+ Other / Custom Module...</option>
+                </select>
+              </div>
+
+              {newType === '__custom__' && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                    Custom Module Key *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. leads, invoices, subscriptions"
+                    value={customType}
+                    onChange={(e) => setCustomType(e.target.value)}
+                    className="input-field"
+                    style={{ width: '100%', height: '40px', fontSize: '0.875rem' }}
+                  />
+                </div>
+              )}
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                  Notification Subject / Title *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. New Enterprise Account Registered"
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  className="input-field"
+                  style={{ width: '100%', height: '40px', fontSize: '0.875rem' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                  Message Content *
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  placeholder="Detailed notification explanation..."
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  className="input-field"
+                  style={{ width: '100%', padding: '0.65rem', fontSize: '0.875rem', resize: 'vertical' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                  Destination Link URL (Optional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. /organizations or /settings"
+                  value={newLink}
+                  onChange={(e) => setNewLink(e.target.value)}
+                  className="input-field"
+                  style={{ width: '100%', height: '40px', fontSize: '0.875rem' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setIsCreateModalOpen(false)}
+                  className="btn btn-secondary"
+                  disabled={isSubmitting}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={isSubmitting}
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}
+                >
+                  {isSubmitting && <Loader2 size={14} className="animate-spin" />}
+                  <span>Dispatch Alert</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -9,6 +9,7 @@ from app.api.v1.auth.router import router as auth_router
 from app.api.v1.mobile.router import router as mobile_router
 from app.api.v1.public.router import router as public_router
 from app.infrastructure.database.session import get_db_session
+from app.modules.activity_logs.router import router as activity_logs_router
 from app.modules.masters.registry import (
     address_router,
     address_type_router,
@@ -78,6 +79,9 @@ router.include_router(notifications_router)
 
 # System Settings routes.
 router.include_router(settings_router)
+
+# System Activity Logs routes.
+router.include_router(activity_logs_router)
 
 # Master Data routes.
 router.include_router(country_router)

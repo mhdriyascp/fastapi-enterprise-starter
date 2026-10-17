@@ -210,3 +210,81 @@ Standardizes all destructive, deactivation, and warning popups across all module
 - **Visual Parity**: Built upon the Master Data Governance warning design standard with glassmorphic backdrop, circular icon badge, and color variants (`danger`, `warning`, `primary`).
 - **Full Accessibility**: Implements `role="dialog"`, `aria-modal="true"`, `aria-labelledby`, keyboard `ESC` dismissal, and body scroll lock.
 - **Loading State**: Displays inline spinner (`<Loader2 className="loading-spinner" />`) and disables action buttons while async operations are in progress.
+
+---
+
+## 11. Enterprise Deletion Policy & Status Visibility Engine
+
+Located in [`app/shared/deletion_policy.py`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/app/shared/deletion_policy.py).
+
+- **Two-Stage Deletion Lifecycle & Policy (Soft-Delete First)**:
+  - System-generated hard-delete permissions (`organization.hard_delete`, `user.hard_delete`, `role.hard_delete`, `menu.hard_delete`, `masters:hard_delete`, `notification.hard_delete`) are granted to system administrators (`super_admin`, `admin`, `system_admin`).
+  - Single-resource deletion endpoints accept an optional query parameter `?hard_delete=true|false`.
+  - **Soft-Delete First**: All deletion actions default to soft-delete (`?hard_delete=false` or omitted `hard_delete=None` resolving to `False`), ensuring active records are NEVER permanently destroyed on first deletion.
+  - **Two-Stage Action Workflow**:
+    1. *Stage 1 (Active Record)*: Clicking Delete executes a soft-delete (marking `is_deleted = True` or `is_active = False` with `deleted_at` timestamp).
+    2. *Stage 2 (Soft-Deleted Record)*: When viewing soft-deleted or inactive records, operators are presented with two distinct choices:
+       - **Restore**: Reinstates the record back to active state.
+       - **Permanent Delete (Purge)**: Prompts a strong confirmation modal and executes `DELETE ...?hard_delete=true` to permanently purge the record from the database.
+- **Distinct Visual Styling for Restore Action (`.btn-restore`)**:
+  - Restore buttons across all modules (`organizations`, `users`, `masters`, `menus`, `rbac`) feature a dedicated emerald-green visual theme (`.btn-restore`):
+    - Text: `#34d399` (dark mode) / `#059669` (light mode)
+    - Background: `rgba(16, 185, 129, 0.12)` (dark mode) / `rgba(16, 185, 129, 0.1)` (light mode)
+    - Border: `1px solid rgba(16, 185, 129, 0.3)`
+    - Hover: `rgba(16, 185, 129, 0.22)` with subtle emerald focus glow (`0 0 10px rgba(16, 185, 129, 0.2)`)
+    - Icon: `<RotateCcw size={13} />` with label `Restore`
+  - Visually differentiates constructive reactivation from destructive deletion (`.btn-danger`) or navigation (`.btn-secondary`).
+- **Strict RBAC Enforcement for Other Users**:
+  - Other users are governed strictly by the RBAC permissions explicitly granted to their roles.
+  - Standard users with `{module}.delete` permission can ONLY perform soft-deletions (`is_deleted = True, deleted_at = UTC timestamp`).
+  - If a user without `{module}.hard_delete` attempts to execute `?hard_delete=true`, the endpoint strictly intercepts the request and raises `403 Forbidden` (`detail="You do not have permission to permanently delete records in this module. Only soft-deletion is permitted based on your RBAC permissions."`).
+- **Dynamic System Settings Configuration**:
+  - `data_retention.permanent_delete_roles`: Configures authorized administrative roles dynamically without hardcoded application logic.
+  - `data_retention.soft_delete_only_for_non_admins`: System-wide toggle enforcing soft deletion for non-admins.
+  - `data_retention.permanent_delete_exceptions`: Allows operators to configure granular exceptions (e.g., `["audit_logs:soft_only"]`, `["notifications:hard"]`).
+  - `data_retention.admin_view_all_statuses`: Enables platform administrators to view records across all statuses (active, inactive, soft-deleted) on their listings.
+- **Administrator Listing Visibility**:
+  - Listing endpoints inspect `should_user_view_all_statuses(db, user)`. For administrators, listings automatically default `effective_include_deleted = True`, allowing administrative operators full visibility into active, inactive, and soft-deleted entities with dedicated `Deleted` status badges and filter controls.
+  - Non-administrative users are strictly shielded from soft-deleted entities.
+
+---
+
+## 12. Granular Restoration & Bulk Operations Engine
+
+Standardizes record recovery, multi-select bulk operations, and real-time state updates across all CRM domains (`organizations`, `users`, `masters`, `menus`, `rbac`, `notifications`):
+- **Granular RBAC Restoration Permissions**:
+  - `organization.restore`: Restores soft-deleted organizations and their operational state.
+  - `user.restore`: Restores deactivated/soft-deleted user accounts and clears suspension flags.
+  - `masters:restore`: Restores deactivated or soft-deleted master reference records.
+  - `menu.restore`: Restores deactivated navigation menu items and preserves hierarchy.
+  - `role.restore`: Restores deactivated custom roles and re-enables assignment.
+- **Dedicated Dual-Lookup Restoration Endpoints**:
+  - `POST /api/v1/organizations/{identifier}/restore` (guarded by `organization.restore`)
+  - `POST /api/v1/users/{identifier}/restore` (guarded by `user.restore`)
+  - `POST /api/v1/masters/{entity}/{identifier}/restore` (guarded by `masters:restore`)
+  - `POST /api/v1/menus/{identifier}/restore` (guarded by `menu.restore`)
+  - `POST /api/v1/roles/{identifier}/restore` (guarded by `role.restore`)
+  - Restores `is_deleted = False`, clears `deleted_at`, resets operational status to active, and updates audit timestamps.
+- **Frontend Bulk Selection & Delete Operations**:
+  - High-density data tables provide individual row checkboxes and a header "Select All" checkbox.
+  - Contextual action bar appears with `Delete ({selectedCount})` trigger upon selection.
+  - Modal confirmation (`ConfirmationModal`) confirms the batch operation and provides administrators an option for permanent hard-deletion when authorized.
+- **Zero-Page-Reload Real-Time Rehydration**:
+  - Full browser page reloads (`window.location.reload()`) are strictly eliminated.
+  - All create, edit, delete, bulk delete, and restore mutations asynchronously rehydrate local component state (`loadOrganizations()`, `reloadUsers()`, `loadRecords()`, `loadMenus()`, `refreshNotifications()`, `loadRbacData()`) and update navigation sidebars in real-time.
+
+---
+
+## 13. Standardized Listing UX & Sequence Numbering
+
+Enterprise listing tables implement continuous row sequence numbering and settings-driven pagination:
+- **Global Row Sequence Numbering (`#`)**:
+  - Every listing module (`organizations`, `users`, `masters`, `menus`, `notifications`, `rbac` roles/permissions, `system-logs`, `settings`) displays an explicit `#` sequence number column computed continuously as `(currentPage - 1) * pageSize + index + 1`.
+  - Row numbering respects pagination boundaries, providing operators continuous, unambiguous numbering across pages without resetting per page.
+- **Settings-Driven Dynamic Pagination (`default_page_size`)**:
+  - System-wide default page size is backed by the database setting `default_page_size` (`GET /api/v1/settings/public`), initialized to `15` records per page.
+  - Hook [`useDefaultPageSize`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/frontend/src/lib/use-page-size.ts) caches and supplies the active page size to all dashboard screens.
+- **Accurate Counter Envelopes**:
+  - Listing headers and pagination footers display detailed record metrics: `Showing X to Y of Z records (filtered from Total)`.
+
+

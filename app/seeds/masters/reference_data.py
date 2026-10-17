@@ -146,6 +146,9 @@ async def seed_reference_data(db: AsyncSession) -> None:
     country_ids: dict[str, int] = {}
 
     for item in countries:
+        curr_code = item.get("currency")
+        curr_id = currency_ids.get(curr_code) if curr_code else None
+
         country, _created = await get_or_create(
             db,
             Country,
@@ -155,10 +158,17 @@ async def seed_reference_data(db: AsyncSession) -> None:
                 "iso3_code": item["iso3_code"],
                 "name": item["name"],
                 "phone_code": item["phone_code"],
+                "default_currency_id": curr_id,
                 "is_active": True,
             },
         )
+        if curr_id and country.default_currency_id != curr_id:
+            country.default_currency_id = curr_id
+            db.add(country)
+
         country_ids[item["code"]] = country.id
+
+    await db.flush()
 
     # ---------------------------------------------------------
     # 3. STATES, PROVINCES, REGIONS, AND GOVERNORATES

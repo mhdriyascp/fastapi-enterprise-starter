@@ -47,7 +47,11 @@ from app.infrastructure.database.models.organization import (
     ProfitCenter,
     Team,
 )
-from app.infrastructure.database.models.system import Notification, SystemSetting
+from app.infrastructure.database.models.system import (
+    ActivityLog,
+    Notification,
+    SystemSetting,
+)
 
 # Masters models
 from app.modules.identity.models import AuthSession

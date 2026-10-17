@@ -5,15 +5,18 @@ import { apiFetch } from '@/lib/api-client';
 import { MenuItem, MenuCreateInput, MenuUpdateInput } from '@/lib/types';
 import { useMenus } from '@/hooks/use-menus';
 import { useToast } from '@/lib/toast-context';
+import { useAuth } from '@/lib/auth-context';
 import { generateMenuCode } from '@/lib/code-generator';
 import { SearchableSelect, SelectOption } from '@/components/ui/searchable-select';
 import { ConfirmationModal } from '@/components/ui/confirmation-modal';
+import { useDefaultPageSize } from '@/lib/use-page-size';
 import {
   Plus,
   Edit2,
   Trash2,
   Route,
   RefreshCw,
+  RotateCcw,
   Search,
   List,
   FolderTree,
@@ -53,6 +56,7 @@ function getMenuIcon(iconName: string | null): React.ReactNode {
  * create/edit modals, child nesting, and live sidebar synchronization.
  */
 export default function MenusPage() {
+  const { user } = useAuth();
   const { refreshMenus: refreshSidebarMenus } = useMenus();
   const { toast } = useToast();
   const [menuTree, setMenuTree] = useState<MenuItem[]>([]);
@@ -60,13 +64,65 @@ export default function MenusPage() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [viewMode, setViewMode] = useState<'table' | 'tree'>('table');
   const [search, setSearch] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'deleted'>('all');
+  const [levelFilter, setLevelFilter] = useState<'all' | 'root' | 'submenus'>('all');
+  const [pageSize] = useDefaultPageSize(15);
+  const [currentPage, setCurrentPage] = useState<number>(1);
 
   // Modal States
   const [modalMode, setModalMode] = useState<'create' | 'edit' | null>(null);
   const [selectedMenu, setSelectedMenu] = useState<MenuItem | null>(null);
   const [viewingMenu, setViewingMenu] = useState<MenuItem | null>(null);
   const [deleteCandidate, setDeleteCandidate] = useState<MenuItem | null>(null);
+  const [isHardDelete, setIsHardDelete] = useState<boolean>(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string | number>>(new Set());
+  const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState<boolean>(false);
+  const [bulkRestoreConfirmOpen, setBulkRestoreConfirmOpen] = useState<boolean>(false);
+  const [bulkHardDeleteRequested, setBulkHardDeleteRequested] = useState<boolean>(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState<boolean>(false);
+  const [isBulkRestoring, setIsBulkRestoring] = useState<boolean>(false);
+  const [restoreCandidate, setRestoreCandidate] = useState<MenuItem | null>(null);
+  const [isRestoring, setIsRestoring] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
+  const isAdmin = useMemo(() => {
+    if (!user) return false;
+    if (user.is_super_admin) return true;
+    return (user.roles || []).some((r: string) =>
+      ['super_admin', 'superadmin', 'admin', 'system_admin'].includes(r.toLowerCase())
+    );
+  }, [user]);
+
+  const canRestore = useMemo(() => {
+    if (!user) return false;
+    return Boolean(
+      isAdmin ||
+      user.is_super_admin ||
+      user?.permissions?.includes('menu.restore') ||
+      user?.permissions?.includes('*.manage')
+    );
+  }, [isAdmin, user]);
+
+  const canDelete = useMemo(() => {
+    if (!user) return false;
+    return Boolean(
+      isAdmin ||
+      user.is_super_admin ||
+      user?.permissions?.includes('menu.delete') ||
+      user?.permissions?.includes('*.delete') ||
+      user?.permissions?.includes('*.manage')
+    );
+  }, [isAdmin, user]);
+
+  const canHardDelete = useMemo(() => {
+    if (!user) return false;
+    return Boolean(
+      isAdmin ||
+      user.is_super_admin ||
+      user?.permissions?.includes('menu.hard_delete') ||
+      user?.permissions?.includes('*.hard_delete')
+    );
+  }, [isAdmin, user]);
 
   // Form State
   const [formData, setFormData] = useState<{
@@ -162,16 +218,52 @@ export default function MenusPage() {
 
   // Filter items in table view
   const filteredFlatList = useMemo(() => {
-    if (!search.trim()) return flatList;
-    const q = search.toLowerCase();
-    return flatList.filter(
-      (m) =>
-        m.title.toLowerCase().includes(q) ||
-        m.code.toLowerCase().includes(q) ||
-        (m.path && m.path.toLowerCase().includes(q)) ||
-        (m.route && m.route.toLowerCase().includes(q))
-    );
-  }, [flatList, search]);
+    return flatList.filter((m) => {
+      if (search.trim()) {
+        const q = search.toLowerCase();
+        const matchesSearch =
+          m.title.toLowerCase().includes(q) ||
+          m.code.toLowerCase().includes(q) ||
+          (m.path && m.path.toLowerCase().includes(q)) ||
+          (m.route && m.route.toLowerCase().includes(q));
+        if (!matchesSearch) return false;
+      }
+
+      if (statusFilter === 'all') {
+        if (m.is_deleted) return false;
+      } else if (statusFilter === 'active') {
+        if (!m.is_active || m.is_deleted) return false;
+      } else if (statusFilter === 'inactive') {
+        if (m.is_active || m.is_deleted) return false;
+      } else if (statusFilter === 'deleted') {
+        if (!m.is_deleted) return false;
+      }
+
+      const isRoot = m.parent_id === null || m.parent_id === undefined || m.parent_id === '';
+      if (levelFilter === 'root' && !isRoot) return false;
+      if (levelFilter === 'submenus' && isRoot) return false;
+
+      return true;
+    });
+  }, [flatList, search, statusFilter, levelFilter]);
+
+  const menuCounts = useMemo(() => {
+    return {
+      all: flatList.filter((m) => !m.is_deleted).length,
+      active: flatList.filter((m) => m.is_active && !m.is_deleted).length,
+      inactive: flatList.filter((m) => !m.is_active && !m.is_deleted).length,
+      deleted: flatList.filter((m) => Boolean(m.is_deleted)).length,
+    };
+  }, [flatList]);
+
+  const totalRecords = flatList.length;
+  const filteredCount = filteredFlatList.length;
+  const totalPages = Math.max(1, Math.ceil(filteredCount / pageSize));
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+  const paginatedFlatList = useMemo(() => {
+    const start = (safeCurrentPage - 1) * pageSize;
+    return filteredFlatList.slice(start, start + pageSize);
+  }, [filteredFlatList, safeCurrentPage, pageSize]);
 
   function validateField(name: string, value: string): string | null {
     const trimmed = (value || '').trim();
@@ -197,7 +289,7 @@ export default function MenusPage() {
   const handleFieldChange = (field: string, value: string | number | boolean) => {
     setFormData((prev) => {
       const next = { ...prev, [field]: value };
-      if (field === 'title' && modalMode === 'create' && typeof value === 'string') {
+      if (field === 'title' && typeof value === 'string') {
         next.code = generateMenuCode(value);
       }
       return next;
@@ -355,11 +447,15 @@ export default function MenusPage() {
     setIsSubmitting(true);
 
     try {
-      await apiFetch(`/menus/${deleteCandidate.id}`, {
+      await apiFetch(`/menus/${deleteCandidate.id}?hard_delete=${isHardDelete}`, {
         method: 'DELETE',
       });
 
-      toast.success(`Menu "${deleteCandidate.title}" deleted.`);
+      toast.success(
+        isHardDelete
+          ? `Menu "${deleteCandidate.title}" permanently deleted.`
+          : `Menu "${deleteCandidate.title}" soft-deleted / deactivated.`
+      );
       setDeleteCandidate(null);
       await loadMenus();
       await refreshSidebarMenus();
@@ -370,6 +466,108 @@ export default function MenusPage() {
       setIsSubmitting(false);
     }
   }
+
+  const handleToggleSelectAll = (items: MenuItem[]) => {
+    if (selectedIds.size === items.length && items.length > 0) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(items.map((m) => m.id)));
+    }
+  };
+
+  const handleToggleSelect = (id: string | number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    setIsBulkDeleting(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const menuId of selectedIds) {
+      try {
+        const query = bulkHardDeleteRequested ? '?hard_delete=true' : '?hard_delete=false';
+        await apiFetch(`/menus/${menuId}${query}`, {
+          method: 'DELETE',
+        });
+        successCount++;
+      } catch {
+        failCount++;
+      }
+    }
+
+    if (successCount > 0) {
+      toast.success(`Successfully processed ${successCount} menu item(s).`);
+    }
+    if (failCount > 0) {
+      toast.error(`Failed to process ${failCount} menu item(s).`);
+    }
+
+    setSelectedIds(new Set());
+    setBulkDeleteConfirmOpen(false);
+    setIsBulkDeleting(false);
+    await loadMenus();
+    await refreshSidebarMenus();
+  };
+
+  const handleBulkRestore = async () => {
+    if (selectedIds.size === 0) return;
+    setIsBulkRestoring(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const menuId of selectedIds) {
+      try {
+        await apiFetch(`/menus/${menuId}/restore`, {
+          method: 'POST',
+        });
+        successCount++;
+      } catch {
+        failCount++;
+      }
+    }
+
+    if (successCount > 0) {
+      toast.success(`Successfully restored ${successCount} menu item(s).`);
+    }
+    if (failCount > 0) {
+      toast.error(`Failed to restore ${failCount} menu item(s).`);
+    }
+
+    setSelectedIds(new Set());
+    setBulkRestoreConfirmOpen(false);
+    setIsBulkRestoring(false);
+    await loadMenus();
+    await refreshSidebarMenus();
+  };
+
+  const handleConfirmRestore = async () => {
+    if (!restoreCandidate) return;
+    setIsRestoring(true);
+    try {
+      await apiFetch(`/menus/${restoreCandidate.id}/restore`, {
+        method: 'POST',
+      });
+      toast.success(`Menu "${restoreCandidate.title}" restored successfully.`);
+      setRestoreCandidate(null);
+      await loadMenus();
+      await refreshSidebarMenus();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to restore menu.';
+      toast.error(msg);
+    } finally {
+      setIsRestoring(false);
+    }
+  };
 
   // Hierarchical tree node component
   function renderTreeNode(item: MenuItem, depth: number = 0) {
@@ -474,16 +672,49 @@ export default function MenusPage() {
               <span>Edit</span>
             </button>
 
-            {/* Delete Button */}
-            <button
-              type="button"
-              onClick={() => setDeleteCandidate(item)}
-              className="btn btn-danger"
-              style={{ padding: '0.35rem 0.65rem', fontSize: '0.75rem' }}
-              title="Delete menu"
-            >
-              <Trash2 size={13} />
-            </button>
+            {/* Restore and Permanent Purge or Deactivate */}
+            {!item.is_active ? (
+              <>
+                {canRestore && (
+                  <button
+                    type="button"
+                    onClick={() => setRestoreCandidate(item)}
+                    className="btn btn-restore"
+                    style={{ padding: '0.35rem 0.65rem', fontSize: '0.75rem' }}
+                    title="Restore menu"
+                  >
+                    <RotateCcw size={13} />
+                    <span>Restore</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDeleteCandidate(item);
+                    setIsHardDelete(true);
+                  }}
+                  className="btn btn-danger"
+                  style={{ padding: '0.35rem 0.65rem', fontSize: '0.75rem' }}
+                  title="Permanently purge menu"
+                >
+                  <Trash2 size={13} />
+                  <span>Purge</span>
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteCandidate(item);
+                  setIsHardDelete(false);
+                }}
+                className="btn btn-danger"
+                style={{ padding: '0.35rem 0.65rem', fontSize: '0.75rem' }}
+                title="Deactivate menu"
+              >
+                <Trash2 size={13} />
+              </button>
+            )}
           </div>
         </div>
 
@@ -510,9 +741,14 @@ export default function MenusPage() {
         }}
       >
         <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
-            RBAC Navigation Menus
-          </h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
+              RBAC Navigation Menus
+            </h1>
+            <span className="badge badge-neutral" style={{ fontWeight: 600, fontSize: '0.75rem' }}>
+              {filteredCount === totalRecords ? `${totalRecords} Total Menus` : `${filteredCount} of ${totalRecords} Menus`}
+            </span>
+          </div>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
             Configure dynamic enterprise navigation structure, route permissions, and role hierarchy.
           </p>
@@ -578,6 +814,62 @@ export default function MenusPage() {
             <span>Reload</span>
           </button>
 
+          {selectedIds.size > 0 && (statusFilter === 'deleted' || (selectedIds.size > 0 && flatList.filter((m) => selectedIds.has(m.id)).every((m) => Boolean(m.is_deleted)))) ? (
+            <>
+              {canRestore && (
+                <button
+                  id="btn-bulk-restore-menu"
+                  type="button"
+                  onClick={() => setBulkRestoreConfirmOpen(true)}
+                  className="btn btn-restore"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem' }}
+                  title={`Restore ${selectedIds.size} selected menu(s)`}
+                >
+                  <RotateCcw size={14} />
+                  <span>Restore ({selectedIds.size})</span>
+                </button>
+              )}
+              {canHardDelete && (
+                <button
+                  id="btn-bulk-purge-menu"
+                  type="button"
+                  onClick={() => {
+                    setBulkHardDeleteRequested(true);
+                    setBulkDeleteConfirmOpen(true);
+                  }}
+                  className="btn btn-danger"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem' }}
+                  title={`Permanently purge ${selectedIds.size} selected menu(s)`}
+                >
+                  <Trash2 size={14} />
+                  <span>Purge ({selectedIds.size})</span>
+                </button>
+              )}
+            </>
+          ) : (
+            canDelete && selectedIds.size > 0 && (
+              <button
+                id="btn-bulk-delete-menu"
+                type="button"
+                onClick={() => {
+                  setBulkHardDeleteRequested(false);
+                  setBulkDeleteConfirmOpen(true);
+                }}
+                className="btn btn-secondary"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.45rem',
+                  color: 'var(--danger)',
+                  borderColor: 'rgba(239, 68, 68, 0.4)',
+                }}
+              >
+                <Trash2 size={14} />
+                <span>Delete ({selectedIds.size})</span>
+              </button>
+            )
+          )}
+
           <button onClick={() => openCreateModal()} className="btn btn-primary">
             <Plus size={15} />
             <span>Add Menu Item</span>
@@ -585,17 +877,123 @@ export default function MenusPage() {
         </div>
       </div>
 
-      {/* Search Filter Toolbar */}
-      <div style={{ position: 'relative', width: '100%', maxWidth: '340px' }}>
-        <Search size={16} style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-        <input
-          type="text"
-          placeholder="Search menus by title, code, or path..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="input-field"
-          style={{ paddingLeft: '2.5rem', fontSize: '0.85rem', height: '38px' }}
-        />
+      {/* Filter and Search Bar */}
+      <div
+        className="glass-panel"
+        style={{
+          padding: '0.85rem 1rem',
+          borderRadius: 'var(--radius-lg)',
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: '0.85rem',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
+        <div style={{ position: 'relative', flex: '1 1 260px', minWidth: '220px' }}>
+          <Search size={16} style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+          <input
+            type="text"
+            placeholder="Search menus by title, code, or path..."
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="input-field"
+            style={{ paddingLeft: '2.5rem', fontSize: '0.85rem', height: '38px', width: '100%' }}
+          />
+        </div>
+
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          {/* Status Filter Segmented Control */}
+          <div
+            style={{
+              display: 'flex',
+              background: 'var(--bg-app)',
+              padding: '0.25rem',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--border-color)',
+            }}
+          >
+            {(['all', 'active', 'inactive', 'deleted'] as const).map((st) => {
+              const count = menuCounts[st];
+              return (
+                <button
+                  key={st}
+                  id={`btn-filter-status-${st}`}
+                  type="button"
+                  onClick={() => {
+                    setStatusFilter(st);
+                    setSelectedIds(new Set());
+                    setCurrentPage(1);
+                  }}
+                  style={{
+                    padding: '0.35rem 0.75rem',
+                    fontSize: '0.78rem',
+                    fontWeight: 600,
+                    textTransform: 'capitalize',
+                    border: 'none',
+                    borderRadius: 'calc(var(--radius-md) - 2px)',
+                    background: statusFilter === st ? 'var(--accent-primary)' : 'transparent',
+                    color: statusFilter === st ? '#ffffff' : 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    transition: 'var(--transition)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.35rem',
+                  }}
+                >
+                  <span>{st}</span>
+                  <span
+                    style={{
+                      fontSize: '0.7rem',
+                      opacity: 0.85,
+                      padding: '0 4px',
+                      borderRadius: '4px',
+                      background: statusFilter === st ? 'rgba(255,255,255,0.2)' : 'var(--bg-card)',
+                    }}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Level / Hierarchy Selector */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <select
+              value={levelFilter}
+              onChange={(e) => {
+                setLevelFilter(e.target.value as 'all' | 'root' | 'submenus');
+                setCurrentPage(1);
+              }}
+              className="input-field"
+              style={{ height: '38px', padding: '0 0.75rem', fontSize: '0.8125rem' }}
+            >
+              <option value="all">All Hierarchy</option>
+              <option value="root">Root Menus Only</option>
+              <option value="submenus">Submenus Only</option>
+            </select>
+          </div>
+
+          {(search || statusFilter !== 'all' || levelFilter !== 'all') && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearch('');
+                setStatusFilter('all');
+                setLevelFilter('all');
+                setCurrentPage(1);
+              }}
+              className="btn btn-secondary"
+              style={{ fontSize: '0.8125rem', padding: '0.4rem 0.75rem' }}
+            >
+              Reset Filters
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Main View Container */}
@@ -606,11 +1004,21 @@ export default function MenusPage() {
           <div className="skeleton" style={{ height: '64px', width: '100%' }} />
         </div>
       ) : viewMode === 'table' ? (
-        /* High-Density Data Table View (Default) */
-        <div className="table-container">
+        <>
+          {/* High-Density Data Table View (Default) */}
+          <div className="table-container">
           <table className="data-table">
             <thead>
               <tr>
+                <th style={{ width: '45px', textAlign: 'center' }}>#</th>
+                <th style={{ width: '38px', textAlign: 'center' }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.size === filteredFlatList.length && filteredFlatList.length > 0}
+                    onChange={() => handleToggleSelectAll(filteredFlatList)}
+                    aria-label="Select all menu items"
+                  />
+                </th>
                 <th>Menu Title</th>
                 <th>System Code</th>
                 <th>Destination Path</th>
@@ -620,9 +1028,20 @@ export default function MenusPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredFlatList.length > 0 ? (
-                filteredFlatList.map((item) => (
-                  <tr key={item.id}>
+              {paginatedFlatList.length > 0 ? (
+                paginatedFlatList.map((item, index) => (
+                  <tr key={item.id} style={{ background: selectedIds.has(item.id) ? 'var(--accent-subtle)' : undefined }}>
+                    <td style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 600 }}>
+                      {(safeCurrentPage - 1) * pageSize + index + 1}
+                    </td>
+                    <td style={{ textAlign: 'center' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(item.id)}
+                        onChange={() => handleToggleSelect(item.id)}
+                        aria-label={`Select ${item.title}`}
+                      />
+                    </td>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
                         <div
@@ -684,8 +1103,8 @@ export default function MenusPage() {
                     </td>
                     <td style={{ color: 'var(--text-secondary)' }}>{item.sort_order ?? item.order_no ?? 0}</td>
                     <td>
-                      <span className={`badge ${item.is_active ? 'badge-success' : 'badge-danger'}`}>
-                        {item.is_active ? 'Active' : 'Disabled'}
+                      <span className={`badge ${item.is_deleted ? 'badge-danger' : item.is_active ? 'badge-success' : 'badge-warning'}`}>
+                        {item.is_deleted ? 'Deleted' : item.is_active ? 'Active' : 'Disabled'}
                       </span>
                     </td>
                     <td style={{ textAlign: 'right' }}>
@@ -709,21 +1128,57 @@ export default function MenusPage() {
                           <Edit2 size={13} />
                           <span>Edit</span>
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => setDeleteCandidate(item)}
-                          className="btn btn-danger"
-                          style={{ padding: '0.35rem 0.6rem', fontSize: '0.75rem' }}
-                        >
-                          <Trash2 size={13} />
-                        </button>
+                        {!item.is_active || item.is_deleted ? (
+                          <>
+                            {canRestore && (
+                              <button
+                                type="button"
+                                onClick={() => setRestoreCandidate(item)}
+                                className="btn btn-restore"
+                                style={{ padding: '0.35rem 0.6rem', fontSize: '0.75rem' }}
+                                title="Restore menu"
+                              >
+                                <RotateCcw size={13} />
+                                <span>Restore</span>
+                              </button>
+                            )}
+                            {canHardDelete && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setDeleteCandidate(item);
+                                  setIsHardDelete(true);
+                                }}
+                                className="btn btn-danger"
+                                style={{ padding: '0.35rem 0.6rem', fontSize: '0.75rem' }}
+                                title="Permanently purge menu"
+                              >
+                                <Trash2 size={13} />
+                                <span>Purge</span>
+                              </button>
+                            )}
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDeleteCandidate(item);
+                              setIsHardDelete(false);
+                            }}
+                            className="btn btn-danger"
+                            style={{ padding: '0.35rem 0.6rem', fontSize: '0.75rem' }}
+                            title="Soft delete menu"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                  <td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
                     No matching menu items found.
                   </td>
                 </tr>
@@ -731,6 +1186,55 @@ export default function MenusPage() {
             </tbody>
           </table>
         </div>
+
+        {/* Menus Table Pagination Footer */}
+        {filteredCount > 0 && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '1rem',
+              padding: '0.85rem 1.25rem',
+              background: 'var(--bg-card)',
+              borderRadius: 'var(--radius-lg)',
+              border: '1px solid var(--border-subtle)',
+              fontSize: '0.85rem',
+              color: 'var(--text-muted)',
+            }}
+          >
+            <div>
+              Showing <strong>{(safeCurrentPage - 1) * pageSize + 1}</strong> to{' '}
+              <strong>{Math.min(safeCurrentPage * pageSize, filteredCount)}</strong> of <strong>{filteredCount}</strong> menu items
+              {filteredCount !== totalRecords && ` (filtered from ${totalRecords} total)`}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={safeCurrentPage <= 1}
+                style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
+              >
+                Previous
+              </button>
+              <span style={{ padding: '0 0.5rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                Page {safeCurrentPage} of {totalPages}
+              </span>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={safeCurrentPage >= totalPages}
+                style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+      </>
       ) : (
         /* Hierarchical Tree View (Second) */
         menuTree.length > 0 ? (
@@ -952,14 +1456,17 @@ export default function MenusPage() {
           <div
             className="modal-dialog glass-panel"
             style={{
-              maxWidth: '520px',
-              padding: '2rem',
-              boxShadow: 'var(--shadow-lg)',
+              width: '100%',
+              maxWidth: '740px',
+              padding: 'clamp(1.5rem, 4vw, 2.25rem)',
+              boxShadow: 'var(--shadow-xl)',
               maxHeight: '90vh',
               overflowY: 'auto',
+              borderRadius: 'var(--radius-xl)',
+              border: '1px solid var(--border-color)',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', gap: '0.75rem' }}>
               <div>
                 <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)' }}>
                   {modalMode === 'create' ? 'Create Menu Item' : 'Edit Menu Item'}
@@ -978,7 +1485,12 @@ export default function MenusPage() {
                   border: 'none',
                   color: 'var(--text-muted)',
                   cursor: 'pointer',
+                  padding: '0.25rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                 }}
+                aria-label="Close dialog"
               >
                 <X size={20} />
               </button>
@@ -1027,8 +1539,8 @@ export default function MenusPage() {
                 )}
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem' }}>
+                <div style={{ minWidth: 0 }}>
                   <label
                     style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}
                   >
@@ -1048,14 +1560,16 @@ export default function MenusPage() {
                       fontWeight: 600,
                       color: formData.title ? 'var(--color-primary-light, #38bdf8)' : 'var(--text-muted)',
                       letterSpacing: '0.05em',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      minWidth: 0,
                     }}
                   >
-                    {modalMode === 'edit'
-                      ? (selectedMenu?.code || 'SYSTEM_RECORD')
-                      : (formData.code || generateMenuCode(formData.title) || 'auto_menu_code')}
+                    {formData.code || generateMenuCode(formData.title) || 'auto_menu_code'}
                   </div>
                 </div>
-                <div>
+                <div style={{ minWidth: 0 }}>
                   <label
                     htmlFor="menu-input-path"
                     style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}
@@ -1072,6 +1586,7 @@ export default function MenusPage() {
                     className={`input-field ${fieldErrors.path && touched.path ? 'has-error' : ''}`}
                     aria-invalid={Boolean(fieldErrors.path && touched.path)}
                     aria-describedby={fieldErrors.path && touched.path ? 'menu-error-path' : undefined}
+                    style={{ width: '100%', boxSizing: 'border-box' }}
                   />
                   {fieldErrors.path && touched.path && (
                     <div id="menu-error-path" className="field-error-text" role="alert">
@@ -1082,8 +1597,8 @@ export default function MenusPage() {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem' }}>
+                <div style={{ minWidth: 0 }}>
                   <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>
                     Parent Category
                   </label>
@@ -1113,7 +1628,7 @@ export default function MenusPage() {
                   />
                 </div>
 
-                <div>
+                <div style={{ minWidth: 0 }}>
                   <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>
                     Sort Order No
                   </label>
@@ -1122,7 +1637,7 @@ export default function MenusPage() {
                     value={formData.sort_order}
                     onChange={(e) => setFormData({ ...formData, sort_order: Number(e.target.value) })}
                     className="input-field"
-                    style={{ height: '42px' }}
+                    style={{ height: '42px', width: '100%', boxSizing: 'border-box' }}
                   />
                 </div>
               </div>
@@ -1162,7 +1677,7 @@ export default function MenusPage() {
                 </label>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap', gap: '0.75rem', marginTop: '1.25rem' }}>
                 <button
                   type="button"
                   onClick={() => setModalMode(null)}
@@ -1192,18 +1707,92 @@ export default function MenusPage() {
         isOpen={!!deleteCandidate}
         onClose={() => setDeleteCandidate(null)}
         onConfirm={handleDeleteMenu}
-        title="Delete Menu Item?"
-        subtitle="This action permanently deletes the navigation item."
+        title={isHardDelete ? "Permanently Delete Menu Item?" : "Deactivate Menu Item?"}
+        subtitle={isHardDelete ? "This action permanently purges the navigation item from the database." : "This will deactivate the navigation item."}
         message={
           deleteCandidate ? (
+            isHardDelete ? (
+              <>
+                Are you sure you want to <strong>permanently purge</strong> <strong>{deleteCandidate.title}</strong>? Any nested child navigation items or access assignments will also be deleted. This action <strong>cannot be undone</strong>.
+              </>
+            ) : (
+              <>
+                Are you sure you want to deactivate <strong>{deleteCandidate.title}</strong>? It can be restored back to active state or permanently purged later.
+              </>
+            )
+          ) : null
+        }
+        confirmLabel={isHardDelete ? "Permanently Delete" : "Deactivate Menu"}
+        variant="danger"
+        isLoading={isSubmitting}
+      />
+
+      {/* Restore Confirmation Modal Dialog */}
+      <ConfirmationModal
+        isOpen={!!restoreCandidate}
+        onClose={() => setRestoreCandidate(null)}
+        onConfirm={handleConfirmRestore}
+        title="Restore Menu Item?"
+        subtitle="This action reactivates the navigation item."
+        message={
+          restoreCandidate ? (
             <>
-              Are you sure you want to permanently delete <strong>{deleteCandidate.title}</strong>? Any nested child navigation items or access assignments will also be deleted.
+              Are you sure you want to restore <strong>{restoreCandidate.title}</strong>? It will become active and available in role navigation layouts.
             </>
           ) : null
         }
-        confirmLabel="Confirm Delete"
+        confirmLabel="Confirm Restore"
+        variant="primary"
+        isLoading={isRestoring}
+      />
+
+      {/* Bulk Delete Confirmation Modal Dialog */}
+      <ConfirmationModal
+        isOpen={bulkDeleteConfirmOpen}
+        onClose={() => setBulkDeleteConfirmOpen(false)}
+        onConfirm={handleBulkDelete}
+        title={`Delete ${selectedIds.size} Selected Menu(s)?`}
+        subtitle={`${selectedIds.size} items selected`}
+        message={
+          <div>
+            <p>
+              Are you sure you want to delete the {selectedIds.size} selected menu item(s)?
+            </p>
+            {canHardDelete && (
+              <div style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <input
+                  type="checkbox"
+                  id="bulk_menu_hard_delete_check"
+                  checked={bulkHardDeleteRequested}
+                  onChange={(e) => setBulkHardDeleteRequested(e.target.checked)}
+                />
+                <label htmlFor="bulk_menu_hard_delete_check" style={{ fontSize: '0.82rem', color: 'var(--danger)', fontWeight: 600 }}>
+                  Permanently purge records (Hard Delete)
+                </label>
+              </div>
+            )}
+          </div>
+        }
+        confirmLabel={`Delete ${selectedIds.size} Menus`}
         variant="danger"
-        isLoading={isSubmitting}
+        isLoading={isBulkDeleting}
+      />
+
+      {/* Bulk Restore Confirmation Modal Dialog */}
+      <ConfirmationModal
+        isOpen={bulkRestoreConfirmOpen}
+        onClose={() => setBulkRestoreConfirmOpen(false)}
+        onConfirm={handleBulkRestore}
+        title={`Restore ${selectedIds.size} Selected Menu(s)?`}
+        subtitle={`${selectedIds.size} items selected`}
+        message={
+          <p>
+            Are you sure you want to restore the {selectedIds.size} selected menu item(s)? They will be reactivated and available in navigation layouts.
+          </p>
+        }
+        confirmLabel={`Restore ${selectedIds.size} Menus`}
+        variant="primary"
+        isLoading={isBulkRestoring}
       />
     </div>
   );

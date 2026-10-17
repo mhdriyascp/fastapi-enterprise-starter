@@ -2,12 +2,17 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.modules.masters.schemas.currency import CurrencyResponse
+
 
 class CountryCreate(BaseModel):
     code: str = Field(min_length=2, max_length=2)
     iso3_code: str | None = Field(default=None, min_length=3, max_length=3)
     name: str = Field(min_length=1, max_length=100)
     phone_code: str | None = Field(default=None, max_length=10)
+    default_currency_id: int | None = Field(
+        default=None, description="Optional default currency ID"
+    )
 
     @field_validator("code")
     @classmethod
@@ -42,6 +47,9 @@ class CountryUpdate(BaseModel):
     iso3_code: str | None = Field(default=None, min_length=3, max_length=3)
     name: str | None = Field(default=None, min_length=1, max_length=100)
     phone_code: str | None = Field(default=None, max_length=10)
+    default_currency_id: int | None = Field(
+        default=None, description="Optional default currency ID"
+    )
     is_active: bool | None = None
 
     @field_validator("code")
@@ -87,4 +95,6 @@ class CountryResponse(BaseModel):
     iso3_code: str | None
     name: str
     phone_code: str | None
+    default_currency_id: int | None = None
+    default_currency: CurrencyResponse | None = None
     is_active: bool

@@ -10,6 +10,7 @@ from sqlalchemy.inspection import inspect
 from app.infrastructure.database.models.organization.organization import (
     Organization,
 )
+from app.modules.activity_logs.service import record_activity
 from app.modules.organizations.schemas import (
     OrganizationCreate,
     OrganizationUpdate,
@@ -62,6 +63,19 @@ class OrganizationService:
         try:
             await self.db.commit()
             await self.db.refresh(organization)
+            await record_activity(
+                db=self.db,
+                module="organizations",
+                action="CREATE",
+                entity_type="Organization",
+                entity_id=organization.public_id,
+                entity_name=organization.name,
+                details={
+                    "code": organization.code,
+                    "legal_name": organization.legal_name,
+                },
+            )
+            await self.db.commit()
         except IntegrityError as exc:
             await self.db.rollback()
             raise ValueError("An organization with this code already exists.") from exc
@@ -77,6 +91,7 @@ class OrganizationService:
         sort_order: str = "desc",
         search: str | None = None,
         is_active: bool | None = None,
+        include_deleted: bool = False,
     ) -> tuple[list[Organization], int]:
         """Lists organizations with pagination, search, status filtering, and dynamic sorting.
 
@@ -87,11 +102,14 @@ class OrganizationService:
             sort_order: Sort direction ('asc' or 'desc').
             search: Optional text term to search in name, code, legal_name, registration_number.
             is_active: Optional boolean filter for active state.
+            include_deleted: If True, includes soft-deleted records.
 
         Returns:
             A tuple of (organizations list, total count).
         """
-        query = select(Organization).where(Organization.is_deleted.is_(False))
+        query = select(Organization)
+        if not include_deleted:
+            query = query.where(Organization.is_deleted.is_(False))
         mapper = inspect(Organization)
 
         if is_active is not None:
@@ -193,6 +211,15 @@ class OrganizationService:
     ) -> Organization:
         updates = data.model_dump(exclude_unset=True)
 
+        if "name" in updates and "code" not in updates:
+            new_name = str(updates["name"]).strip()
+            if new_name:
+                base_code = re.sub(r"[^A-Za-z0-9_]+", "_", new_name.upper()).strip("_")
+                updates["code"] = base_code[:30] if base_code else "ORG"
+
+        if "code" in updates and updates["code"]:
+            updates["code"] = str(updates["code"]).strip().upper()
+
         for field, value in updates.items():
             if field == "name":
                 if value is None or not str(value).strip():
@@ -209,6 +236,16 @@ class OrganizationService:
         try:
             await self.db.commit()
             await self.db.refresh(organization)
+            await record_activity(
+                db=self.db,
+                module="organizations",
+                action="UPDATE",
+                entity_type="Organization",
+                entity_id=organization.public_id,
+                entity_name=organization.name,
+                details={"updated_fields": list(updates.keys())},
+            )
+            await self.db.commit()
         except IntegrityError as exc:
             await self.db.rollback()
             raise ValueError("The organization could not be updated.") from exc
@@ -223,6 +260,16 @@ class OrganizationService:
         organization.is_active = is_active
         await self.db.commit()
         await self.db.refresh(organization)
+        await record_activity(
+            db=self.db,
+            module="organizations",
+            action="STATUS_CHANGE",
+            entity_type="Organization",
+            entity_id=organization.public_id,
+            entity_name=organization.name,
+            details={"is_active": is_active},
+        )
+        await self.db.commit()
         return organization
 
     async def delete(
@@ -245,8 +292,66 @@ class OrganizationService:
             await self.db.delete(organization)
         else:
             organization.is_deleted = True
+            organization.is_active = False
             organization.deleted_at = datetime.now(UTC)
             if deleted_by_id is not None:
                 organization.updated_by_id = deleted_by_id
 
+        try:
+            await self.db.commit()
+            await record_activity(
+                db=self.db,
+                module="organizations",
+                action="DELETE",
+                entity_type="Organization",
+                entity_id=organization.public_id,
+                entity_name=organization.name,
+                details={
+                    "hard_delete": hard_delete,
+                    "is_deleted": True,
+                    "is_active": False,
+                },
+            )
+            await self.db.commit()
+        except IntegrityError as exc:
+            await self.db.rollback()
+            raise ValueError(
+                "Cannot permanently delete organization because related records "
+                "(branches, departments, fiscal years, etc.) depend on it. "
+                "Please remove related records first or use soft delete."
+            ) from exc
+
+    async def restore(
+        self,
+        organization: Organization,
+        restored_by_id: UUID | None = None,
+    ) -> Organization:
+        """Restores a soft-deleted organization back to active status.
+
+        Args:
+            organization: The soft-deleted organization entity to restore.
+            restored_by_id: Optional operator UUID responsible for restoring.
+
+        Returns:
+            The restored organization entity.
+        """
+        organization.is_deleted = False
+        organization.deleted_at = None
+        organization.is_active = True
+        if restored_by_id is not None:
+            organization.updated_by_id = restored_by_id
+
         await self.db.commit()
+        await self.db.refresh(organization)
+
+        await record_activity(
+            db=self.db,
+            module="organizations",
+            action="RESTORE",
+            entity_type="Organization",
+            entity_id=organization.public_id,
+            entity_name=organization.name,
+            details={"is_deleted": False, "is_active": True},
+        )
+        await self.db.commit()
+        return organization

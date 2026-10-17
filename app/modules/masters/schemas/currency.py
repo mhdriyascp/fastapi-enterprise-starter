@@ -21,6 +21,7 @@ class CurrencyUpdate(BaseModel):
 class CurrencyResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
+    id: int | None = None
     public_id: UUID
     code: str
     name: str

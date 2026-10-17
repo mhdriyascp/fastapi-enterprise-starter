@@ -94,7 +94,8 @@ Single-item endpoints support the **Dual-Lookup Strategy**: external callers can
 | `GET` | `/api/v1/organizations/{identifier}` | `organization.read` | `OrganizationResponse` | Get organization details by UUID `public_id` or integer ID. |
 | `PATCH`| `/api/v1/organizations/{identifier}` | `organization.update` | `OrganizationResponse` | Update organization profile by UUID `public_id` or integer ID. |
 | `PATCH`| `/api/v1/organizations/{identifier}/status` | `organization.update` | `OrganizationResponse` | Update operational active status. |
-| `DELETE`| `/api/v1/organizations/{identifier}` | `organization.delete` | None (`204`) | Soft-delete an organization (`204 No Content`). |
+| `DELETE`| `/api/v1/organizations/{identifier}` | `organization.delete` | None (`204`) | Two-stage delete: soft-deletes active records by default (`is_deleted=true`, `is_active=false`); permanently purges from DB when `?hard_delete=true`. |
+| `POST` | `/api/v1/organizations/{identifier}/restore` | `organization.restore` | `OrganizationResponse` | Restores a previously soft-deleted organization back to active state. |
 
 ---
 
@@ -104,9 +105,17 @@ The frontend application provides a complete enterprise CRUD interface:
 - **Location**: [`frontend/src/app/(dashboard)/organizations/page.tsx`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/frontend/src/app/%28dashboard%29/organizations/page.tsx)
 - **Features**:
   - **Live Filter & Search**: Client-side query matching against name, uppercase code, legal entity name, and tax ID.
-  - **Status Tabs**: Instant filter between All, Active, and Inactive organizations.
+  - **Status Tabs**: Instant filter between All, Active, Inactive, and Deleted organizations.
   - **Create Modal**: Validated form with Code, Name, Legal Name, Tax Registration Number, Email, Phone, and Website.
   - **Edit Modal**: Full attribute updates with optimistic state refresh.
   - **Status Quick-Toggle**: Inline activation/deactivation button triggering `PATCH /api/v1/organizations/{identifier}/status`.
-  - **Delete Safeguard**: Dedicated confirmation dialog with red destructive action and toast notification.
+  - **Two-Stage Deletion & Safeguards**:
+    - Active records offer a soft-delete button, immediately moving records to the "Deleted" tab and removing them from the "All" and "Active" views.
+    - Soft-deleted records show an emerald green **Restore** button (`.btn-restore`) and a red **Purge** button for permanent database removal.
+    - Status tabs dynamically display live record counts for immediate feedback: `All (N)`, `Active (N)`, `Inactive (N)`, and `Deleted (N)`.
+  - **Bulk Operations (Delete, Purge & Restore)**:
+    - Multi-select rows with header select-all control.
+    - When selecting active records: Bulk **Delete** soft-deletes and moves records to the "Deleted" tab.
+    - When viewing the "Deleted" tab or selecting deleted records: Toolbar offers **Restore ({count})** and **Purge ({count})** buttons with dedicated confirmation dialogs.
+    - Detailed error toast notification reporting exact constraint restrictions on deletion failure.
 
