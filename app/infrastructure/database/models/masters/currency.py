@@ -4,13 +4,13 @@ from uuid import UUID, uuid7
 from sqlalchemy import BigInteger, Boolean, Integer, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.infrastructure.database.models.base_entity import EntityBase
+from app.infrastructure.database.models.base_entity import AuditEntityBase
 
 if TYPE_CHECKING:
     from app.infrastructure.database.models.masters.country import Country
 
 
-class Currency(EntityBase):
+class Currency(AuditEntityBase):
     __tablename__ = "currencies"
 
     id: Mapped[int] = mapped_column(

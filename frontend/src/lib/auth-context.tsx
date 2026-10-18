@@ -28,8 +28,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     (permissionCode: string): boolean => {
       if (!user) return false;
       if (user.is_super_admin) return true;
-      if (user.roles?.includes('super_admin')) return true;
-      return user.permissions?.includes(permissionCode) ?? false;
+      if (user.roles?.some((r) => ['super_admin', 'superadmin', 'admin', 'system_admin'].includes(r.toLowerCase()))) {
+        return true;
+      }
+      if (!user.permissions || user.permissions.length === 0) return false;
+      if (user.permissions.includes('*') || user.permissions.includes('*.*')) return true;
+      if (user.permissions.includes(permissionCode)) return true;
+
+      // Check namespace wildcards (e.g. 'organization.*', 'organization.manage')
+      if (permissionCode.includes('.')) {
+        const [resource] = permissionCode.split('.');
+        if (
+          user.permissions.includes(`${resource}.*`) ||
+          user.permissions.includes(`${resource}.manage`)
+        ) {
+          return true;
+        }
+      }
+      // Check colon-separated wildcards (e.g. 'masters:*', 'masters:manage')
+      if (permissionCode.includes(':')) {
+        const [resource] = permissionCode.split(':');
+        if (
+          user.permissions.includes(`${resource}:*`) ||
+          user.permissions.includes(`${resource}:manage`)
+        ) {
+          return true;
+        }
+      }
+      return false;
     },
     [user]
   );

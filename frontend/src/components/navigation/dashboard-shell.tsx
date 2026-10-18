@@ -5,6 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { Sidebar } from '@/components/navigation/sidebar';
 import { Header } from '@/components/navigation/header';
+import { SessionInactivityGuard } from '@/components/security/session-inactivity-guard';
 
 interface DashboardShellProps {
   children: React.ReactNode;
@@ -62,6 +63,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
 
   return (
     <div className="app-shell">
+      <SessionInactivityGuard />
       <Sidebar
         isMobileOpen={isMobileSidebarOpen}
         onCloseMobile={() => setIsMobileSidebarOpen(false)}

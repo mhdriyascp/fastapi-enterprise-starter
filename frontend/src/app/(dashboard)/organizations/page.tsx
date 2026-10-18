@@ -458,7 +458,7 @@ export default function OrganizationsPage() {
       });
       toast.success(
         isHardDelete
-          ? `Organization "${deleteCandidate.name}" permanently deleted.`
+          ? `Organization "${deleteCandidate.name}" purged successfully.`
           : `Organization "${deleteCandidate.name}" soft-deleted successfully.`
       );
       setDeleteCandidate(null);
@@ -1021,7 +1021,7 @@ export default function OrganizationsPage() {
                   <td style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                       <Clock size={13} color="var(--text-muted)" />
-                      <FormattedDate value={org.created_at} variant="date" />
+                      <FormattedDate value={org.created_at} />
                     </div>
                   </td>
 
@@ -1732,7 +1732,7 @@ export default function OrganizationsPage() {
         isOpen={!!deleteCandidate}
         onClose={() => setDeleteCandidate(null)}
         onConfirm={handleDeleteOrganization}
-        title={isHardDelete ? "Permanently Delete Organization?" : "Soft Delete Organization?"}
+        title={isHardDelete ? "Purge Organization?" : "Soft Delete Organization?"}
         subtitle={deleteCandidate ? `Code: ${deleteCandidate.code}` : undefined}
         message={
           deleteCandidate ? (
@@ -1749,7 +1749,7 @@ export default function OrganizationsPage() {
             )
           ) : null
         }
-        confirmLabel={isHardDelete ? "Permanently Delete" : "Soft Delete"}
+        confirmLabel={isHardDelete ? "Purge Organization" : "Soft Delete"}
         variant="danger"
         isLoading={isSubmitting}
       />
@@ -1781,7 +1781,7 @@ export default function OrganizationsPage() {
         onConfirm={handleBulkDelete}
         title={
           bulkHardDeleteRequested
-            ? `Permanently Purge ${selectedIds.size} Selected Organization(s)?`
+            ? `Purge ${selectedIds.size} Selected Organization(s)?`
             : `Soft Delete ${selectedIds.size} Selected Organization(s)?`
         }
         subtitle={`${selectedIds.size} record${selectedIds.size === 1 ? '' : 's'} selected`}
@@ -1815,7 +1815,7 @@ export default function OrganizationsPage() {
         }
         confirmLabel={
           bulkHardDeleteRequested
-            ? `Permanently Purge (${selectedIds.size})`
+            ? `Purge (${selectedIds.size})`
             : `Soft Delete (${selectedIds.size})`
         }
         variant="danger"

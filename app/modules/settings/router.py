@@ -9,6 +9,7 @@ from app.infrastructure.database.session import get_db_session
 from app.modules.settings.schemas import (
     BulkSettingsUpdate,
     PublicSettingsResponse,
+    SettingsOptionsResponse,
     SystemSettingResponse,
     SystemSettingUpdate,
 )
@@ -124,6 +125,25 @@ async def bulk_update_settings(
     service = SystemSettingService(db)
     updated = await service.bulk_update(payload, updated_by_id=current_user.id)
     return [SystemSettingResponse.model_validate(item) for item in updated]
+
+
+@router.get(
+    "/options",
+    response_model=SettingsOptionsResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get dynamic setting dropdown options",
+    description="Returns live active master records (roles, currencies, timezones, languages, and modules) for dynamic UI dropdowns.",
+    dependencies=[
+        Depends(require_admin()),
+        Depends(require_permission("settings.read")),
+    ],
+)
+async def get_settings_options(
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+) -> SettingsOptionsResponse:
+    service = SystemSettingService(db)
+    options_data = await service.get_options_metadata()
+    return SettingsOptionsResponse.model_validate(options_data)
 
 
 @router.get(

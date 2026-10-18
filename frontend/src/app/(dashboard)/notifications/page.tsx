@@ -30,12 +30,15 @@ import { useToast } from '@/lib/toast-context';
 import { useAuth } from '@/lib/auth-context';
 import { formatDateTime, formatRelativeTime } from '@/lib/date-utils';
 import { ConfirmationModal } from '@/components/ui/confirmation-modal';
+import { FormattedDate } from '@/components/ui/formatted-date';
 import { useDefaultPageSize } from '@/lib/use-page-size';
 
 export default function NotificationsPage() {
   const { toast } = useToast();
   const { user, hasPermission } = useAuth();
   const canDelete = Boolean(hasPermission('notification.delete') || hasPermission('notification.manage') || user?.is_super_admin);
+  const canCreate = Boolean(hasPermission('notification.create') || hasPermission('notification.manage') || user?.is_super_admin);
+  const canUpdate = Boolean(hasPermission('notification.update') || hasPermission('notification.manage') || user?.is_super_admin);
 
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [availableModules, setAvailableModules] = useState<string[]>([
@@ -128,6 +131,10 @@ export default function NotificationsPage() {
   }, [toast]);
 
   const handleMarkAllRead = async () => {
+    if (!canUpdate) {
+      toast.error('You do not have permission to update notifications.');
+      return;
+    }
     try {
       await apiFetch<{ updated: number }>('/notifications/mark-all-read', {
         method: 'POST',
@@ -136,6 +143,44 @@ export default function NotificationsPage() {
       toast.success('All notifications marked as read');
     } catch {
       toast.error('Failed to mark all notifications as read');
+    }
+  };
+
+  const handleToggleRead = async (id: number | string, currentIsRead: boolean) => {
+    if (!canUpdate) {
+      toast.error('You do not have permission to update notifications.');
+      return;
+    }
+    const nextStatus = !currentIsRead;
+    // Optimistic update
+    setNotifications((prev) =>
+      prev.map((n) =>
+        n.id === id ? { ...n, is_read: nextStatus, read_at: nextStatus ? new Date().toISOString() : null } : n
+      )
+    );
+    if (viewingNotification && viewingNotification.id === id) {
+      setViewingNotification((prev) =>
+        prev ? { ...prev, is_read: nextStatus, read_at: nextStatus ? new Date().toISOString() : null } : null
+      );
+    }
+
+    try {
+      await apiFetch<NotificationItem>(`/notifications/${id}/read`, {
+        method: 'PATCH',
+        body: JSON.stringify({ is_read: nextStatus }),
+      });
+      toast.success(nextStatus ? 'Marked as read' : 'Marked as unread');
+    } catch {
+      // Revert on failure
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, is_read: currentIsRead } : n))
+      );
+      if (viewingNotification && viewingNotification.id === id) {
+        setViewingNotification((prev) =>
+          prev ? { ...prev, is_read: currentIsRead } : null
+        );
+      }
+      toast.error('Failed to update notification status');
     }
   };
 
@@ -406,6 +451,17 @@ export default function NotificationsPage() {
 
         {/* Global Toolbar Actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          {canCreate && (
+            <button
+              type="button"
+              onClick={() => setIsCreateModalOpen(true)}
+              className="btn btn-primary"
+              title="Dispatch / Create Alert"
+            >
+              <PlusCircle size={15} />
+              <span>Dispatch Alert</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={refreshNotifications}
@@ -783,6 +839,21 @@ export default function NotificationsPage() {
                   {/* Actions */}
                   <td style={{ textAlign: 'right' }}>
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+                      {canUpdate && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleRead(n.id, n.is_read);
+                          }}
+                          className="btn btn-secondary"
+                          style={{ padding: '0.35rem 0.65rem', fontSize: '0.75rem', gap: '0.35rem' }}
+                          title={n.is_read ? 'Mark as Unread' : 'Mark as Read'}
+                        >
+                          <CheckCheck size={13} color={n.is_read ? 'var(--text-muted)' : 'var(--accent-primary)'} />
+                          <span>{n.is_read ? 'Unread' : 'Read'}</span>
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={(e) => {
@@ -1029,7 +1100,7 @@ export default function NotificationsPage() {
                   <tr>
                     <th>Created Timestamp</th>
                     <td style={{ fontSize: '0.785rem', color: 'var(--text-secondary)' }}>
-                      {viewingNotification.created_at}
+                      <FormattedDate value={viewingNotification.created_at} />
                     </td>
                   </tr>
                 </tbody>
@@ -1038,7 +1109,18 @@ export default function NotificationsPage() {
 
             {/* Modal Actions */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '0.5rem' }}>
-              <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                {canUpdate && (
+                  <button
+                    type="button"
+                    onClick={() => handleToggleRead(viewingNotification.id, viewingNotification.is_read)}
+                    className="btn btn-secondary"
+                    style={{ fontSize: '0.8125rem', gap: '0.35rem' }}
+                  >
+                    <CheckCheck size={14} color={viewingNotification.is_read ? 'var(--text-muted)' : 'var(--accent-primary)'} />
+                    <span>{viewingNotification.is_read ? 'Mark as Unread' : 'Mark as Read'}</span>
+                  </button>
+                )}
                 {canDelete && (
                   <button
                     type="button"

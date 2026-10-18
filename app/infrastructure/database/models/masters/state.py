@@ -10,10 +10,10 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.infrastructure.database.models.base_entity import EntityBase
+from app.infrastructure.database.models.base_entity import AuditEntityBase
 
 
-class State(EntityBase):
+class State(AuditEntityBase):
     __tablename__ = "states"
     __table_args__ = (
         UniqueConstraint("country_id", "code", name="uq_states_country_code"),

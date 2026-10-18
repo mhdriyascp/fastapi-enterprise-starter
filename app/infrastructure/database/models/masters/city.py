@@ -10,10 +10,10 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.infrastructure.database.models.base_entity import EntityBase
+from app.infrastructure.database.models.base_entity import AuditEntityBase
 
 
-class City(EntityBase):
+class City(AuditEntityBase):
     __tablename__ = "cities"
     __table_args__ = (
         UniqueConstraint(

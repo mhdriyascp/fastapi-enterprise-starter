@@ -56,7 +56,7 @@ function parseDate(input: string | Date | null | undefined): Date | null {
 
 /**
  * Formats a UTC ISO timestamp into a localized, human-readable date and time.
- * Example: "Oct 16, 2026, 05:54 PM"
+ * Standard Format: "Oct 14, 2026, 04:41:58 PM"
  */
 export function formatDateTime(
   input: string | Date | null | undefined,
@@ -67,6 +67,7 @@ export function formatDateTime(
 
   const locale = resolveLocale(options.locale);
   const timeZone = resolveTimeZone(options.timeZone);
+  const includeSeconds = options.includeSeconds !== false; // Defaults to true for standard enterprise format
 
   try {
     return new Intl.DateTimeFormat(locale, {
@@ -75,7 +76,8 @@ export function formatDateTime(
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
-      second: options.includeSeconds ? '2-digit' : undefined,
+      second: includeSeconds ? '2-digit' : undefined,
+      hour12: true,
       timeZone,
     }).format(date);
   } catch {

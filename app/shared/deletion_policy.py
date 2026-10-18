@@ -160,6 +160,64 @@ async def is_user_authorized_for_hard_delete(
     return bool((await db.execute(select(exists(rbac_query)))).scalar_one())
 
 
+async def is_user_authorized_for_restore(
+    db: AsyncSession,
+    user: User,
+    module: str,
+) -> bool:
+    """Evaluates whether the user is authorized to restore a soft-deleted record.
+
+    Policy:
+    - Super administrators are always authorized.
+    - Administrators (roles in permanent_delete_roles setting) are authorized.
+    - Any role granted explicit RBAC restore permission (e.g. '{module}.restore',
+      '{module}:restore', '*.restore', or '*.*') is authorized.
+
+    Args:
+        db: Database session.
+        user: The authenticated user initiating the restore.
+        module: The CRM domain or entity name (e.g., 'masters', 'organizations').
+
+    Returns:
+        True if the user has authorization to restore records; False otherwise.
+    """
+    if getattr(user, "is_super_admin", False):
+        return True
+
+    is_admin = await is_user_administrator(db, user.id)
+    if is_admin:
+        return True
+
+    clean_mod = module.strip().lower()
+    singular_mod = (
+        clean_mod[:-1]
+        if clean_mod.endswith("s") and clean_mod not in ("masters", "rbac")
+        else clean_mod
+    )
+    perm_codes = (
+        f"{singular_mod}.restore",
+        f"{clean_mod}.restore",
+        f"{clean_mod}:restore",
+        "*.restore",
+        "*.*",
+        "*.manage",
+    )
+
+    rbac_query = (
+        select(UserRole.user_id)
+        .join(Role, Role.id == UserRole.role_id)
+        .join(RolePermission, RolePermission.role_id == Role.id)
+        .join(Permission, Permission.id == RolePermission.permission_id)
+        .where(
+            UserRole.user_id == user.id,
+            Role.is_active.is_(True),
+            Permission.is_active.is_(True),
+            Permission.code.in_(perm_codes),
+        )
+    )
+    return bool((await db.execute(select(exists(rbac_query)))).scalar_one())
+
+
 async def should_user_view_all_statuses(db: AsyncSession, user: User) -> bool:
     """Evaluates whether the user is authorized to view records across all statuses.
 

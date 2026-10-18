@@ -217,7 +217,7 @@ async def delete_permission(
     if hard_delete is True and not can_hard_delete:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have permission to permanently delete permissions. Only soft-deletion is permitted based on your RBAC permissions.",
+            detail="You do not have permission to purge permissions. Only soft-deletion is permitted based on your RBAC permissions.",
         )
     effective_hard_delete = bool(hard_delete)
     service = PermissionService(db)

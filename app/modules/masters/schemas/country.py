@@ -1,8 +1,10 @@
+from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from app.modules.masters.schemas.currency import CurrencyResponse
+from app.shared.base_schema import BaseSchema
 
 
 class CountryCreate(BaseModel):
@@ -86,9 +88,7 @@ class CountryUpdate(BaseModel):
         return value
 
 
-class CountryResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class CountryResponse(BaseSchema):
     id: int
     public_id: UUID
     code: str
@@ -98,3 +98,9 @@ class CountryResponse(BaseModel):
     default_currency_id: int | None = None
     default_currency: CurrencyResponse | None = None
     is_active: bool
+    created_by_id: UUID | None = None
+    updated_by_id: UUID | None = None
+    is_deleted: bool = False
+    deleted_at: datetime | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None

@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import {
   Menu as MenuIcon,
@@ -13,6 +14,8 @@ import {
   Layers,
   LogOut,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   CheckCircle2,
   X,
   ArrowRight,
@@ -20,12 +23,22 @@ import {
   Building2,
   Loader2,
   ExternalLink,
+  LayoutDashboard,
+  ShieldCheck,
+  Database,
+  Settings,
+  Globe,
+  MapPin,
+  Clock,
+  Coins,
+  History,
 } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { usePublicSettings } from '@/lib/use-public-settings';
 import { apiFetch } from '@/lib/api-client';
-import { NotificationItem, PagedResponse, UnreadCountResponse } from '@/lib/types';
-import { formatRelativeTime } from '@/lib/date-utils';
+import { NotificationItem, PagedResponse, UnreadCountResponse, MenuItem } from '@/lib/types';
+import { formatDateTime, formatRelativeTime } from '@/lib/date-utils';
+import { useMenus } from '@/hooks/use-menus';
 
 export interface HeaderProps {
   /** Optional handler triggered when the mobile navigation hamburger icon is clicked */
@@ -40,10 +53,10 @@ interface RouteSuggestion {
   title: string;
   description: string;
   path: string;
-  category: 'Dashboard' | 'Accounts' | 'Security & RBAC' | 'Administration' | 'Settings';
+  category: 'Dashboard' | 'Accounts' | 'Security & RBAC' | 'Administration' | 'Settings' | 'Master Data' | 'Audit & Logs';
   keywords: string[];
+  permissions?: string[];
 }
-
 
 const SYSTEM_ROUTES: RouteSuggestion[] = [
   {
@@ -52,7 +65,8 @@ const SYSTEM_ROUTES: RouteSuggestion[] = [
     description: 'Executive KPIs, Sales Funnel, Receivables & Pipeline Overview',
     path: '/',
     category: 'Dashboard',
-    keywords: ['home', 'kpi', 'revenue', 'arr', 'stats', 'analytics', 'funnel', 'pipeline', 'crm'],
+    keywords: ['home', 'kpi', 'revenue', 'arr', 'stats', 'analytics', 'funnel', 'pipeline', 'crm', 'overview'],
+    permissions: [],
   },
   {
     id: 'r-orgs',
@@ -60,7 +74,8 @@ const SYSTEM_ROUTES: RouteSuggestion[] = [
     description: 'Master multi-tenant organizations, tax profiles, and corporate legal entities',
     path: '/organizations',
     category: 'Accounts',
-    keywords: ['organizations', 'accounts', 'tenants', 'clients', 'companies', 'legal', 'tax'],
+    keywords: ['organizations', 'accounts', 'tenants', 'clients', 'companies', 'legal', 'tax', 'org'],
+    permissions: ['organization.read', 'organization.create', 'organization.manage'],
   },
   {
     id: 'r-users',
@@ -68,7 +83,8 @@ const SYSTEM_ROUTES: RouteSuggestion[] = [
     description: 'Manage staff accounts, team directory, and operator profiles',
     path: '/users',
     category: 'Administration',
-    keywords: ['users', 'team', 'staff', 'operators', 'members', 'people', 'contacts'],
+    keywords: ['users', 'team', 'staff', 'operators', 'members', 'people', 'contacts', 'directory'],
+    permissions: ['user.read', 'user.create', 'user.manage'],
   },
   {
     id: 'r-rbac',
@@ -77,6 +93,7 @@ const SYSTEM_ROUTES: RouteSuggestion[] = [
     path: '/rbac',
     category: 'Security & RBAC',
     keywords: ['rbac', 'access', 'security', 'privileges', 'roles', 'permissions', 'matrix'],
+    permissions: ['role.read', 'permission.read', 'role.manage', 'permission.manage'],
   },
   {
     id: 'r-roles',
@@ -85,6 +102,7 @@ const SYSTEM_ROUTES: RouteSuggestion[] = [
     path: '/rbac?tab=roles',
     category: 'Security & RBAC',
     keywords: ['roles', 'admin', 'operator', 'super admin', 'manager', 'role'],
+    permissions: ['role.read', 'role.create', 'role.manage'],
   },
   {
     id: 'r-perms',
@@ -93,6 +111,7 @@ const SYSTEM_ROUTES: RouteSuggestion[] = [
     path: '/rbac?tab=permissions',
     category: 'Security & RBAC',
     keywords: ['permissions', 'privilege', 'resource', 'action', 'rules', 'grant'],
+    permissions: ['permission.read', 'permission.create', 'permission.manage'],
   },
   {
     id: 'r-matrix',
@@ -101,6 +120,7 @@ const SYSTEM_ROUTES: RouteSuggestion[] = [
     path: '/rbac?tab=matrix',
     category: 'Security & RBAC',
     keywords: ['matrix', 'assign', 'privilege matrix', 'toggle', 'grid'],
+    permissions: ['role.read', 'permission.read', 'role.update', 'permission.update'],
   },
   {
     id: 'r-menus',
@@ -109,6 +129,7 @@ const SYSTEM_ROUTES: RouteSuggestion[] = [
     path: '/menus',
     category: 'Settings',
     keywords: ['menus', 'navigation', 'sidebar', 'hierarchy', 'tree', 'order', 'sort'],
+    permissions: ['menu.read', 'menu.create', 'menu.manage'],
   },
   {
     id: 'r-notifications',
@@ -117,25 +138,402 @@ const SYSTEM_ROUTES: RouteSuggestion[] = [
     path: '/notifications',
     category: 'Settings',
     keywords: ['notifications', 'alerts', 'activity', 'events', 'feed', 'stream', 'inbox', 'messages'],
+    permissions: ['notification.read', 'notification.create', 'notification.manage'],
+  },
+  {
+    id: 'r-masters',
+    title: 'Master Data Catalog',
+    description: 'Centralized reference data: geography, currencies, languages, industries, and taxonomy',
+    path: '/masters',
+    category: 'Master Data',
+    keywords: ['masters', 'master data', 'reference', 'catalog', 'countries', 'currencies', 'geography', 'lookup'],
+    permissions: ['masters:read', 'master.read', 'masters:create', 'masters:manage'],
+  },
+  {
+    id: 'r-masters-countries',
+    title: 'Countries & Geographies',
+    description: 'ISO country registry, phone codes, and international boundaries',
+    path: '/masters?tab=countries',
+    category: 'Master Data',
+    keywords: ['countries', 'iso', 'geography', 'phone codes', 'regions'],
+    permissions: ['masters:read', 'master.read'],
+  },
+  {
+    id: 'r-masters-states',
+    title: 'States & Provinces',
+    description: 'Sub-national administrative territories and state codes',
+    path: '/masters?tab=states',
+    category: 'Master Data',
+    keywords: ['states', 'provinces', 'regions', 'territories'],
+    permissions: ['masters:read', 'master.read'],
+  },
+  {
+    id: 'r-masters-cities',
+    title: 'Cities & Municipalities',
+    description: 'Urban municipalities, postal jurisdictions, and geographic hubs',
+    path: '/masters?tab=cities',
+    category: 'Master Data',
+    keywords: ['cities', 'municipalities', 'towns', 'urban', 'postal'],
+    permissions: ['masters:read', 'master.read'],
+  },
+  {
+    id: 'r-masters-currencies',
+    title: 'Currencies & Exchange Rates',
+    description: 'Global ISO currency codes, symbols, decimal precision, and exchange rates',
+    path: '/masters?tab=currencies',
+    category: 'Master Data',
+    keywords: ['currencies', 'money', 'exchange', 'forex', 'symbols', 'iso4217'],
+    permissions: ['masters:read', 'master.read'],
+  },
+  {
+    id: 'r-masters-timezones',
+    title: 'Time Zones & Local Offsets',
+    description: 'IANA timezone database and UTC daylight savings offsets',
+    path: '/masters?tab=time-zones',
+    category: 'Master Data',
+    keywords: ['timezones', 'iana', 'utc', 'offsets', 'clock', 'time'],
+    permissions: ['masters:read', 'master.read'],
+  },
+  {
+    id: 'r-masters-languages',
+    title: 'System Languages',
+    description: 'Supported UI localization and communication language codes',
+    path: '/masters?tab=languages',
+    category: 'Master Data',
+    keywords: ['languages', 'locale', 'i18n', 'translation', 'iso639'],
+    permissions: ['masters:read', 'master.read'],
+  },
+  {
+    id: 'r-masters-industries',
+    title: 'Industries & Market Sectors',
+    description: 'Commercial market segmentation, industry classifications, and verticals',
+    path: '/masters?tab=industries',
+    category: 'Master Data',
+    keywords: ['industries', 'sectors', 'verticals', 'market', 'segmentation'],
+    permissions: ['masters:read', 'master.read'],
+  },
+  {
+    id: 'r-masters-brands',
+    title: 'Commercial Brands Directory',
+    description: 'Corporate brand entities, subsidiaries, and product line representations',
+    path: '/masters?tab=brands',
+    category: 'Master Data',
+    keywords: ['brands', 'subsidiaries', 'trademarks', 'products', 'corporate'],
+    permissions: ['masters:read', 'master.read'],
+  },
+  {
+    id: 'r-masters-addresses',
+    title: 'Facilities & Addresses',
+    description: 'Verified physical address registry and facility location profiles',
+    path: '/masters?tab=addresses',
+    category: 'Master Data',
+    keywords: ['addresses', 'facilities', 'locations', 'headquarters', 'buildings'],
+    permissions: ['masters:read', 'master.read'],
+  },
+  {
+    id: 'r-settings',
+    title: 'System Configuration & Settings',
+    description: 'Enterprise security parameters, session inactivity timeout, branding, and notification modules',
+    path: '/settings',
+    category: 'Settings',
+    keywords: ['settings', 'configuration', 'security', 'timeout', 'branding', 'email', 'system', 'preferences'],
+    permissions: ['settings.read', 'setting.read', 'settings.manage', 'setting.update', 'settings.update'],
+  },
+  {
+    id: 'r-logs',
+    title: 'System Audit & Activity Stream',
+    description: 'Comprehensive operational activity stream, user access tracking, and security audit logs',
+    path: '/system-logs',
+    category: 'Audit & Logs',
+    keywords: ['logs', 'audit', 'activity', 'events', 'security', 'tracking', 'history', 'stream'],
+    permissions: ['activity_logs.read', 'activity_log.read', 'activity_logs.manage'],
+  },
+  {
+    id: 'r-profile',
+    title: 'Operator Profile & Preferences',
+    description: 'Manage individual user profile, password, active session tokens, and display preferences',
+    path: '/profile',
+    category: 'Administration',
+    keywords: ['profile', 'account', 'password', 'preferences', 'my account', 'security', 'operator'],
+    permissions: [],
   },
 ];
+
+/**
+ * Normalizes backend route strings to working dashboard page paths.
+ */
+function normalizeRoute(rawRoute: string | null | undefined): string {
+  if (!rawRoute || rawRoute === '#') return '#';
+  const clean = rawRoute.trim();
+  if (clean === '/dashboard') return '/';
+  if (clean === '/settings/menus') return '/menus';
+  if (clean === '/access-control') return '/rbac';
+  if (clean === '/access-control/roles') return '/rbac?tab=roles';
+  if (clean === '/access-control/permissions') return '/rbac?tab=permissions';
+  if (clean === '/access-control/matrix' || clean === '/access-control/access-matrix') return '/rbac?tab=matrix';
+  if (clean === '/organizations/new') return '/organizations';
+  if (clean === '/masters') return '/masters';
+  if (clean === '/masters/countries' || clean === 'countries') return '/masters?tab=countries';
+  if (clean === '/masters/states' || clean === 'states') return '/masters?tab=states';
+  if (clean === '/masters/cities' || clean === 'cities') return '/masters?tab=cities';
+  if (clean === '/masters/currencies' || clean === 'currencies') return '/masters?tab=currencies';
+  if (clean === '/masters/time-zones' || clean === 'time-zones') return '/masters?tab=time-zones';
+  if (clean === '/masters/languages' || clean === 'languages') return '/masters?tab=languages';
+  if (clean === '/masters/industries' || clean === 'industries') return '/masters?tab=industries';
+  if (clean === '/masters/address-types' || clean === 'address-types') return '/masters?tab=address-types';
+  if (clean === '/masters/communication-types' || clean === 'communication-types') return '/masters?tab=communication-types';
+  if (clean === '/masters/document-types' || clean === 'document-types') return '/masters?tab=document-types';
+  if (clean === '/masters/identification-types' || clean === 'identification-types') return '/masters?tab=identification-types';
+  if (clean === '/masters/units-of-measure' || clean === 'units-of-measure') return '/masters?tab=units-of-measure';
+  if (clean === '/masters/taxes' || clean === 'taxes') return '/masters?tab=taxes';
+  if (clean === '/masters/brands' || clean === 'brands') return '/masters?tab=brands';
+  if (clean === '/masters/addresses' || clean === 'addresses') return '/masters?tab=addresses';
+  if (clean === '/system-logs' || clean === '/logs' || clean === '/activity-logs') return '/system-logs';
+  return clean;
+}
+
+/**
+ * Resolves icon identifier string into a styled Lucide React node for header menus.
+ */
+function getHeaderMenuIcon(icon: string | null, size = 15) {
+  if (!icon) return <Layers size={size} />;
+  const n = icon.toLowerCase();
+  if (n.includes('dash') || n.includes('layout')) return <LayoutDashboard size={size} />;
+  if (n.includes('build') || n.includes('org')) return <Building2 size={size} />;
+  if (n.includes('user')) return <UserIcon size={size} />;
+  if (n.includes('shield') || n.includes('role') || n.includes('perm') || n.includes('access') || n.includes('rbac')) return <ShieldCheck size={size} />;
+  if (n.includes('data') || n.includes('master')) return <Database size={size} />;
+  if (n.includes('setting')) return <Settings size={size} />;
+  if (n.includes('globe') || n.includes('countr')) return <Globe size={size} />;
+  if (n.includes('bell') || n.includes('notif')) return <Bell size={size} />;
+  if (n.includes('pin') || n.includes('map') || n.includes('address')) return <MapPin size={size} />;
+  if (n.includes('clock') || n.includes('time') || n.includes('zone')) return <Clock size={size} />;
+  if (n.includes('coin') || n.includes('currency') || n.includes('cash')) return <Coins size={size} />;
+  if (n.includes('file') || n.includes('log') || n.includes('history')) return <History size={size} />;
+  return <Layers size={size} />;
+}
 
 /**
  * Enterprise Header component.
  * Features:
  * - Mobile sidebar navigation drawer toggle
  * - Global route search with instant auto-suggestions dropdown & keyboard shortcuts (⌘K / Esc)
- * - Reduced operational status dot (without redundant text label)
+ * - Configurable & RBAC-governed Top Header Navigation Menus
  * - Interactive Enterprise Notification Center with unread counters and filters
  * - Theme switcher dropdown & User account hover/click identity popover
  */
 export function Header({ onToggleMobileSidebar }: HeaderProps) {
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const { user, logout, hasPermission } = useAuth();
+  const { menus } = useMenus();
 
   // Dynamic system public settings configuration
   const { settings: publicSettings } = usePublicSettings();
   const showThemeToggle = publicSettings.show_theme_toggle_in_header !== false;
+  const showTopHeaderMenus = publicSettings.enable_top_header_menus !== false;
+
+  const headerMenus = useMemo(() => {
+    if (!menus) return [];
+    return menus.filter(
+      (m) => m.show_in_header !== false && !m.is_deleted && m.is_active !== false
+    );
+  }, [menus]);
+
+  // Top Header Menu Dropdown Hover/Click State
+  const [openDropdownMenuId, setOpenDropdownMenuId] = useState<string | number | null>(null);
+  const [openedViaClickMenuId, setOpenedViaClickMenuId] = useState<string | number | null>(null);
+  const [dropdownCoords, setDropdownCoords] = useState<{ top: number; left: number } | null>(null);
+  const menuDropdownTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const subnavScrollRef = useRef<HTMLDivElement | null>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState<boolean>(false);
+  const [canScrollRight, setCanScrollRight] = useState<boolean>(false);
+
+  const isFinePointer = () => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+  };
+
+  const updateScrollButtons = () => {
+    const el = subnavScrollRef.current;
+    if (!el) return;
+    const { scrollLeft, scrollWidth, clientWidth } = el;
+    setCanScrollLeft(scrollLeft > 4);
+    setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 4);
+  };
+
+  useEffect(() => {
+    updateScrollButtons();
+    const el = subnavScrollRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => {
+      updateScrollButtons();
+    });
+    observer.observe(el);
+    window.addEventListener('resize', updateScrollButtons);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateScrollButtons);
+    };
+  }, [headerMenus]);
+
+  const calculateDropdownPosition = (el: HTMLElement) => {
+    const rect = el.getBoundingClientRect();
+    const dropdownEstimatedWidth = Math.min(260, Math.max(200, window.innerWidth - 24));
+    // Anchor strictly at the bottom of the parent menu button
+    const top = Math.round(rect.bottom + 2);
+    // Align left edge directly to the parent button's left edge
+    let left = Math.round(rect.left);
+
+    // If extending right causes offscreen overflow, align right edge to button's right edge
+    if (left + dropdownEstimatedWidth > window.innerWidth - 12) {
+      left = Math.round(rect.right - dropdownEstimatedWidth);
+    }
+
+    // STRICT VIEWPORT BOUNDS: Always guarantee the dropdown is 100% visible on screen!
+    const maxLeft = Math.max(12, window.innerWidth - dropdownEstimatedWidth - 12);
+    left = Math.max(12, Math.min(left, maxLeft));
+
+    return { top, left };
+  };
+
+  useEffect(() => {
+    const handleGlobalClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target?.closest?.('.top-header-subnav') && !target?.closest?.('.top-header-dropdown-menu')) {
+        setOpenDropdownMenuId(null);
+        setOpenedViaClickMenuId(null);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setOpenDropdownMenuId(null);
+        setOpenedViaClickMenuId(null);
+      }
+    };
+    const handleScrollOrResize = (e: Event) => {
+      // Do not close if scrolling inside the dropdown itself
+      const target = e.target as HTMLElement | null;
+      if (target?.closest?.('.top-header-dropdown-menu')) {
+        return;
+      }
+      setOpenDropdownMenuId(null);
+      setOpenedViaClickMenuId(null);
+    };
+
+    window.addEventListener('click', handleGlobalClick);
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('scroll', handleScrollOrResize, { passive: true });
+    window.addEventListener('resize', handleScrollOrResize);
+    return () => {
+      window.removeEventListener('click', handleGlobalClick);
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('scroll', handleScrollOrResize);
+      window.removeEventListener('resize', handleScrollOrResize);
+    };
+  }, []);
+
+  const handleScrollLeft = () => {
+    setOpenDropdownMenuId(null);
+    setOpenedViaClickMenuId(null);
+    subnavScrollRef.current?.scrollBy({ left: -260, behavior: 'smooth' });
+  };
+
+  const handleScrollRight = () => {
+    setOpenDropdownMenuId(null);
+    setOpenedViaClickMenuId(null);
+    subnavScrollRef.current?.scrollBy({ left: 260, behavior: 'smooth' });
+  };
+
+  const handleMenuMouseEnter = (id: string | number, e: React.MouseEvent<HTMLElement>) => {
+    if (!isFinePointer()) return;
+    if (menuDropdownTimeoutRef.current) {
+      clearTimeout(menuDropdownTimeoutRef.current);
+      menuDropdownTimeoutRef.current = null;
+    }
+    setDropdownCoords(calculateDropdownPosition(e.currentTarget));
+    setOpenDropdownMenuId(id);
+  };
+
+  const handleMenuMouseLeave = () => {
+    if (openedViaClickMenuId !== null) return;
+    if (!isFinePointer()) return;
+    menuDropdownTimeoutRef.current = setTimeout(() => {
+      setOpenDropdownMenuId(null);
+    }, 300);
+  };
+
+  const handleDropdownMouseEnter = () => {
+    if (menuDropdownTimeoutRef.current) {
+      clearTimeout(menuDropdownTimeoutRef.current);
+      menuDropdownTimeoutRef.current = null;
+    }
+  };
+
+  const handleDropdownMouseLeave = () => {
+    if (openedViaClickMenuId !== null) return;
+    if (!isFinePointer()) return;
+    menuDropdownTimeoutRef.current = setTimeout(() => {
+      setOpenDropdownMenuId(null);
+    }, 250);
+  };
+
+  const handleMenuClick = (id: string | number, e: React.MouseEvent<HTMLElement>) => {
+    e.stopPropagation();
+    if (openDropdownMenuId === id) {
+      setOpenDropdownMenuId(null);
+      setOpenedViaClickMenuId(null);
+    } else {
+      setDropdownCoords(calculateDropdownPosition(e.currentTarget));
+      setOpenDropdownMenuId(id);
+      setOpenedViaClickMenuId(id);
+    }
+  };
+
+  const handleTrackWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (e.deltaY !== 0 && subnavScrollRef.current) {
+      subnavScrollRef.current.scrollLeft += e.deltaY;
+    }
+  };
+
+  const activeOpenMenu = useMemo(() => {
+    if (!openDropdownMenuId) return null;
+    return headerMenus.find((m) => m.id === openDropdownMenuId) || null;
+  }, [openDropdownMenuId, headerMenus]);
+
+  const isRouteActive = (routePath: string) => {
+    const clean = normalizeRoute(routePath);
+    if (clean === '#') return false;
+    if (clean.includes('?')) {
+      const [pathPart, queryPart] = clean.split('?');
+      if (pathname !== pathPart) return false;
+      const tab = new URLSearchParams(queryPart).get('tab');
+      const currentTab =
+        searchParams?.get('tab') ||
+        (pathname === '/masters' ? 'countries' : pathname === '/rbac' ? 'roles' : null);
+      return currentTab === tab;
+    }
+    if (clean === '/') {
+      return pathname === '/';
+    }
+    if (
+      searchParams &&
+      searchParams.toString().length > 0 &&
+      (clean === '/masters' || clean === '/rbac')
+    ) {
+      return false;
+    }
+    return pathname === clean || pathname.startsWith(`${clean}/`);
+  };
+
+  const isParentRouteActive = (item: MenuItem) => {
+    if (item.path && isRouteActive(item.path)) return true;
+    if (item.children && item.children.length > 0) {
+      return item.children.some((child) => child.path && isRouteActive(child.path));
+    }
+    return false;
+  };
 
   // Search State
   const [searchQuery, setSearchQuery] = useState('');
@@ -166,11 +564,40 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
     return notifications.filter((n) => !n.is_read);
   }, [notifications]);
 
-  // Auto-suggestions based on search query
+  // Set of authorized route paths extracted from user's dynamic RBAC menus
+  const userAuthorizedPaths = useMemo(() => {
+    const paths = new Set<string>();
+    function extract(items: MenuItem[]) {
+      for (const item of items) {
+        if (item.path && item.path !== '#') {
+          paths.add(item.path);
+        }
+        if (item.children && item.children.length > 0) {
+          extract(item.children);
+        }
+      }
+    }
+    extract(menus || []);
+    return paths;
+  }, [menus]);
+
+  // Auto-suggestions based on search query, strictly filtered by RBAC permissions
   const suggestions = useMemo(() => {
     if (!searchQuery.trim()) return [];
     const q = searchQuery.toLowerCase().trim();
+
     return SYSTEM_ROUTES.filter((r) => {
+      // 1. RBAC Authorization Gate
+      if (r.permissions && r.permissions.length > 0) {
+        const hasDirectPermission = r.permissions.some((perm) => hasPermission(perm));
+        const hasMenuAuthorization =
+          userAuthorizedPaths.has(r.path) || userAuthorizedPaths.has(r.path.split('?')[0]);
+        if (!hasDirectPermission && !hasMenuAuthorization) {
+          return false;
+        }
+      }
+
+      // 2. Query Match against title, description, path, category, or keywords
       return (
         r.title.toLowerCase().includes(q) ||
         r.description.toLowerCase().includes(q) ||
@@ -178,8 +605,8 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
         r.category.toLowerCase().includes(q) ||
         r.keywords.some((k) => k.toLowerCase().includes(q))
       );
-    }).slice(0, 6);
-  }, [searchQuery]);
+    }).slice(0, 8);
+  }, [searchQuery, hasPermission, userAuthorizedPaths]);
 
   const handleSelectRoute = (path: string) => {
     setIsSearchOpen(false);
@@ -325,6 +752,7 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
         setIsSearchOpen(false);
         setShowNotifications(false);
         setShowUserMenu(false);
+        setOpenDropdownMenuId(null);
       }
     }
 
@@ -338,6 +766,10 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
       if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
         setShowUserMenu(false);
       }
+      const target = e.target as HTMLElement;
+      if (!target?.closest?.('.top-header-subnav') && !target?.closest?.('.top-header-dropdown-menu')) {
+        setOpenDropdownMenuId(null);
+      }
     }
 
     window.addEventListener('keydown', handleKeyDown);
@@ -347,6 +779,9 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
       document.removeEventListener('mousedown', handleClickOutside);
       if (hoverTimeoutRef.current) {
         clearTimeout(hoverTimeoutRef.current);
+      }
+      if (menuDropdownTimeoutRef.current) {
+        clearTimeout(menuDropdownTimeoutRef.current);
       }
     };
   }, []);
@@ -398,29 +833,40 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
 
   return (
     <header className="top-header">
-      {/* Left Area: Mobile Navigation Toggle & Left-Aligned Global Search */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', flex: 1, maxWidth: '440px', minWidth: 0 }}>
-        {onToggleMobileSidebar && (
-          <button
-            type="button"
-            onClick={onToggleMobileSidebar}
-            className="mobile-sidebar-toggle"
-            aria-label="Toggle navigation menu"
-            title="Open navigation menu"
-          >
-            <MenuIcon size={20} />
-          </button>
-        )}
-
-        {/* Global Search Bar with Auto-Suggestions Dropdown (Left Aligned) */}
+      {/* Top Row: Left-Aligned Search and Right Action Controls */}
+      <div className="top-header-main">
+        {/* Left Area: Mobile Navigation Toggle & Left-Aligned Global Search */}
         <div
-          ref={searchContainerRef}
           style={{
-            position: 'relative',
-            width: '100%',
-            maxWidth: '380px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.85rem',
+            flex: 1,
+            maxWidth: '560px',
+            minWidth: 0,
           }}
         >
+          {onToggleMobileSidebar && (
+            <button
+              type="button"
+              onClick={onToggleMobileSidebar}
+              className="mobile-sidebar-toggle"
+              aria-label="Toggle navigation menu"
+              title="Open navigation menu"
+            >
+              <MenuIcon size={20} />
+            </button>
+          )}
+
+          {/* Global Search Bar with Auto-Suggestions Dropdown (Left Aligned) */}
+          <div
+            ref={searchContainerRef}
+            style={{
+              position: 'relative',
+              width: '100%',
+              maxWidth: '560px',
+            }}
+          >
         <Search
           size={16}
           style={{
@@ -786,7 +1232,7 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
                             {n.title}
                             {n.link && <ExternalLink size={11} color="var(--text-muted)" />}
                           </span>
-                          <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                          <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }} title={formatDateTime(n.created_at)}>
                             {formatRelativeTime(n.created_at)}
                           </span>
                         </div>
@@ -1299,6 +1745,261 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
           )}
         </div>
       </div>
+      </div>
+
+      {/* Bottom Sub-Header Bar: Configurable & RBAC-Governed Top Header Navigation Menus */}
+      {showTopHeaderMenus && headerMenus.length > 0 && (
+        <nav
+          className="top-header-subnav"
+          aria-label="Top Header Navigation"
+        >
+          {/* Slide Navigation to Left */}
+          {canScrollLeft && (
+            <button
+              type="button"
+              onClick={handleScrollLeft}
+              className="top-header-scroll-btn"
+              aria-label="Slide navigation left"
+              title="Slide left"
+            >
+              <ChevronLeft size={16} />
+            </button>
+          )}
+
+          {/* Scrollable Navigation Track */}
+          <div
+            ref={subnavScrollRef}
+            onScroll={() => {
+              updateScrollButtons();
+              setOpenDropdownMenuId(null);
+            }}
+            onWheel={handleTrackWheel}
+            className="top-header-scroll-track"
+          >
+            {headerMenus.map((item) => {
+              const hasChildren = item.children && item.children.length > 0;
+              const isParentActive = isParentRouteActive(item);
+              const isOpen = openDropdownMenuId === item.id;
+              const cleanPath = normalizeRoute(item.path);
+
+              if (hasChildren) {
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={(e) => handleMenuClick(item.id, e)}
+                    onMouseEnter={(e) => handleMenuMouseEnter(item.id, e)}
+                    onMouseLeave={handleMenuMouseLeave}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.45rem',
+                      padding: '0.35rem 0.75rem',
+                      borderRadius: 'var(--radius-md)',
+                      fontSize: '0.8125rem',
+                      fontWeight: isParentActive || isOpen ? 700 : 500,
+                      color: isParentActive || isOpen ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                      background: isParentActive || isOpen
+                        ? 'var(--accent-subtle)'
+                        : 'transparent',
+                      border: isParentActive || isOpen
+                        ? '1px solid var(--accent-glow)'
+                        : '1px solid transparent',
+                      boxShadow: isOpen ? '0 0 10px rgba(56, 189, 248, 0.15)' : 'none',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0,
+                    }}
+                    aria-expanded={isOpen}
+                    aria-haspopup="true"
+                  >
+                    {getHeaderMenuIcon(item.icon)}
+                    <span>{item.title}</span>
+                    <ChevronDown
+                      size={12}
+                      style={{
+                        transform: isOpen ? 'rotate(180deg)' : 'none',
+                        transition: 'transform 0.15s ease',
+                        opacity: isOpen ? 1 : 0.7,
+                        color: isOpen ? 'var(--accent-primary)' : 'currentColor',
+                      }}
+                    />
+                  </button>
+                );
+              }
+
+              const isItemActive = isRouteActive(cleanPath);
+              return (
+                <Link
+                  key={item.id}
+                  href={cleanPath}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.45rem',
+                    padding: '0.35rem 0.75rem',
+                    borderRadius: 'var(--radius-md)',
+                    fontSize: '0.8125rem',
+                    fontWeight: isItemActive ? 700 : 500,
+                    color: isItemActive ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                    background: isItemActive ? 'var(--accent-subtle)' : 'transparent',
+                    border: isItemActive ? '1px solid var(--accent-glow)' : '1px solid transparent',
+                    textDecoration: 'none',
+                    transition: 'all 0.15s ease',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0,
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isItemActive) {
+                      e.currentTarget.style.background = 'var(--bg-hover)';
+                      e.currentTarget.style.color = 'var(--text-primary)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isItemActive) {
+                      e.currentTarget.style.background = 'transparent';
+                      e.currentTarget.style.color = 'var(--text-secondary)';
+                    }
+                  }}
+                >
+                  {getHeaderMenuIcon(item.icon)}
+                  <span>{item.title}</span>
+                </Link>
+              );
+            })}
+          </div>
+
+          {/* Slide Navigation to Right */}
+          {canScrollRight && (
+            <button
+              type="button"
+              onClick={handleScrollRight}
+              className="top-header-scroll-btn"
+              aria-label="Slide navigation right"
+              title="Slide right"
+            >
+              <ChevronRight size={16} />
+            </button>
+          )}
+
+          {/* Fixed-Position Floating Submenu Dropdown Portal (Mounted directly to document.body) */}
+          {activeOpenMenu && dropdownCoords && typeof document !== 'undefined' && createPortal(
+            <div
+              className="top-header-dropdown-menu glass-panel"
+              onMouseEnter={handleDropdownMouseEnter}
+              onMouseLeave={handleDropdownMouseLeave}
+              style={{
+                position: 'fixed',
+                top: `${dropdownCoords.top}px`,
+                left: `${dropdownCoords.left}px`,
+                minWidth: '240px',
+                maxWidth: '340px',
+                maxHeight: 'min(440px, calc(100vh - 140px))',
+                overflowY: 'auto',
+                padding: '0.45rem',
+                borderRadius: 'var(--radius-md)',
+                boxShadow: '0 24px 48px -4px rgba(0, 0, 0, 0.75), 0 10px 24px rgba(0, 0, 0, 0.5)',
+                background: 'var(--bg-surface)',
+                border: '1px solid var(--border-color)',
+                zIndex: 999999,
+                animation: 'fadeIn 0.12s ease-out',
+              }}
+            >
+              {/* Invisible hover bridge to prevent mouseleave during transit */}
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '-8px',
+                  left: 0,
+                  right: 0,
+                  height: '8px',
+                }}
+              />
+
+              <div
+                style={{
+                  fontSize: '0.6875rem',
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.06em',
+                  color: 'var(--text-muted)',
+                  padding: '0.35rem 0.65rem 0.25rem',
+                  borderBottom: '1px solid var(--border-subtle)',
+                  marginBottom: '0.3rem',
+                }}
+              >
+                {activeOpenMenu.title}
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                {activeOpenMenu.children
+                  .filter((child) => child.show_in_header !== false && !child.is_deleted && child.is_active !== false)
+                  .map((child) => {
+                    const childCleanPath = normalizeRoute(child.path);
+                    const isChildSelected = isRouteActive(childCleanPath);
+                    return (
+                      <Link
+                        key={child.id}
+                        href={childCleanPath}
+                        onClick={() => {
+                          setTimeout(() => {
+                            setOpenDropdownMenuId(null);
+                            setOpenedViaClickMenuId(null);
+                          }, 80);
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.55rem',
+                          padding: '0.45rem 0.65rem',
+                          borderRadius: 'var(--radius-sm)',
+                          fontSize: '0.8rem',
+                          fontWeight: isChildSelected ? 600 : 500,
+                          color: isChildSelected
+                            ? 'var(--accent-primary)'
+                            : 'var(--text-primary)',
+                          background: isChildSelected
+                            ? 'var(--accent-glow)'
+                            : 'transparent',
+                          textDecoration: 'none',
+                          transition: 'background 0.12s ease',
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isChildSelected) {
+                            e.currentTarget.style.background = 'var(--bg-hover)';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isChildSelected) {
+                            e.currentTarget.style.background = 'transparent';
+                          }
+                        }}
+                      >
+                        <span style={{ color: isChildSelected ? 'var(--accent-primary)' : 'var(--text-muted)' }}>
+                          {getHeaderMenuIcon(child.icon, 13)}
+                        </span>
+                        <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {child.title}
+                        </span>
+                        {isChildSelected ? (
+                          <span className="badge badge-primary" style={{ fontSize: '0.625rem', padding: '0.1rem 0.4rem', flexShrink: 0 }}>
+                            Active
+                          </span>
+                        ) : child.badge ? (
+                          <span className="badge badge-neutral" style={{ fontSize: '0.625rem', padding: '0.1rem 0.35rem', flexShrink: 0 }}>
+                            {child.badge}
+                          </span>
+                        ) : null}
+                      </Link>
+                    );
+                  })}
+              </div>
+            </div>,
+            document.body
+          )}
+        </nav>
+      )}
     </header>
   );
 }

@@ -3,10 +3,10 @@ from uuid import UUID, uuid7
 from sqlalchemy import BigInteger, Boolean, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.infrastructure.database.models.base_entity import EntityBase
+from app.infrastructure.database.models.base_entity import AuditEntityBase
 
 
-class UnitOfMeasure(EntityBase):
+class UnitOfMeasure(AuditEntityBase):
     __tablename__ = "units_of_measure"
 
     id: Mapped[int] = mapped_column(

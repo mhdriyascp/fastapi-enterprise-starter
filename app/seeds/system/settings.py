@@ -158,12 +158,22 @@ DEFAULT_SETTINGS = [
     },
     {
         "category": "security",
+        "key": "enable_session_timeout",
+        "value": True,
+        "value_type": "boolean",
+        "label": "Enable Session Inactivity Timeout",
+        "description": "Automatically terminate user sessions after idle inactivity (HIPAA § 164.312 & SOC 2 compliance).",
+        "is_public": True,
+        "is_system": True,
+    },
+    {
+        "category": "security",
         "key": "session_timeout_mins",
-        "value": 30,
+        "value": 15,
         "value_type": "integer",
         "label": "Inactivity Session Timeout (Minutes)",
-        "description": "Minutes of user idle time before automatic session expiration.",
-        "is_public": False,
+        "description": "Minutes of user idle time before automatic session expiration. Turn on or off to enable or disable automated session termination (HIPAA § 164.312 & SOC 2).",
+        "is_public": True,
         "is_system": True,
     },
     {
@@ -173,6 +183,36 @@ DEFAULT_SETTINGS = [
         "value_type": "string",
         "label": "Two-Factor Authentication Policy",
         "description": "MFA enforcement policy ('disabled', 'optional', 'enforced').",
+        "is_public": False,
+        "is_system": True,
+    },
+    {
+        "category": "security",
+        "key": "password_expiry_days",
+        "value": 90,
+        "value_type": "integer",
+        "label": "Password Expiration Window (Days)",
+        "description": "Forces credential rotation every N days. 0 disables automatic expiration (SOC 2 & ISO 27001).",
+        "is_public": False,
+        "is_system": True,
+    },
+    {
+        "category": "security",
+        "key": "session_max_lifetime_hours",
+        "value": 24,
+        "value_type": "integer",
+        "label": "Maximum Session Lifetime (Hours)",
+        "description": "Absolute session duration before forced re-authentication regardless of user activity.",
+        "is_public": True,
+        "is_system": True,
+    },
+    {
+        "category": "security",
+        "key": "enable_api_rate_limiting",
+        "value": True,
+        "value_type": "boolean",
+        "label": "Enable API Abuse & Rate Limiting",
+        "description": "Mitigates denial-of-service and brute-force enumeration on public and authenticated routes.",
         "is_public": False,
         "is_system": True,
     },
@@ -239,6 +279,16 @@ DEFAULT_SETTINGS = [
     },
     {
         "category": "notifications",
+        "key": "notification_retention_days",
+        "value": 60,
+        "value_type": "integer",
+        "label": "In-App Notification Retention (Days)",
+        "description": "Automated lifecycle retention window before archiving read notifications.",
+        "is_public": False,
+        "is_system": True,
+    },
+    {
+        "category": "notifications",
         "key": "notification_modules",
         "value": [
             "organizations",
@@ -251,6 +301,10 @@ DEFAULT_SETTINGS = [
             "security",
             "system",
             "deal",
+            "leads",
+            "contacts",
+            "addresses",
+            "notifications",
         ],
         "value_type": "array",
         "label": "Supported Notification Modules",
@@ -259,6 +313,16 @@ DEFAULT_SETTINGS = [
         "is_system": True,
     },
     # 4. Governance & Compliance
+    {
+        "category": "governance",
+        "key": "enable_audit_logging",
+        "value": True,
+        "value_type": "boolean",
+        "label": "Enable Immutable Audit Trail",
+        "description": "Master switch recording all create, update, delete, and restore mutations across domain modules.",
+        "is_public": False,
+        "is_system": True,
+    },
     {
         "category": "governance",
         "key": "audit_retention_days",
@@ -330,6 +394,16 @@ DEFAULT_SETTINGS = [
         "is_public": True,
         "is_system": True,
     },
+    {
+        "category": "features",
+        "key": "enable_top_header_menus",
+        "value": True,
+        "value_type": "boolean",
+        "label": "Top Header Navigation Menus",
+        "description": "Displays horizontal top navigation menu links on the header based on RBAC permissions.",
+        "is_public": True,
+        "is_system": True,
+    },
     # 6. Data Retention & Deletion Policy
     {
         "category": "data_retention",
@@ -397,7 +471,9 @@ async def seed_system_settings(db: AsyncSession) -> None:
                 sort_order=default_order,
             )
             db.add(new_setting)
-        elif existing.sort_order == 0:
-            existing.sort_order = default_order
+        elif existing is not None:
+            existing.is_public = setting_data["is_public"]
+            if existing.sort_order == 0:
+                existing.sort_order = default_order
 
     await db.commit()

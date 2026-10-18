@@ -47,7 +47,7 @@ The RBAC module provides centralized authorization management, decoupling permis
 
 All CRM domain modules adhere to standard lifecycle permission codes:
 - **Soft Delete**: `{module}.delete` (or `masters:delete`)
-- **Hard Delete**: `{module}.hard_delete` (or `masters:hard_delete`)
+- **Purge**: `{module}.hard_delete` (or `masters:hard_delete`)
 - **Restore**: `{module}.restore` (or `masters:restore`)
 
 Supported across: `role`, `permission`, `user`, `organization`, `masters`, `menu`, and `notification`.
@@ -86,44 +86,44 @@ Supported across: `role`, `permission`, `user`, `organization`, `masters`, `menu
 | | `user.update` | Update user details and toggle status |
 | | `user.delete` | **Soft Delete Users** — Soft-delete user accounts (deactivates credentials, preserves profile and historical audit trails, allows restoration) |
 | | `user.restore` | **Restore Soft-Deleted Users** — Restore soft-deleted or suspended user accounts back to active status |
-| | `user.hard_delete` | **Hard Delete Users** — Permanently purge user accounts and identity from database (irreversible physical deletion) |
+| | `user.hard_delete` | **Purge Users** — Permanently purge user accounts and identity from database (irreversible physical deletion) |
 | **Organizations** | `organization.read` | View organizations |
 | | `organization.create` | Create organizations |
 | | `organization.update` | Edit organization details |
 | | `organization.delete` | **Soft Delete Organizations** — Soft-delete organization records (marks entity as deleted, preserves full audit history, and allows restoration) |
 | | `organization.restore` | **Restore Soft-Deleted Organizations** — Restore soft-deleted organization records back to active status |
-| | `organization.hard_delete` | **Hard Delete Organizations** — Permanently purge organization records from database (irreversible physical deletion) |
+| | `organization.hard_delete` | **Purge Organizations** — Permanently purge organization records from database (irreversible physical deletion) |
 | **Master Data** | `masters:read` | View master records |
 | | `masters:create` | Create master records |
 | | `masters:update` | Update master records |
 | | `masters:delete` | **Soft Delete Master Records** — Soft-delete master reference records (marks record as inactive/deleted with complete restore capability) |
 | | `masters:restore` | **Restore Soft-Deleted Master Records** — Restore soft-deleted or deactivated master reference records back to active status |
-| | `masters:hard_delete` | **Hard Delete Master Records** — Permanently purge master reference records from database (irreversible physical deletion) |
+| | `masters:hard_delete` | **Purge Master Records** — Permanently purge master reference records from database (irreversible physical deletion) |
 | **Menus** | `menu.read` | View navigation menus |
 | | `menu.create` | Create navigation menu items |
 | | `menu.update` | Update navigation menu items |
 | | `menu.delete` | **Soft Delete Menus** — Soft-delete navigation menu items (hides menu item from navigation tree while preserving configuration for restore) |
 | | `menu.restore` | **Restore Soft-Deleted Menus** — Restore soft-deleted navigation menu items back to active status |
-| | `menu.hard_delete` | **Hard Delete Menus** — Permanently purge navigation menu items from database (irreversible physical deletion) |
+| | `menu.hard_delete` | **Purge Menus** — Permanently purge navigation menu items from database (irreversible physical deletion) |
 | **Notifications** | `notification.read` | View notifications |
 | | `notification.create` | Create system notifications |
 | | `notification.update` | Update notification states |
 | | `notification.delete` | **Soft Delete Notifications** — Soft-delete notification alerts (dismisses from user inbox while preserving audit trail) |
-| | `notification.hard_delete` | **Hard Delete Notifications** — Permanently purge notifications from database (irreversible physical deletion) |
+| | `notification.hard_delete` | **Purge Notifications** — Permanently purge notifications from database (irreversible physical deletion) |
 | **RBAC Roles** | `role.read` | View RBAC roles |
 | | `role.create` | Create roles |
 | | `role.update` | Update role details |
 | | `role.delete` | **Soft Delete Roles** — Soft-delete custom roles (marks entity as deleted/inactive, preserves historical assignments and audit trails, enables restoration) |
 | | `role.restore` | **Restore Soft-Deleted Roles** — Restore soft-deleted custom roles back to active status in the system |
-| | `role.hard_delete` | **Hard Delete Roles** — Permanently purge eligible custom roles from the database (irreversible physical deletion) |
+| | `role.hard_delete` | **Purge Roles** — Permanently purge eligible custom roles from the database (irreversible physical deletion) |
 | | `role.assign_permission` | Assign permission to role |
 | | `role.revoke_permission` | Revoke permission from role |
-| **RBAC Permissions** | `permission.read` | View permissions catalog |
+| | `permission.read` | View permissions catalog |
 | | `permission.create` | Create permissions |
 | | `permission.update` | Edit permissions |
 | | `permission.delete` | **Soft Delete Permissions** — Soft-delete custom permissions (deactivates privilege, preserves audit history, allows restoration) |
 | | `permission.restore` | **Restore Soft-Deleted Permissions** — Restore soft-deleted custom permissions back to active status |
-| | `permission.hard_delete` | **Hard Delete Permissions** — Permanently purge custom permissions from the database (irreversible physical deletion) |
+| | `permission.hard_delete` | **Purge Permissions** — Permanently purge custom permissions from the database (irreversible physical deletion) |
 
 ---
 

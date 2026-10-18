@@ -431,7 +431,7 @@ export default function UsersPage() {
 
       toast.success(
         isHardDelete
-          ? `User ${deletingUser.display_name || deletingUser.email} has been permanently deleted.`
+          ? `User ${deletingUser.display_name || deletingUser.email} has been purged successfully.`
           : `User ${deletingUser.display_name || deletingUser.email} has been deactivated / soft-deleted.`
       );
       setDeletingUser(null);
@@ -1136,7 +1136,7 @@ export default function UsersPage() {
                     <td style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                         <Clock size={12} color="var(--text-muted)" />
-                        <FormattedDate value={user.created_at} variant="date" />
+                        <FormattedDate value={user.created_at} />
                       </div>
                     </td>
 
@@ -1486,7 +1486,7 @@ export default function UsersPage() {
                       <td>
                         {viewingUser.email_verified_at ? (
                           <span style={{ color: '#22c55e', fontSize: '0.825rem', fontWeight: 600 }}>
-                            Verified on <FormattedDate value={viewingUser.email_verified_at} variant="date" />
+                            Verified on <FormattedDate value={viewingUser.email_verified_at} />
                           </span>
                         ) : (
                           <span style={{ color: '#f59e0b', fontSize: '0.825rem' }}>
@@ -2161,7 +2161,7 @@ export default function UsersPage() {
         isOpen={!!deletingUser}
         onClose={() => setDeletingUser(null)}
         onConfirm={handleConfirmDelete}
-        title={isHardDelete ? "Permanently Delete User Account?" : "Confirm Account Deactivation"}
+        title={isHardDelete ? "Purge User Account?" : "Confirm Account Deactivation"}
         subtitle={isHardDelete ? "This action permanently purges the user from the database." : "This action performs a soft-deletion and disables account access."}
         message={
           deletingUser ? (
@@ -2184,7 +2184,7 @@ export default function UsersPage() {
             )
           ) : null
         }
-        confirmLabel={isHardDelete ? "Permanently Delete" : "Deactivate User"}
+        confirmLabel={isHardDelete ? "Purge User" : "Deactivate User"}
         variant="danger"
         isLoading={isDeleting}
       />
@@ -2219,7 +2219,7 @@ export default function UsersPage() {
         onConfirm={handleBulkDelete}
         title={
           bulkHardDeleteRequested
-            ? `Permanently Purge ${selectedIds.size} Selected User(s)?`
+            ? `Purge ${selectedIds.size} Selected User(s)?`
             : `Soft Delete ${selectedIds.size} Selected User(s)?`
         }
         subtitle={`${selectedIds.size} accounts selected`}
@@ -2253,7 +2253,7 @@ export default function UsersPage() {
         }
         confirmLabel={
           bulkHardDeleteRequested
-            ? `Permanently Purge (${selectedIds.size})`
+            ? `Purge (${selectedIds.size})`
             : `Soft Delete (${selectedIds.size})`
         }
         variant="danger"

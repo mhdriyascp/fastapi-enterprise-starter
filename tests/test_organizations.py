@@ -460,7 +460,7 @@ async def test_organization_soft_vs_hard_delete_rbac() -> None:
             headers=non_admin_headers,
         )
         assert res_forbidden.status_code == 403
-        assert "permission to permanently delete" in res_forbidden.json()["detail"]
+        assert "permission to purge" in res_forbidden.json()["detail"]
 
         # D. Non-admin executes SOFT delete -> 204 No Content
         res_nonadmin_soft = await client.delete(

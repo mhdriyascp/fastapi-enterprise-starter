@@ -609,7 +609,7 @@ export default function DashboardOverviewPage() {
                       <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                           <Clock size={13} />
-                          <FormattedDate value={u.created_at} variant="date" />
+                          <FormattedDate value={u.created_at} />
                         </div>
                       </td>
                     </tr>

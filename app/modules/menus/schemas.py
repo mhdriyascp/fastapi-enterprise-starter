@@ -16,6 +16,7 @@ class MenuCreate(BaseModel):
     sort_order: int = Field(default=0, ge=0)
     parent_id: int | UUID | str | None = None
     is_active: bool = True
+    show_in_header: bool = True
     role_ids: list[UUID] = Field(default_factory=list)
     permission_ids: list[UUID] = Field(default_factory=list)
 
@@ -30,6 +31,7 @@ class MenuUpdate(BaseModel):
     sort_order: int | None = Field(default=None, ge=0)
     parent_id: int | UUID | str | None = None
     is_active: bool | None = None
+    show_in_header: bool | None = None
     role_ids: list[UUID] | None = None
     permission_ids: list[UUID] | None = None
 
@@ -52,6 +54,7 @@ class MenuResponse(BaseSchema):
     icon: str | None = None
     sort_order: int
     is_active: bool
+    show_in_header: bool = True
     is_deleted: bool = False
     deleted_at: datetime | None = None
     role_ids: list[UUID] = Field(default_factory=list)
@@ -70,6 +73,7 @@ class MenuTreeNode(BaseSchema):
     icon: str | None = None
     sort_order: int
     is_active: bool
+    show_in_header: bool = True
     is_deleted: bool = False
     deleted_at: datetime | None = None
     children: list[MenuTreeNode] = Field(default_factory=list)

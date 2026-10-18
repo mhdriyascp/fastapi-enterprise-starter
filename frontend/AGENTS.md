@@ -34,7 +34,18 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 4. **Design System Consistency**:
    - Rely on CSS variables and design tokens defined in `globals.css` (dark slate theme, glassmorphism, micro-animations). Avoid arbitrary ad-hoc inline styling.
 
-5. **Definition of Done (DoD)**:
+5. **Standardized Date/Time Presentation (`Oct 14, 2026, 04:41:58 PM`)**:
+   - Every date or timestamp rendered in tables, detail modals, cards, badges, or activity logs across all modules MUST format strictly as **`MMM D, YYYY, hh:mm:ss A`** (e.g., **`Oct 14, 2026, 04:41:58 PM`**).
+   - All components MUST use `<FormattedDate value={...} />` from `@/components/ui/formatted-date` or functions from `@/lib/date-utils`. Direct calls to `toLocaleDateString()` or `toLocaleString()` are strictly prohibited.
+   - Seconds are enabled by default (`includeSeconds: true`). Tooltips show UTC audit timestamps.
+
+6. **Unified Lifecycle UI & RBAC Protocol (Soft-Delete, Purge, & Restore)**:
+   - Data-driven module dashboards must provide the 4-segment status tab triad: `All (N)`, `Active (N)`, `Inactive (N)`, and `Deleted (N)`.
+   - **Purge Terminology Standard**: Use "Purge" consistently across all user-facing labels, action buttons (`.btn-danger`), confirmation modals, and toast messages. Never label user-facing controls as raw "hard delete".
+   - **Context-Aware Action Swapping**: When in `Deleted` tab, action buttons dynamically swap to `Restore (N)` (emerald `.btn-restore`) and `Purge (N)` (red `.btn-danger`).
+   - Single and bulk operations must trigger descriptive confirmation modals and provide immediate toast notifications.
+
+7. **Definition of Done (DoD)**:
    ```bash
    npm run lint
    npm run build

@@ -16,7 +16,7 @@ export interface FormattedDateProps {
   value: string | Date | null | undefined;
   /** Display presentation mode: 'datetime' (default), 'date', 'time', 'relative', or 'iso' */
   variant?: 'datetime' | 'date' | 'time' | 'relative' | 'iso';
-  /** Whether to show seconds in datetime/time mode */
+  /** Whether to show seconds in datetime/time mode (defaults to true for 'Oct 14, 2026, 04:41:58 PM' format) */
   includeSeconds?: boolean;
   /** Custom time zone override (defaults to user profile or browser) */
   timeZone?: string;
@@ -36,12 +36,12 @@ export interface FormattedDateProps {
  * Standard Enterprise Formatted Date Component.
  *
  * Implements semantic `<time>` tag with hover audit tooltip and automatic
- * user-level timezone / locale resolution.
+ * user-level timezone / locale resolution. Formats by default as 'Oct 14, 2026, 04:41:58 PM'.
  */
 export function FormattedDate({
   value,
   variant = 'datetime',
-  includeSeconds = false,
+  includeSeconds = true,
   timeZone,
   locale,
   placeholder = '—',

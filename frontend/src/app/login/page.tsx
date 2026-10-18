@@ -1,27 +1,30 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
-import { Sparkles, ArrowRight, Lock, Mail, AlertCircle, Loader2 } from 'lucide-react';
+import { Sparkles, ArrowRight, Lock, Mail, AlertCircle, Loader2, ShieldAlert } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { useToast } from '@/lib/toast-context';
 
 /**
- * Authentication login page.
- * Authenticates user credentials via `POST /api/v1/auth/login`, manages tokens via `AuthProvider`,
- * and redirects authenticated sessions to the dashboard overview.
+ * Inner login form component wrapped in Suspense for searchParams handling.
  */
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, login } = useAuth();
   const { toast } = useToast();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+
+  const reason = searchParams.get('reason');
+  const isInactivityLogout = reason === 'inactivity';
 
   useEffect(() => {
     if (user) {
@@ -104,6 +107,153 @@ export default function LoginPage() {
   }
 
   return (
+    <div className="glass-panel" style={{ padding: '2rem' }}>
+      {/* HIPAA & SOC 2 Inactivity Logout Notice */}
+      {isInactivityLogout && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '0.75rem',
+            padding: '0.85rem 1rem',
+            borderRadius: 'var(--radius-md)',
+            background: 'rgba(245, 158, 11, 0.12)',
+            border: '1px solid rgba(245, 158, 11, 0.35)',
+            color: '#f59e0b',
+            fontSize: '0.85rem',
+            marginBottom: '1.5rem',
+            lineHeight: 1.45,
+          }}
+          role="alert"
+        >
+          <ShieldAlert size={18} style={{ flexShrink: 0, marginTop: '2px' }} />
+          <div>
+            <strong>Session Inactivity Timeout (HIPAA &amp; SOC 2):</strong> You were automatically logged out after 15 minutes of inactivity to protect sensitive enterprise data. Please sign in again to continue.
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.65rem',
+            padding: '0.85rem 1rem',
+            borderRadius: 'var(--radius-md)',
+            background: 'var(--accent-danger-bg)',
+            border: '1px solid rgba(244, 63, 94, 0.25)',
+            color: '#fca5a5',
+            fontSize: '0.875rem',
+            marginBottom: '1.5rem',
+          }}
+          role="alert"
+        >
+          <AlertCircle size={18} style={{ flexShrink: 0 }} />
+          <div>{error}</div>
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+        <div>
+          <label
+            htmlFor="login-input-email"
+            style={{
+              display: 'block',
+              fontSize: '0.8125rem',
+              fontWeight: 600,
+              color: 'var(--text-secondary)',
+              marginBottom: '0.5rem',
+            }}
+          >
+            Work Email <span style={{ color: '#f43f5e' }}>*</span>
+          </label>
+          <div style={{ position: 'relative' }}>
+            <Mail
+              size={17}
+              style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}
+            />
+            <input
+              id="login-input-email"
+              type="text"
+              placeholder="name@company.com"
+              value={email}
+              onChange={(e) => handleInputChange('email', e.target.value)}
+              onBlur={() => handleBlur('email', email)}
+              className={`input-field ${fieldErrors.email && touched.email ? 'has-error' : ''}`}
+              style={{ paddingLeft: '2.75rem' }}
+            />
+          </div>
+          {fieldErrors.email && touched.email && (
+            <div className="field-error-text" role="alert">
+              <AlertCircle size={13} style={{ flexShrink: 0 }} />
+              <span>{fieldErrors.email}</span>
+            </div>
+          )}
+        </div>
+
+        <div>
+          <label
+            htmlFor="login-input-password"
+            style={{
+              display: 'block',
+              fontSize: '0.8125rem',
+              fontWeight: 600,
+              color: 'var(--text-secondary)',
+              marginBottom: '0.5rem',
+            }}
+          >
+            Password <span style={{ color: '#f43f5e' }}>*</span>
+          </label>
+          <div style={{ position: 'relative' }}>
+            <Lock
+              size={17}
+              style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}
+            />
+            <input
+              id="login-input-password"
+              type="password"
+              placeholder="••••••••••••"
+              value={password}
+              onChange={(e) => handleInputChange('password', e.target.value)}
+              onBlur={() => handleBlur('password', password)}
+              className={`input-field ${fieldErrors.password && touched.password ? 'has-error' : ''}`}
+              style={{ paddingLeft: '2.75rem' }}
+            />
+          </div>
+          {fieldErrors.password && touched.password && (
+            <div className="field-error-text" role="alert">
+              <AlertCircle size={13} style={{ flexShrink: 0 }} />
+              <span>{fieldErrors.password}</span>
+            </div>
+          )}
+        </div>
+
+        <button type="submit" disabled={isSubmitting} className="btn btn-primary" style={{ width: '100%', marginTop: '0.5rem' }}>
+          {isSubmitting ? (
+            <>
+              <Loader2 size={18} className="loading-spinner" />
+              <span>Authenticating...</span>
+            </>
+          ) : (
+            <>
+              <span>Sign In to Dashboard</span>
+              <ArrowRight size={18} />
+            </>
+          )}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+/**
+ * Authentication login page.
+ * Authenticates user credentials via `POST /api/v1/auth/login`, manages tokens via `AuthProvider`,
+ * and redirects authenticated sessions to the dashboard overview.
+ */
+export default function LoginPage() {
+  return (
     <div
       style={{
         minHeight: '100vh',
@@ -146,118 +296,16 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {/* Login Card */}
-        <div className="glass-panel" style={{ padding: '2rem' }}>
-          {error && (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.65rem',
-                padding: '0.85rem 1rem',
-                borderRadius: 'var(--radius-md)',
-                background: 'var(--accent-danger-bg)',
-                border: '1px solid rgba(244, 63, 94, 0.25)',
-                color: '#fca5a5',
-                fontSize: '0.875rem',
-                marginBottom: '1.5rem',
-              }}
-            >
-              <AlertCircle size={18} style={{ flexShrink: 0 }} />
-              <div>{error}</div>
+        {/* Suspense-wrapped login card */}
+        <Suspense
+          fallback={
+            <div className="glass-panel" style={{ padding: '2rem', minHeight: '320px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Loader2 size={24} className="loading-spinner" />
             </div>
-          )}
-
-          <form onSubmit={handleSubmit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            <div>
-              <label
-                htmlFor="login-input-email"
-                style={{
-                  display: 'block',
-                  fontSize: '0.8125rem',
-                  fontWeight: 600,
-                  color: 'var(--text-secondary)',
-                  marginBottom: '0.5rem',
-                }}
-              >
-                Work Email <span style={{ color: '#f43f5e' }}>*</span>
-              </label>
-              <div style={{ position: 'relative' }}>
-                <Mail
-                  size={17}
-                  style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}
-                />
-                <input
-                  id="login-input-email"
-                  type="text"
-                  placeholder="name@company.com"
-                  value={email}
-                  onChange={(e) => handleInputChange('email', e.target.value)}
-                  onBlur={() => handleBlur('email', email)}
-                  className={`input-field ${fieldErrors.email && touched.email ? 'has-error' : ''}`}
-                  style={{ paddingLeft: '2.75rem' }}
-                />
-              </div>
-              {fieldErrors.email && touched.email && (
-                <div className="field-error-text" role="alert">
-                  <AlertCircle size={13} style={{ flexShrink: 0 }} />
-                  <span>{fieldErrors.email}</span>
-                </div>
-              )}
-            </div>
-
-            <div>
-              <label
-                htmlFor="login-input-password"
-                style={{
-                  display: 'block',
-                  fontSize: '0.8125rem',
-                  fontWeight: 600,
-                  color: 'var(--text-secondary)',
-                  marginBottom: '0.5rem',
-                }}
-              >
-                Password <span style={{ color: '#f43f5e' }}>*</span>
-              </label>
-              <div style={{ position: 'relative' }}>
-                <Lock
-                  size={17}
-                  style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}
-                />
-                <input
-                  id="login-input-password"
-                  type="password"
-                  placeholder="••••••••••••"
-                  value={password}
-                  onChange={(e) => handleInputChange('password', e.target.value)}
-                  onBlur={() => handleBlur('password', password)}
-                  className={`input-field ${fieldErrors.password && touched.password ? 'has-error' : ''}`}
-                  style={{ paddingLeft: '2.75rem' }}
-                />
-              </div>
-              {fieldErrors.password && touched.password && (
-                <div className="field-error-text" role="alert">
-                  <AlertCircle size={13} style={{ flexShrink: 0 }} />
-                  <span>{fieldErrors.password}</span>
-                </div>
-              )}
-            </div>
-
-            <button type="submit" disabled={isSubmitting} className="btn btn-primary" style={{ width: '100%', marginTop: '0.5rem' }}>
-              {isSubmitting ? (
-                <>
-                  <Loader2 size={18} className="loading-spinner" />
-                  <span>Authenticating...</span>
-                </>
-              ) : (
-                <>
-                  <span>Sign In to Dashboard</span>
-                  <ArrowRight size={18} />
-                </>
-              )}
-            </button>
-          </form>
-        </div>
+          }
+        >
+          <LoginForm />
+        </Suspense>
       </div>
     </div>
   );

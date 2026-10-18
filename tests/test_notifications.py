@@ -242,3 +242,38 @@ async def test_dynamic_notification_modules_from_settings() -> None:
             s_obj = (await db.execute(setting_stmt)).scalar_one()
             s_obj.value = original_value
             await db.commit()
+
+
+@pytest.mark.asyncio
+async def test_clear_all_notifications() -> None:
+    """Verifies DELETE /api/v1/notifications/clear-all deletes user notifications."""
+    async with SessionFactory() as db:
+        res = await db.execute(
+            select(User).where(User.email == settings.seed_super_admin_email)
+        )
+        super_admin = res.scalar_one()
+        token = create_access_token(super_admin.id)
+
+    headers = {"Authorization": f"Bearer {token}"}
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as client:
+        # Create a test notification
+        await client.post(
+            "/api/v1/notifications",
+            json={
+                "title": "Clear All Test Notification",
+                "message": "Testing clear all endpoint routing.",
+                "type": "system",
+            },
+            headers=headers,
+        )
+
+        # Clear all
+        clear_resp = await client.delete(
+            "/api/v1/notifications/clear-all",
+            headers=headers,
+        )
+        assert clear_resp.status_code == 200
+        assert "deleted" in clear_resp.json()

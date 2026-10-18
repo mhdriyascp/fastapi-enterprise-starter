@@ -656,7 +656,7 @@ function RbacWorkspace() {
       });
       toast.success(
         isHardDelete
-          ? `Role "${deleteRoleCandidate.name}" permanently deleted.`
+          ? `Role "${deleteRoleCandidate.name}" purged successfully.`
           : `Role "${deleteRoleCandidate.name}" deactivated / soft-deleted.`
       );
       setDeleteRoleCandidate(null);
@@ -860,7 +860,7 @@ function RbacWorkspace() {
       });
       toast.success(
         isHardDeletePerm
-          ? `Permission "${deletePermissionCandidate.code}" permanently deleted.`
+          ? `Permission "${deletePermissionCandidate.code}" purged successfully.`
           : `Permission "${deletePermissionCandidate.code}" deactivated / soft-deleted.`
       );
       setDeletePermissionCandidate(null);
@@ -1847,7 +1847,7 @@ function RbacWorkspace() {
                           ) : null}
                           {p.action === 'hard_delete' ? (
                             <span className="badge badge-danger" style={{ fontSize: '0.65rem', fontWeight: 700 }}>
-                              Hard Delete
+                              Purge
                             </span>
                           ) : p.action === 'delete' ? (
                             <span className="badge badge-warning" style={{ fontSize: '0.65rem', fontWeight: 700 }}>
@@ -2866,7 +2866,7 @@ function RbacWorkspace() {
         isOpen={!!deleteRoleCandidate}
         onClose={() => setDeleteRoleCandidate(null)}
         onConfirm={handleDeleteRole}
-        title={isHardDelete ? "Permanently Delete Role?" : "Deactivate Role?"}
+        title={isHardDelete ? "Purge Role?" : "Deactivate Role?"}
         subtitle={isHardDelete ? "This action permanently purges the role definition from the database." : "This action deactivates the role."}
         message={
           deleteRoleCandidate ? (
@@ -2883,7 +2883,7 @@ function RbacWorkspace() {
             )
           ) : null
         }
-        confirmLabel={isHardDelete ? "Permanently Delete" : "Deactivate Role"}
+        confirmLabel={isHardDelete ? "Purge Role" : "Deactivate Role"}
         variant="danger"
         isLoading={isSubmitting}
       />
@@ -2913,7 +2913,7 @@ function RbacWorkspace() {
         isOpen={!!deletePermissionCandidate}
         onClose={() => setDeletePermissionCandidate(null)}
         onConfirm={handleDeletePermission}
-        title={isHardDeletePerm ? "Permanently Delete Permission?" : "Deactivate Permission?"}
+        title={isHardDeletePerm ? "Purge Permission?" : "Deactivate Permission?"}
         subtitle={isHardDeletePerm ? "This action permanently purges the permission definition from the database." : "This action deactivates the permission."}
         message={
           deletePermissionCandidate ? (
@@ -2930,7 +2930,7 @@ function RbacWorkspace() {
             )
           ) : null
         }
-        confirmLabel={isHardDeletePerm ? "Permanently Delete" : "Deactivate Permission"}
+        confirmLabel={isHardDeletePerm ? "Purge Permission" : "Deactivate Permission"}
         variant="danger"
         isLoading={isSubmitting}
       />
@@ -2960,7 +2960,7 @@ function RbacWorkspace() {
         isOpen={bulkRoleDeleteConfirmOpen}
         onClose={() => setBulkRoleDeleteConfirmOpen(false)}
         onConfirm={handleBulkDeleteRoles}
-        title={bulkRoleHardDeleteRequested ? `Permanently Purge ${selectedRoleIds.size} Roles?` : `Deactivate ${selectedRoleIds.size} Roles?`}
+        title={bulkRoleHardDeleteRequested ? `Purge ${selectedRoleIds.size} Roles?` : `Deactivate ${selectedRoleIds.size} Roles?`}
         subtitle={bulkRoleHardDeleteRequested ? "This action permanently purges the selected roles." : "This action deactivates the selected roles."}
         message={
           bulkRoleHardDeleteRequested ? (
@@ -2975,7 +2975,7 @@ function RbacWorkspace() {
             </>
           )
         }
-        confirmLabel={bulkRoleHardDeleteRequested ? "Permanently Purge" : "Deactivate Roles"}
+        confirmLabel={bulkRoleHardDeleteRequested ? "Purge Roles" : "Deactivate Roles"}
         variant="danger"
         isLoading={isBulkDeletingRoles}
       />
@@ -3003,7 +3003,7 @@ function RbacWorkspace() {
         isOpen={bulkPermDeleteConfirmOpen}
         onClose={() => setBulkPermDeleteConfirmOpen(false)}
         onConfirm={handleBulkDeletePerms}
-        title={bulkPermHardDeleteRequested ? `Permanently Purge ${selectedPermIds.size} Permissions?` : `Deactivate ${selectedPermIds.size} Permissions?`}
+        title={bulkPermHardDeleteRequested ? `Purge ${selectedPermIds.size} Permissions?` : `Deactivate ${selectedPermIds.size} Permissions?`}
         subtitle={bulkPermHardDeleteRequested ? "This action permanently purges the selected permissions." : "This action deactivates the selected permissions."}
         message={
           bulkPermHardDeleteRequested ? (
@@ -3018,7 +3018,7 @@ function RbacWorkspace() {
             </>
           )
         }
-        confirmLabel={bulkPermHardDeleteRequested ? "Permanently Purge" : "Deactivate Permissions"}
+        confirmLabel={bulkPermHardDeleteRequested ? "Purge Permissions" : "Deactivate Permissions"}
         variant="danger"
         isLoading={isBulkDeletingPerms}
       />

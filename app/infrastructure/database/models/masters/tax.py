@@ -12,10 +12,10 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.infrastructure.database.models.base_entity import EntityBase
+from app.infrastructure.database.models.base_entity import AuditEntityBase
 
 
-class Tax(EntityBase):
+class Tax(AuditEntityBase):
     __tablename__ = "taxes"
 
     __table_args__ = (

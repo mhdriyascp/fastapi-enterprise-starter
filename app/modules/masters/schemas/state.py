@@ -1,6 +1,9 @@
+from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.shared.base_schema import BaseSchema
 
 
 class StateCreate(BaseModel):
@@ -46,12 +49,16 @@ class StateUpdate(BaseModel):
         return value
 
 
-class StateResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class StateResponse(BaseSchema):
     id: int
     public_id: UUID
     country_id: int
     code: str | None
     name: str
     is_active: bool
+    created_by_id: UUID | None = None
+    updated_by_id: UUID | None = None
+    is_deleted: bool = False
+    deleted_at: datetime | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None

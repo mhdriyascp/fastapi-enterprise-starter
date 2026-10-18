@@ -1,7 +1,10 @@
+from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
+
+from app.shared.base_schema import BaseSchema
 
 
 class TaxBase(BaseModel):
@@ -31,8 +34,12 @@ class TaxUpdate(BaseModel):
     is_active: bool | None = None
 
 
-class TaxResponse(TaxBase):
-    model_config = ConfigDict(from_attributes=True)
-
+class TaxResponse(BaseSchema, TaxBase):
     id: int
     public_id: UUID
+    created_by_id: UUID | None = None
+    updated_by_id: UUID | None = None
+    is_deleted: bool = False
+    deleted_at: datetime | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None

@@ -270,3 +270,257 @@ class SystemSettingService:
             updated_by_id,
         )
         return updated_settings
+
+    async def get_options_metadata(self) -> dict[str, list[dict[str, Any]]]:
+        """Provides dynamic select options for modules, roles, currencies, timezones, and languages.
+
+        Queries live relational master tables and security roles so dropdowns never rely on
+        stale, hardcoded lists.
+        """
+        # 1. Fetch dynamic active roles from RBAC
+        from app.modules.rbac.models import Role
+
+        roles_stmt = (
+            select(Role)
+            .where(Role.is_deleted.is_(False), Role.is_active.is_(True))
+            .order_by(Role.name.asc())
+        )
+        roles_res = await self.db.scalars(roles_stmt)
+        roles_list = [
+            {
+                "value": r.code,
+                "label": r.name,
+                "sublabel": r.code,
+                "badge": "System" if r.is_system else "Custom",
+            }
+            for r in roles_res.all()
+        ]
+
+        # 2. Fetch dynamic active currencies from Master data
+        from app.infrastructure.database.models.masters.currency import Currency
+
+        curr_stmt = (
+            select(Currency)
+            .where(Currency.is_deleted.is_(False), Currency.is_active.is_(True))
+            .order_by(Currency.code.asc())
+        )
+        curr_res = await self.db.scalars(curr_stmt)
+        currencies_list = [
+            {
+                "value": c.code,
+                "label": f"{c.code} ({c.symbol} - {c.name})"
+                if c.symbol
+                else f"{c.code} ({c.name})",
+                "sublabel": c.name,
+                "badge": c.code,
+            }
+            for c in curr_res.all()
+        ]
+
+        # 3. Fetch dynamic active timezones from Master data
+        from app.infrastructure.database.models.masters.time_zone import TimeZone
+
+        tz_stmt = (
+            select(TimeZone)
+            .where(TimeZone.is_deleted.is_(False), TimeZone.is_active.is_(True))
+            .order_by(TimeZone.label.asc())
+        )
+        tz_res = await self.db.scalars(tz_stmt)
+        timezones_list = [
+            {
+                "value": tz.name,
+                "label": tz.label,
+                "sublabel": tz.name,
+                "badge": tz.utc_offset or "UTC",
+            }
+            for tz in tz_res.all()
+        ]
+
+        # 4. Fetch dynamic active languages/locales from Master data
+        from app.infrastructure.database.models.masters.language import Language
+
+        lang_stmt = (
+            select(Language)
+            .where(Language.is_deleted.is_(False), Language.is_active.is_(True))
+            .order_by(Language.name.asc())
+        )
+        lang_res = await self.db.scalars(lang_stmt)
+        languages_list = [
+            {
+                "value": lang.code,
+                "label": f"{lang.name} ({lang.native_name})"
+                if lang.native_name
+                else lang.name,
+                "sublabel": lang.code,
+                "badge": lang.code.upper(),
+            }
+            for lang in lang_res.all()
+        ]
+
+        # 5. Comprehensive System & CRM modules registry (current active + upcoming roadmap)
+        modules_list = [
+            # Active Platform Modules
+            {
+                "value": "organizations",
+                "label": "Organizations",
+                "sublabel": "Company tenants & accounts",
+                "badge": "Core",
+                "status": "active",
+            },
+            {
+                "value": "masters",
+                "label": "Master Data",
+                "sublabel": "Catalogs, currencies, countries & locations",
+                "badge": "Core",
+                "status": "active",
+            },
+            {
+                "value": "rbac",
+                "label": "Access Control (RBAC)",
+                "sublabel": "Roles & security permissions",
+                "badge": "Security",
+                "status": "active",
+            },
+            {
+                "value": "users",
+                "label": "User Accounts",
+                "sublabel": "Identities, profiles & credentials",
+                "badge": "Security",
+                "status": "active",
+            },
+            {
+                "value": "settings",
+                "label": "System Settings",
+                "sublabel": "Global parameters & enterprise configurations",
+                "badge": "System",
+                "status": "active",
+            },
+            {
+                "value": "menus",
+                "label": "Navigation Menus",
+                "sublabel": "Sidebar navigation & routes",
+                "badge": "System",
+                "status": "active",
+            },
+            {
+                "value": "activity_logs",
+                "label": "System Activity Logs",
+                "sublabel": "Audit trails & compliance records",
+                "badge": "Audit",
+                "status": "active",
+            },
+            {
+                "value": "security",
+                "label": "Security Governance",
+                "sublabel": "Session timeouts & lockout protection",
+                "badge": "Security",
+                "status": "active",
+            },
+            {
+                "value": "system",
+                "label": "System Operations",
+                "sublabel": "Core runtime & scheduler services",
+                "badge": "System",
+                "status": "active",
+            },
+            {
+                "value": "notifications",
+                "label": "System Notifications",
+                "sublabel": "Real-time dispatch channels & banners",
+                "badge": "System",
+                "status": "active",
+            },
+            # Upcoming CRM Domain Modules
+            {
+                "value": "leads",
+                "label": "Leads & Inquiries",
+                "sublabel": "Inbound inquiries, scoring & qualification",
+                "badge": "Sales",
+                "status": "upcoming",
+            },
+            {
+                "value": "deal",
+                "label": "Deals & Opportunities",
+                "sublabel": "Sales pipeline stages & revenue forecasting",
+                "badge": "Sales",
+                "status": "upcoming",
+            },
+            {
+                "value": "contacts",
+                "label": "Contacts & Stakeholders",
+                "sublabel": "Customer decision makers & relationships",
+                "badge": "CRM",
+                "status": "upcoming",
+            },
+            {
+                "value": "accounts",
+                "label": "Customer Accounts",
+                "sublabel": "Corporate client entities & branch hierarchies",
+                "badge": "CRM",
+                "status": "upcoming",
+            },
+            {
+                "value": "pipelines",
+                "label": "Sales Pipelines",
+                "sublabel": "Custom deal workflows & velocity tracking",
+                "badge": "Sales",
+                "status": "upcoming",
+            },
+            {
+                "value": "products",
+                "label": "Products & Services",
+                "sublabel": "Product catalog, SKU inventory & price books",
+                "badge": "Commerce",
+                "status": "upcoming",
+            },
+            {
+                "value": "quotes",
+                "label": "Quotes & Estimates",
+                "sublabel": "Sales proposals, estimations & discount approvals",
+                "badge": "Commerce",
+                "status": "upcoming",
+            },
+            {
+                "value": "invoices",
+                "label": "Invoices & Billing",
+                "sublabel": "Receivables, billing cycles & payment tracking",
+                "badge": "Commerce",
+                "status": "upcoming",
+            },
+            {
+                "value": "tickets",
+                "label": "Support Tickets",
+                "sublabel": "Customer helpdesk, SLAs & escalations",
+                "badge": "Support",
+                "status": "upcoming",
+            },
+            {
+                "value": "documents",
+                "label": "Documents & Contracts",
+                "sublabel": "File storage, agreements & signatures",
+                "badge": "Operations",
+                "status": "upcoming",
+            },
+            {
+                "value": "tasks",
+                "label": "Tasks & Activities",
+                "sublabel": "Calls, meetings, reminders & follow-ups",
+                "badge": "Productivity",
+                "status": "upcoming",
+            },
+            {
+                "value": "analytics",
+                "label": "Executive Intelligence",
+                "sublabel": "Executive dashboards, conversion ratios & audit KPIs",
+                "badge": "Intelligence",
+                "status": "upcoming",
+            },
+        ]
+
+        return {
+            "modules": modules_list,
+            "roles": roles_list,
+            "currencies": currencies_list,
+            "timezones": timezones_list,
+            "languages": languages_list,
+        }

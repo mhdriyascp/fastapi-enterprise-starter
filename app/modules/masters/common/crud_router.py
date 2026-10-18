@@ -21,6 +21,7 @@ from app.modules.masters.common.crud_service import (
 from app.modules.users.models import User
 from app.shared.deletion_policy import (
     is_user_authorized_for_hard_delete,
+    is_user_authorized_for_restore,
     should_user_view_all_statuses,
 )
 from app.shared.pagination import PaginationParams, get_pagination
@@ -44,19 +45,18 @@ def create_master_router(
         "",
         response_model=response_schema,
         status_code=status.HTTP_201_CREATED,
-        dependencies=[
-            Depends(require_permission("masters:create")),
-        ],
     )
     async def create_endpoint(
         payload: create_schema,
         db: Annotated[AsyncSession, Depends(get_db_session)],
+        current_user: Annotated[User, Depends(require_permission("masters:create"))],
     ) -> Any:
         try:
             return await create_record(
                 db,
                 model,
                 payload.model_dump(exclude_unset=True),
+                operator_id=current_user.id,
             )
         except MasterValidationError as exc:
             raise HTTPException(
@@ -110,9 +110,13 @@ def create_master_router(
         if default_currency_id is not None:
             filters["default_currency_id"] = default_currency_id
 
-        view_all = await should_user_view_all_statuses(db, current_user)
+        can_view_deleted = (
+            await should_user_view_all_statuses(db, current_user)
+            or await is_user_authorized_for_hard_delete(db, current_user, "masters")
+            or await is_user_authorized_for_restore(db, current_user, "masters")
+        )
         effective_include_deleted = (
-            include_deleted if include_deleted is not None else view_all
+            include_deleted if include_deleted is not None else can_view_deleted
         )
 
         records, total = await list_records(
@@ -158,13 +162,17 @@ def create_master_router(
                 detail=f"{model.__name__} identifier cannot be empty or null.",
             )
         try:
-            view_all = await should_user_view_all_statuses(db, current_user)
+            can_view_deleted = (
+                await should_user_view_all_statuses(db, current_user)
+                or await is_user_authorized_for_hard_delete(db, current_user, "masters")
+                or await is_user_authorized_for_restore(db, current_user, "masters")
+            )
             return await get_record(
                 db,
                 model,
                 str_val,
-                include_inactive=view_all,
-                include_deleted=view_all,
+                include_inactive=True,
+                include_deleted=can_view_deleted,
             )
         except MasterValidationError as exc:
             raise HTTPException(
@@ -181,9 +189,6 @@ def create_master_router(
     @router.patch(
         "/{identifier}",
         response_model=response_schema,
-        dependencies=[
-            Depends(require_permission("masters:update")),
-        ],
     )
     async def update_endpoint(
         identifier: Annotated[
@@ -192,6 +197,7 @@ def create_master_router(
         ],
         payload: update_schema,
         db: Annotated[AsyncSession, Depends(get_db_session)],
+        current_user: Annotated[User, Depends(require_permission("masters:update"))],
     ) -> Any:
         str_val = identifier.strip() if identifier else ""
         if not str_val or str_val.lower() in ("null", "undefined", "none"):
@@ -205,6 +211,7 @@ def create_master_router(
                 model,
                 str_val,
                 payload.model_dump(exclude_unset=True),
+                operator_id=current_user.id,
             )
         except MasterValidationError as exc:
             raise HTTPException(
@@ -253,12 +260,16 @@ def create_master_router(
         if hard_delete is True and not can_hard_delete:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You do not have permission to permanently delete master records. Only soft-deletion is permitted based on your RBAC permissions.",
+                detail="You do not have permission to purge master records. Only soft-deletion is permitted based on your RBAC permissions.",
             )
         effective_hard_delete = bool(hard_delete)
         try:
             await deactivate_record(
-                db, model, str_val, hard_delete=effective_hard_delete
+                db,
+                model,
+                str_val,
+                hard_delete=effective_hard_delete,
+                operator_id=current_user.id,
             )
         except MasterNotFoundError:
             raise HTTPException(
@@ -301,7 +312,7 @@ def create_master_router(
                 detail=f"{model.__name__} identifier cannot be empty or null.",
             )
         try:
-            return await restore_record(db, model, str_val)
+            return await restore_record(db, model, str_val, operator_id=current_user.id)
         except MasterNotFoundError:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

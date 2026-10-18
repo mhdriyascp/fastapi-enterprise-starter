@@ -181,9 +181,17 @@ async def create_record(
     db: AsyncSession,
     model: type[DeclarativeBase],
     data: dict[str, Any],
+    *,
+    operator_id: UUID | None = None,
 ) -> Any:
     resolved_data = await resolve_foreign_keys(db, model, data)
     mapper = inspect(model)
+
+    if operator_id is not None:
+        if "created_by_id" in mapper.columns and "created_by_id" not in resolved_data:
+            resolved_data["created_by_id"] = operator_id
+        if "updated_by_id" in mapper.columns and "updated_by_id" not in resolved_data:
+            resolved_data["updated_by_id"] = operator_id
 
     if "code" in mapper.columns and not resolved_data.get("code"):
         source_val = (
@@ -253,6 +261,8 @@ async def update_record(
     model: type[DeclarativeBase],
     identifier: int | UUID | str,
     data: dict[str, Any],
+    *,
+    operator_id: UUID | None = None,
 ) -> Any:
     record = await get_record(db, model, identifier, include_inactive=True)
     resolved_data = await resolve_foreign_keys(db, model, data)
@@ -279,6 +289,9 @@ async def update_record(
             if table_name == "languages":
                 generated_code = generated_code.lower()
             resolved_data["code"] = generated_code
+
+    if operator_id is not None and "updated_by_id" in mapper.columns:
+        setattr(record, "updated_by_id", operator_id)
 
     for field, value in resolved_data.items():
         if field in mapper.columns:
@@ -330,6 +343,7 @@ async def deactivate_record(
     identifier: int | UUID | str,
     *,
     hard_delete: bool = False,
+    operator_id: UUID | None = None,
 ) -> None:
     record = await get_record(
         db,
@@ -350,6 +364,8 @@ async def deactivate_record(
     if not hard_delete and getattr(record, "is_deleted", False):
         if hasattr(record, "is_active") and record.is_active:
             record.is_active = False
+            if operator_id is not None and hasattr(record, "updated_by_id"):
+                record.updated_by_id = operator_id
             await db.commit()
         return
 
@@ -367,6 +383,9 @@ async def deactivate_record(
         if hasattr(record, "is_deleted"):
             record.is_deleted = True
             record.deleted_at = datetime.now(UTC)
+
+        if operator_id is not None and hasattr(record, "updated_by_id"):
+            record.updated_by_id = operator_id
 
     try:
         await db.commit()
@@ -396,6 +415,8 @@ async def restore_record(
     db: AsyncSession,
     model: type[DeclarativeBase],
     identifier: int | UUID | str,
+    *,
+    operator_id: UUID | None = None,
 ) -> Any:
     """Restores a deactivated or soft-deleted master record back to active state."""
     record = await get_record(
@@ -412,6 +433,9 @@ async def restore_record(
 
     if hasattr(record, "is_active"):
         record.is_active = True
+
+    if operator_id is not None and hasattr(record, "updated_by_id"):
+        record.updated_by_id = operator_id
 
     entity_id = getattr(record, "public_id", getattr(record, "id", ""))
     entity_name = getattr(

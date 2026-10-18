@@ -241,7 +241,7 @@ async def update_menu(
     "/{identifier}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete menu item",
-    description="Deletes a menu item, cascading to child items and access assignments (soft or hard delete based on permissions and options).",
+    description="Deletes a menu item, cascading to child items and access assignments (soft-delete or purge based on permissions and options).",
 )
 async def delete_menu(
     identifier: Annotated[
@@ -273,7 +273,7 @@ async def delete_menu(
     if hard_delete is True and not can_hard_delete:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have permission to permanently delete menu items. Only soft-deletion is permitted based on your RBAC permissions.",
+            detail="You do not have permission to purge menu items. Only soft-deletion is permitted based on your RBAC permissions.",
         )
     effective_hard_delete = bool(hard_delete)
 

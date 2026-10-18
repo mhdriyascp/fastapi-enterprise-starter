@@ -3,10 +3,10 @@ from uuid import UUID, uuid7
 from sqlalchemy import BigInteger, Boolean, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.infrastructure.database.models.base_entity import EntityBase
+from app.infrastructure.database.models.base_entity import AuditEntityBase
 
 
-class DocumentType(EntityBase):
+class DocumentType(AuditEntityBase):
     __tablename__ = "document_types"
 
     id: Mapped[int] = mapped_column(

@@ -114,13 +114,20 @@ Before generating any code, every AI agent must execute this 4-step checklist:
   - **Request Tracing & Observability (`X-Request-ID`)**:
     - Every HTTP request must be traced with a unique `X-Request-ID` header.
     - Errors, structured logs, and audit records must be correlated using this request ID.
-  - **Enterprise Audit Trail & Soft-Deletion (`AuditEntityBase`)**:
-    - High-value transactional and CRM domain records must inherit from `AuditEntityBase` with:
-      - `created_by_id: Mapped[UUID | None]`
-      - `updated_by_id: Mapped[UUID | None]`
-      - `is_deleted: Mapped[bool]` (default `False`, indexed)
-      - `deleted_at: Mapped[datetime | None]`
-    - Regular queries must filter out soft-deleted records (`where(Model.is_deleted.is_(False))`) by default.
+  - **Enterprise Audit Trail, Soft-Deletion, Purge & Restore Architecture (`AuditEntityBase`)**:
+    - **Model Inheritance Parity**: All master catalog, relational, navigational, and transactional CRM domain records across current and upcoming modules MUST inherit from `AuditEntityBase` with:
+      - `is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, index=True, nullable=False)`
+      - `deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)`
+      - `created_by_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)`
+      - `updated_by_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)`
+    - **Default Query Filtering**: Regular queries (`include_deleted=False`) must filter out soft-deleted records (`where(Model.is_deleted.is_(False))`) by default.
+    - **Unified RBAC-Only Lifecycle Protocol (Soft-Delete, Purge, & Restore)**:
+      - All lifecycle actions across current and upcoming modules MUST be governed strictly by RBAC permissions (any role can perform these actions when granted permissions by an administrator):
+        1. **Soft Delete (`DELETE /{identifier}`)**: Enforces `{module}.delete` (or `masters:delete`, `*.delete`). Moves record to `is_deleted=True`, stamps `deleted_at=utcnow()`, and updates `updated_by_id=operator_id`. Accessible to any role granted `{module}.delete`.
+        2. **Purge / Hard Delete (`DELETE /{identifier}?hard_delete=true`)**: Validated via `is_user_authorized_for_hard_delete` checking for `{module}.hard_delete`, `*.hard_delete`, or root admin privileges. Permanently removes and cascades the record from PostgreSQL. Accessible to any role granted `{module}.hard_delete`.
+        3. **Restore (`POST /{identifier}/restore`)**: Validated via `is_user_authorized_for_restore` checking for `{module}.restore` or `*.restore`. Reverts `is_deleted=False`, clears `deleted_at=None`, and updates `updated_by_id=operator_id`. Accessible to any role granted `{module}.restore`.
+        4. **Delegated Deleted Visibility**: Users granted `{module}.restore` or `{module}.hard_delete` automatically receive permission to view soft-deleted records (`can_view_deleted=True` and `effective_include_deleted=True`), enabling role-delegated recovery workflows in the UI's `Deleted` tab.
+        5. **Purge Terminology Standard**: Use "Purge" consistently across all user-facing labels, buttons, confirm modals, error details, and logs. Never use raw "hard delete" as a user-facing label.
   - **Decoupled Identity Foundation**:
     - Do **NOT** bind `User` models directly to `Organization` unless explicitly instructed. Keep identity and RBAC decoupled from specific CRM tenant account models.
   - **Standardized Enterprise Datetime Serialization (`YYYY-MM-DDTHH:MM:SSZ`)**:
@@ -186,9 +193,10 @@ Before generating any code, every AI agent must execute this 4-step checklist:
   - **Atomic UI Primitives First**: Always reuse shared primitives in `components/ui/` (`Button`, `Card`, `Badge`, `FormattedDate`, `SearchableSelect`, `StatCard`, `ThemeToggle`). Never re-create ad-hoc button or card styles inline.
   - **Centralized Shared Utilities**: Always import logic from `lib/` (`api-client.ts`, `date-utils.ts`, `code-generator.ts`, `types.ts`).
   - **Zero Redundant Helper Policy**: AI agents are **STRICTLY PROHIBITED** from writing local duplicate helper functions in page components (e.g., local date formatters, relative time calculators, or status badge color switches). Any common formatting or transformation logic MUST live in a reusable utility under `lib/`.
-  - **Standardized Enterprise Date/Time Presentation**:
-    - Every date or timestamp rendered in tables, detail modals, cards, badges, or activity logs MUST use `<FormattedDate value={...} variant="..." />` from `@/components/ui/formatted-date` or formatting functions from `@/lib/date-utils`.
-    - Direct calls to `new Date().toLocaleDateString()` or `new Date().toLocaleString()` are strictly forbidden in page and feature components.
+  - **Standardized Enterprise Date/Time Presentation (`Oct 14, 2026, 04:41:58 PM`)**:
+    - Every date or timestamp rendered in tables, detail modals, cards, badges, or activity logs MUST format strictly as **`MMM D, YYYY, hh:mm:ss A`** (e.g., **`Oct 14, 2026, 04:41:58 PM`**) across ALL current and upcoming modules.
+    - Every date rendered MUST use `<FormattedDate value={...} />` from `@/components/ui/formatted-date` or formatting functions from `@/lib/date-utils`. Direct calls to `new Date().toLocaleDateString()` or `new Date().toLocaleString()` are strictly forbidden in page and feature components.
+    - Seconds are included by default (`includeSeconds: true`, `second: '2-digit'`, `hour12: true`).
     - User view dates automatically adapt to the user's configured `timezone` and `locale` preferences, with fallback to browser environment. Tooltips must show the exact second-precision audit timestamp with UTC offset.
 
 ---

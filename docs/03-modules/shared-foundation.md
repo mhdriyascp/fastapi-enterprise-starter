@@ -174,9 +174,9 @@ Translates universal UTC API responses into user-localized view formats matching
 - **Timezone & Locale Dynamic Resolution**: Resolves user's preferred timezone (e.g. `America/New_York`, `Asia/Kolkata`) and locale from profile or browser default (`Intl.DateTimeFormat().resolvedOptions().timeZone`).
 - **Semantic `<time>` Element**: Renders `<time dateTime={iso} title={auditTooltip} suppressHydrationWarning>{displayText}</time>`.
 - **Variants Supported**:
-  - `datetime`: Standard compact date and time (e.g. `Oct 16, 2026, 05:54 PM`).
-  - `date`: Calendar date only without timezone skew (e.g. `Oct 16, 2026`).
-  - `time`: Time of day only (e.g. `05:54 PM`).
+  - `datetime`: Standard localized date and time with second precision (e.g. `Oct 14, 2026, 04:41:58 PM`). Default across tables, cards, and detail modals.
+  - `date`: Calendar date only without timezone skew (e.g. `Oct 14, 2026`).
+  - `time`: Time of day only with second precision (e.g. `04:41:58 PM`).
   - `relative`: Human-friendly relative time (e.g. `Just now`, `5m ago`, `2h ago`, `Yesterday`).
 - **Comprehensive Audit Tooltip**: Hovering on any date displays the exact localized second-precision timestamp with timezone name and universal UTC offset.
 
@@ -287,4 +287,52 @@ Enterprise listing tables implement continuous row sequence numbering and settin
 - **Accurate Counter Envelopes**:
   - Listing headers and pagination footers display detailed record metrics: `Showing X to Y of Z records (filtered from Total)`.
 
+---
+
+## 14. Session Inactivity Guard & Automatic Session Termination
+
+Located in [`frontend/src/components/security/session-inactivity-guard.tsx`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/frontend/src/components/security/session-inactivity-guard.tsx).
+
+Enforces mandatory regulatory security controls aligned with HIPAA Security Rule (§ 164.312(a)(2)(iii)) and SOC 2 Trust Services Criteria (Common Criteria 6.1, 6.8):
+- **Dynamic System Settings Enablement**:
+  - Administrators can turn the inactivity timeout on or off directly from **Settings -> Security & Access -> Session & Network Governance** via the `enable_session_timeout` toggle switch.
+  - The timeout duration is fully customizable via `session_timeout_mins` (default: 15 minutes, recommended for HIPAA and SOC 2).
+  - When saved, settings dispatch a `crm-settings-updated` event that seamlessly refreshes the timeout parameters in real time without requiring a full browser reload.
+- **Automated Session Timeout**: When enabled, automatically logs out inactive users after the configured duration of idle time to prevent unauthorized access on unattended workstations.
+- **60-Second Warning Countdown Modal**: Displays an interactive modal dialog with real-time countdown when 60 seconds remain before automatic logout:
+  - **Stay Logged In**: Extends the active session and resets the inactivity timer.
+  - **Log Out Now**: Immediately terminates session credentials and redirects to `/login`.
+- **Multi-Tab Cross-Synchronization**: Synchronizes user activity timestamps across all open browser tabs via throttled `localStorage` writes and `StorageEvent` listeners, ensuring active usage in Tab A prevents premature logouts in Tab B.
+- **Audit-Aware Redirection**: Redirects auto-logged-out users to `/login?reason=inactivity`, rendering a high-visibility amber security alert banner detailing why the session was securely closed.
+---
+
+## 15. Select2 Combobox Architecture (`SearchableSelect`)
+
+Located in [`frontend/src/components/ui/searchable-select.tsx`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/frontend/src/components/ui/searchable-select.tsx).
+
+Standardizes search-filterable dropdown combobox controls across the platform without external jQuery or heavy third-party dependencies:
+- **Search & Filtering**: Live debounced text search across options by `label`, `sublabel`, and `badge`.
+- **Portal Rendering**: High-z-index portal popover positioning to avoid table overflow or card clipping.
+- **Strict Taxonomy Enforcement ("No Custom Entry")**:
+  - In array settings such as `notification_modules` and role-based configurations, arbitrary custom free-text inputs are strictly eliminated.
+  - Users select standard registered CRM modules and roles from curated option sets (`NOTIFICATION_MODULE_OPTIONS`, `STANDARD_ROLE_OPTIONS`) with category tags and sublabel metadata.
+  - Already-selected options are dynamically filtered out from the available dropdown choices.
+  - Bulk management actions (`Add All`, `Clear All`, and individual removal chips) provide fast workflows while maintaining 100% data integrity.
+
+---
+
+## 16. RBAC-Gated Global Header Search Architecture
+
+Located in [`frontend/src/components/navigation/header.tsx`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/frontend/src/components/navigation/header.tsx).
+
+Global header search suggestions (`⌘K`) are dynamically filtered based on the active user's authenticated RBAC permissions and authorized navigation tree:
+
+- **Strict Privilege Gating**:
+  - Each platform route defines explicit permission prerequisites (e.g. `organization.read` for `/organizations`, `role.read` / `permission.read` for `/rbac`, `masters:read` for `/masters`, `settings.read` for `/settings`, `activity_logs.read` for `/system-logs`).
+  - Users without required permissions never see unauthorized routes in search auto-suggestions or keyboard navigation.
+- **Dynamic Menu Synchronization**:
+  - Integrates with [`useMenus()`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/frontend/src/hooks/use-menus.ts) (`/menus/my-menus`) so that any dynamically granted custom routes or tenant navigation items are automatically authorized for search discovery.
+- **Enterprise Wildcard & Super Admin Recognition**:
+  - Super admins (`is_super_admin`, `super_admin` role) retain full visibility across all system catalogs.
+  - Supports resource wildcards (`organization.*`, `masters:*`) and management overrides (`*.manage`).
 

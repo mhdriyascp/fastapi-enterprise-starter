@@ -84,12 +84,18 @@ The global Next.js header ([`frontend/src/components/navigation/header.tsx`](fil
    - Accessible via the **System Settings ➔ Notifications & Alerts** sidebar menu item or the "View Full Notification Center" link in the header bell popover.
    - **Executive KPI Cards**: Aggregates Total Alerts, Unread Notices, Security Advisories, and Commercial Updates.
    - **Dedicated Dispatch Modal**:
-     - Operators with `notification.create` permission can trigger notifications across standard system modules (`organizations`, `masters`, `rbac`, `users`, `settings`, `menus`, `activity_logs`, `security`, `system`, `deal`) or enter arbitrary domain modules.
+     - Operators with `notification.create` permission can trigger notifications across standard system modules (`organizations`, `masters`, `rbac`, `users`, `settings`, `menus`, `activity_logs`, `security`, `system`, `deal`) or enter arbitrary domain modules via the top-level **Dispatch Alert** toolbar button.
    - **Dynamic Module Options**:
      - Supported modules are retrieved live from `GET /api/v1/notifications/modules`, driven by `SystemSetting` (`notifications.notification_modules`) and database taxonomy.
    - **Data Filtering & Search**: Instant keyword filtering across titles and messages, dynamic module taxonomy selection, and status tabs (All, Unread, Read).
+   - **Interactive Row & Bulk Actions**:
+     - *Single Read / Unread Toggle*: Directly toggles status via `PATCH /notifications/{identifier}/read`.
+     - *Bulk Selection & Delete*: Multi-row checkbox selection with bulk count delete (`Delete (N)`).
+     - *Clear All*: Confirmation modal with permanent dismissal of all inbox notices (`DELETE /notifications/clear-all`).
+     - *Single Dismissal*: Confirmation modal for single notification deletion (`DELETE /notifications/{identifier}`).
    - **Read-Only Detail Inspector Modal**: Formatted with `.detail-spec-table` two-column key-value tables:
      - *Event Specification*: Title, event taxonomy category, audience scope (Broadcast vs Recipient), operational read status with timestamp.
      - *Content Payload*: Full message body with styled callout.
      - *Audit Identifiers*: Primary UUID with 1-click clipboard copy, and direct action deep-link button.
+     - *Inspector Actions*: Quick toggle read/unread status button and dismiss notification button.
 

@@ -52,12 +52,18 @@ The System Settings domain governs platform-wide parameters, security policies, 
 | `security` | `max_login_attempts` | `5` | `integer`| No | Consecutive failures before lockout |
 | `security` | `lockout_duration_mins` | `15` | `integer`| No | Lockout cooldown period |
 | `security` | `session_timeout_mins` | `30` | `integer`| No | Inactivity timeout before re-auth |
+| `security` | `password_expiry_days` | `90` | `integer`| No | Credential rotation window (SOC 2 / ISO 27001; 0 disables) |
+| `security` | `session_max_lifetime_hours` | `24` | `integer`| **Yes** | Absolute session duration before forced re-login |
+| `security` | `enable_api_rate_limiting` | `true` | `boolean`| No | Mitigates brute-force and DDoS on API endpoints |
 | `security` | `two_factor_policy` | `"optional"` | `string` | No | MFA policy (`disabled`, `optional`, `enforced`) |
 | `security` | `ip_whitelist` | `[]` | `array` | No | Allowed CIDR blocks (empty = open) |
 | `notifications` | `email_sender_name` | `"CRM System Dispatcher"`| `string` | No | Outbound transactional sender name |
 | `notifications` | `email_sender_address`| `"no-reply@enterprise.local"`| `string` | No | Outbound transactional sender address |
 | `notifications` | `enable_in_app_notifications`| `true` | `boolean`| No | In-app notification delivery |
 | `notifications` | `enable_email_notifications` | `true` | `boolean`| No | Email notification delivery |
+| `notifications` | `notification_retention_days`| `60` | `integer`| No | Automated lifecycle cleanup window for read notifications |
+| `notifications` | `notification_modules` | `["organizations", ...]` | `array` | **Yes** | Operational modules supported for notification dispatches |
+| `governance` | `enable_audit_logging` | `true` | `boolean`| No | Master switch recording all domain mutations to activity logs |
 | `governance` | `audit_retention_days` | `365` | `integer`| No | SOC2 / ISO 27001 retention period |
 | `governance` | `gdpr_anonymize_on_delete` | `true` | `boolean`| No | Scramble PII on user soft-delete |
 | `governance` | `data_export_allowed_roles` | `["super_admin", "admin"]` | `array` | No | Roles authorized for mass export |
@@ -72,11 +78,21 @@ The System Settings domain governs platform-wide parameters, security policies, 
 
 ---
 
-## 3. REST API Endpoints
+## 3. Dynamic Dropdown Metadata & Select2 Architecture
+
+The System Settings workspace consumes `GET /api/v1/settings/options` to populate all comboboxes dynamically:
+- **Zero Hardcoded Dropdowns**: Currencies (`default_currency`), timezones (`default_timezone`), and locales (`default_locale`) query PostgreSQL master catalogs directly. Roles (`administrator_roles`, `data_export_allowed_roles`, `permanent_delete_roles`) query RBAC security roles live from the database.
+- **Active & Upcoming CRM Modules Registry**: Populates `notification_modules` with active platform modules and planned roadmap modules (`leads`, `deal`, `contacts`, `accounts`, `pipelines`, `products`, `quotes`, `invoices`, `tickets`, `documents`, `tasks`, `analytics`).
+- **Select2 Standard (`SearchableSelect`)**: Provides searchable comboboxes, category badges, sublabels, and instantaneous multi-select array management without unconstrained free-text inputs.
+
+---
+
+## 4. REST API Endpoints
 
 | Method | Endpoint | Access | Summary |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/api/v1/settings/public` | Public (Unauthenticated) | Get non-sensitive configuration dictionary |
+| `GET` | `/api/v1/settings/options` | Admin Only (`settings.read`) | Get dynamic select options (modules, roles, currencies, timezones, languages) |
 | `GET` | `/api/v1/settings` | Admin Only (`settings.read` / `settings.manage`) | List paginated settings with category filter & search |
 | `GET` | `/api/v1/settings/map` | Admin Only (`settings.read` / `settings.manage`) | Get consolidated key-value mapping of all settings |
 | `GET` | `/api/v1/settings/{identifier}` | Admin Only (`settings.read` / `settings.manage`) | Get single setting by ID, UUID, or key |

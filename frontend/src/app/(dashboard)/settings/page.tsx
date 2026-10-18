@@ -11,6 +11,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { StatCard } from '@/components/ui/stat-card';
+import { SearchableSelect, SelectOption } from '@/components/ui/searchable-select';
 import {
   Sliders,
   Shield,
@@ -43,7 +44,6 @@ import {
   ArrowDown,
   LayoutGrid,
   List,
-  Plus,
 } from 'lucide-react';
 
 type SettingCategory = 'all' | 'general' | 'security' | 'notifications' | 'governance' | 'data_retention' | 'features';
@@ -105,7 +105,7 @@ const SETTING_SECTIONS: SettingSectionConfig[] = [
     icon: KeyRound,
     iconBg: 'rgba(239, 68, 68, 0.12)',
     iconColor: '#ef4444',
-    keys: ['password_min_length', 'password_require_uppercase', 'password_require_numbers', 'password_require_special', 'two_factor_policy'],
+    keys: ['password_min_length', 'password_require_uppercase', 'password_require_numbers', 'password_require_special', 'password_expiry_days', 'two_factor_policy'],
   },
   {
     id: 'security_network',
@@ -115,7 +115,7 @@ const SETTING_SECTIONS: SettingSectionConfig[] = [
     icon: Network,
     iconBg: 'rgba(245, 158, 11, 0.12)',
     iconColor: '#f59e0b',
-    keys: ['max_login_attempts', 'lockout_duration_mins', 'session_timeout_mins', 'ip_whitelist', 'administrator_roles'],
+    keys: ['session_timeout_mins', 'session_max_lifetime_hours', 'max_login_attempts', 'lockout_duration_mins', 'enable_api_rate_limiting', 'ip_whitelist', 'administrator_roles'],
   },
   {
     id: 'notifications_channels',
@@ -125,7 +125,7 @@ const SETTING_SECTIONS: SettingSectionConfig[] = [
     icon: Mail,
     iconBg: 'rgba(16, 185, 129, 0.12)',
     iconColor: '#10b981',
-    keys: ['email_sender_name', 'email_sender_address', 'enable_in_app_notifications', 'enable_email_notifications', 'notification_modules'],
+    keys: ['email_sender_name', 'email_sender_address', 'enable_in_app_notifications', 'enable_email_notifications', 'notification_retention_days', 'notification_modules'],
   },
   {
     id: 'governance_compliance',
@@ -135,7 +135,7 @@ const SETTING_SECTIONS: SettingSectionConfig[] = [
     icon: Scale,
     iconBg: 'rgba(168, 85, 247, 0.12)',
     iconColor: '#a855f7',
-    keys: ['audit_retention_days', 'gdpr_anonymize_on_delete', 'data_export_allowed_roles'],
+    keys: ['enable_audit_logging', 'audit_retention_days', 'gdpr_anonymize_on_delete', 'data_export_allowed_roles'],
   },
   {
     id: 'data_retention_policy',
@@ -155,23 +155,32 @@ const SETTING_SECTIONS: SettingSectionConfig[] = [
     icon: ToggleLeft,
     iconBg: 'rgba(14, 165, 233, 0.12)',
     iconColor: '#0ea5e9',
-    keys: ['maintenance_mode', 'allow_self_registration', 'multi_currency_enabled', 'show_theme_toggle_in_header'],
+    keys: ['maintenance_mode', 'allow_self_registration', 'multi_currency_enabled', 'show_theme_toggle_in_header', 'enable_top_header_menus'],
   },
 ];
 
 /**
- * Interactive array settings editor for dynamic chip addition and removal.
+ * Metadata contract for dynamic dropdown options returned from backend.
  */
+interface SettingsDynamicOptions {
+  modules: SelectOption[];
+  roles: SelectOption[];
+  currencies: SelectOption[];
+  timezones: SelectOption[];
+  languages: SelectOption[];
+}
+
 function ArraySettingEditor({
   setting,
   canEdit,
   handleValueChange,
+  dynamicOptions,
 }: {
   setting: SystemSetting;
   canEdit: boolean;
   handleValueChange: (id: number, val: SettingValue) => void;
+  dynamicOptions?: SettingsDynamicOptions | null;
 }) {
-  const [newChip, setNewChip] = useState<string>('');
   const items = Array.isArray(setting.value) ? (setting.value as string[]) : [];
 
   const handleRemove = (indexToRemove: number) => {
@@ -180,102 +189,185 @@ function ArraySettingEditor({
     handleValueChange(setting.id, updated);
   };
 
-  const handleAdd = () => {
+  const handleAdd = (valToAdd: string) => {
     if (!canEdit) return;
-    const val = newChip.trim().toLowerCase();
-    if (!val) return;
-    if (items.includes(val)) {
-      setNewChip('');
-      return;
-    }
+    const val = valToAdd.trim().toLowerCase();
+    if (!val || items.includes(val)) return;
     const updated = [...items, val];
     handleValueChange(setting.id, updated);
-    setNewChip('');
   };
 
+  // Determine if this setting has pre-defined dropdown options loaded dynamically
+  const isNotificationModules = setting.key === 'notification_modules';
+  const isRoleArray = setting.key.includes('roles');
+
+  const dropdownOptions: SelectOption[] | null = isNotificationModules
+    ? dynamicOptions?.modules || []
+    : isRoleArray
+    ? dynamicOptions?.roles || []
+    : null;
+
+  const availableOptions: SelectOption[] = dropdownOptions
+    ? dropdownOptions.filter((opt) => !items.includes(opt.value))
+    : [];
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', width: '100%', alignItems: 'flex-end' }}>
-      <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', justifyContent: 'flex-end', width: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', width: '100%' }}>
+      {/* Active Selected Chips */}
+      <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', width: '100%' }}>
         {items.length > 0 ? (
-          items.map((item, chipIdx) => (
-            <span
-              key={chipIdx}
-              style={{
-                background: 'rgba(99, 102, 241, 0.12)',
-                padding: '0.2rem 0.5rem',
-                borderRadius: 'var(--radius-sm)',
-                fontSize: '0.75rem',
-                color: 'var(--text-primary)',
-                border: '1px solid rgba(99, 102, 241, 0.3)',
-                fontFamily: 'monospace',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.3rem',
-              }}
-            >
-              <span>{String(item)}</span>
-              {canEdit && (
-                <button
-                  type="button"
-                  onClick={() => handleRemove(chipIdx)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    padding: 0,
-                    display: 'flex',
-                    alignItems: 'center',
-                    color: 'var(--text-muted)',
-                    lineHeight: 1,
-                  }}
-                  title={`Remove ${item}`}
-                >
-                  <X size={12} />
-                </button>
-              )}
-            </span>
-          ))
+          items.map((item, chipIdx) => {
+            const matchedOpt = dropdownOptions?.find((o) => o.value === item);
+            const labelText = matchedOpt ? matchedOpt.label : String(item);
+            return (
+              <span
+                key={chipIdx}
+                style={{
+                  background: 'rgba(99, 102, 241, 0.12)',
+                  padding: '0.22rem 0.55rem',
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: '0.75rem',
+                  color: 'var(--text-primary)',
+                  border: '1px solid rgba(99, 102, 241, 0.3)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                }}
+              >
+                <span>{labelText}</span>
+                {matchedOpt && (
+                  <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                    ({item})
+                  </span>
+                )}
+                {canEdit && (
+                  <button
+                    type="button"
+                    onClick={() => handleRemove(chipIdx)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      padding: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      color: 'var(--text-muted)',
+                      lineHeight: 1,
+                    }}
+                    title={`Remove ${item}`}
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </span>
+            );
+          })
         ) : (
-          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>None configured</span>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+            None configured
+          </span>
         )}
       </div>
+
+      {/* Select2-Style SearchableCombobox & Quick Actions (NO custom text input) */}
       {canEdit && (
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
-          <input
-            type="text"
-            value={newChip}
-            onChange={(e) => setNewChip(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                handleAdd();
-              }
-            }}
-            placeholder="Add module (e.g. leads)..."
-            className="input-field"
-            style={{
-              padding: '0.2rem 0.5rem',
-              fontSize: '0.75rem',
-              height: '26px',
-              width: '160px',
-            }}
-          />
-          <button
-            type="button"
-            onClick={handleAdd}
-            className="btn btn-secondary"
-            style={{
-              padding: '0.2rem 0.5rem',
-              fontSize: '0.75rem',
-              height: '26px',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.2rem',
-            }}
-          >
-            <Plus size={12} />
-            <span>Add</span>
-          </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+          {dropdownOptions ? (
+            <>
+              {/* Select2 Searchable Dropdown */}
+              <div style={{ minWidth: 260, maxWidth: 320, flex: '1 1 260px' }}>
+                <SearchableSelect
+                  options={availableOptions}
+                  value=""
+                  onChange={(val) => {
+                    if (val) handleAdd(val);
+                  }}
+                  placeholder={
+                    availableOptions.length > 0
+                      ? isNotificationModules
+                        ? 'Select module from dropdown...'
+                        : 'Select role from dropdown...'
+                      : 'All standard options added'
+                  }
+                  searchPlaceholder={
+                    isNotificationModules ? 'Search CRM modules...' : 'Search roles...'
+                  }
+                  disabled={availableOptions.length === 0}
+                  noOptionsMessage={
+                    availableOptions.length === 0
+                      ? 'All standard options are already added'
+                      : 'No matching options found'
+                  }
+                />
+              </div>
+
+              {/* Add All Quick Action */}
+              {availableOptions.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const allVals = dropdownOptions.map((m) => m.value);
+                    const merged = Array.from(new Set([...items, ...allVals]));
+                    handleValueChange(setting.id, merged);
+                  }}
+                  className="btn btn-secondary"
+                  style={{
+                    padding: '0.35rem 0.65rem',
+                    fontSize: '0.75rem',
+                    height: '36px',
+                    whiteSpace: 'nowrap',
+                  }}
+                  title="Add all available options"
+                >
+                  Add All
+                </button>
+              )}
+
+              {/* Clear All Quick Action */}
+              {items.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => handleValueChange(setting.id, [])}
+                  className="btn btn-secondary"
+                  style={{
+                    padding: '0.35rem 0.65rem',
+                    fontSize: '0.75rem',
+                    height: '36px',
+                    whiteSpace: 'nowrap',
+                    color: '#ef4444',
+                  }}
+                  title="Remove all options"
+                >
+                  Clear All
+                </button>
+              )}
+            </>
+          ) : (
+            /* Fallback for CIDR IP list or other non-dropdown arrays */
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+              <input
+                type="text"
+                placeholder="Add CIDR IP range (e.g. 10.0.0.0/24)..."
+                className="input-field"
+                style={{
+                  padding: '0.2rem 0.5rem',
+                  fontSize: '0.75rem',
+                  height: '32px',
+                  width: '220px',
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const target = e.currentTarget;
+                    if (target.value.trim()) {
+                      handleAdd(target.value);
+                      target.value = '';
+                    }
+                  }
+                }}
+              />
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -288,7 +380,9 @@ function ArraySettingEditor({
 function renderTypedInput(
   setting: SystemSetting,
   canEdit: boolean,
-  handleValueChange: (id: number, val: SettingValue) => void
+  handleValueChange: (id: number, val: SettingValue) => void,
+  allSettings?: SystemSetting[],
+  dynamicOptions?: SettingsDynamicOptions | null
 ) {
   if (setting.value_type === 'boolean') {
     return (
@@ -349,6 +443,132 @@ function renderTypedInput(
   }
 
   if (setting.value_type === 'integer') {
+    // Specialized integrated control for Inactivity Session Timeout with Turn On / Turn Off toggle
+    if (setting.key === 'session_timeout_mins') {
+      const enableTimeoutSetting = allSettings?.find((s) => s.key === 'enable_session_timeout');
+      const isTimeoutEnabled = enableTimeoutSetting !== undefined ? Boolean(enableTimeoutSetting.value) : true;
+      const currentVal = typeof setting.value === 'number' ? setting.value : Number(setting.value) || 15;
+
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', flexWrap: 'wrap' }}>
+          {/* Turn On / Turn Off Switch */}
+          <label
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              cursor: canEdit ? 'pointer' : 'not-allowed',
+              userSelect: 'none',
+            }}
+            title="Turn on or off automatic session inactivity timeout"
+          >
+            <input
+              type="checkbox"
+              checked={isTimeoutEnabled}
+              disabled={!canEdit}
+              onChange={(e) => {
+                if (enableTimeoutSetting) {
+                  handleValueChange(enableTimeoutSetting.id, e.target.checked);
+                }
+              }}
+              style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }}
+            />
+            <div
+              style={{
+                width: 44,
+                height: 22,
+                borderRadius: 'var(--radius-full)',
+                background: isTimeoutEnabled ? 'var(--accent-primary)' : 'rgba(255, 255, 255, 0.12)',
+                border: '1px solid var(--border-subtle)',
+                position: 'relative',
+                transition: 'background 0.2s ease',
+                boxShadow: isTimeoutEnabled ? '0 0 10px rgba(99, 102, 241, 0.35)' : 'none',
+              }}
+            >
+              <div
+                style={{
+                  width: 16,
+                  height: 16,
+                  borderRadius: '50%',
+                  background: '#ffffff',
+                  position: 'absolute',
+                  top: 2,
+                  left: isTimeoutEnabled ? 24 : 3,
+                  transition: 'left 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.3)',
+                }}
+              />
+            </div>
+            <span
+              style={{
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                color: isTimeoutEnabled ? 'var(--accent-primary)' : 'var(--text-muted)',
+                minWidth: '28px',
+              }}
+            >
+              {isTimeoutEnabled ? 'On' : 'Off'}
+            </span>
+          </label>
+
+          {/* Minutes Input (active when On, dimmed when Off) */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              background: isTimeoutEnabled ? 'var(--bg-input)' : 'rgba(255, 255, 255, 0.03)',
+              border: isTimeoutEnabled ? '1px solid var(--border-subtle)' : '1px dashed var(--border-subtle)',
+              borderRadius: 'var(--radius-md)',
+              overflow: 'hidden',
+              width: '100%',
+              maxWidth: 130,
+              opacity: isTimeoutEnabled ? 1 : 0.45,
+              pointerEvents: isTimeoutEnabled ? 'auto' : 'none',
+              transition: 'all 0.2s ease',
+            }}
+            title={isTimeoutEnabled ? 'Inactivity timeout duration in minutes' : 'Turn on to configure timeout duration'}
+          >
+            <input
+              type="number"
+              min={1}
+              value={currentVal > 0 ? currentVal : 15}
+              disabled={!canEdit || !isTimeoutEnabled}
+              onChange={(e) => handleValueChange(setting.id, Math.max(1, parseInt(e.target.value, 10) || 1))}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                outline: 'none',
+                color: 'var(--text-primary)',
+                fontSize: '0.875rem',
+                fontWeight: 600,
+                textAlign: 'right',
+                padding: '0.55rem 0.65rem',
+                width: '100%',
+              }}
+            />
+            <span
+              style={{
+                fontSize: '0.75rem',
+                color: 'var(--text-muted)',
+                paddingRight: '0.75rem',
+                paddingLeft: '0.25rem',
+                fontWeight: 500,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              mins
+            </span>
+          </div>
+
+          {!isTimeoutEnabled && (
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+              (Turned Off)
+            </span>
+          )}
+        </div>
+      );
+    }
+
     if (setting.key === 'fiscal_year_start_month') {
       return (
         <select
@@ -474,22 +694,48 @@ function renderTypedInput(
       );
     }
     if (setting.key === 'default_currency') {
+      const currencies = dynamicOptions?.currencies || [];
       return (
-        <select
-          value={typeof setting.value === 'string' ? setting.value : String(setting.value ?? '')}
-          disabled={!canEdit}
-          onChange={(e) => handleValueChange(setting.id, e.target.value)}
-          className="input-field"
-          style={{ width: '100%' }}
-        >
-          <option value="USD">USD ($ - US Dollar)</option>
-          <option value="EUR">EUR (€ - Euro)</option>
-          <option value="GBP">GBP (£ - British Pound)</option>
-          <option value="CAD">CAD ($ - Canadian Dollar)</option>
-          <option value="AUD">AUD ($ - Australian Dollar)</option>
-          <option value="JPY">JPY (¥ - Japanese Yen)</option>
-          <option value="INR">INR (₹ - Indian Rupee)</option>
-        </select>
+        <div style={{ width: '100%', minWidth: 200 }}>
+          <SearchableSelect
+            options={currencies}
+            value={typeof setting.value === 'string' ? setting.value : String(setting.value ?? 'USD')}
+            onChange={(val) => handleValueChange(setting.id, val)}
+            disabled={!canEdit}
+            placeholder="Select operating currency..."
+            searchPlaceholder="Search currency..."
+          />
+        </div>
+      );
+    }
+    if (setting.key === 'default_timezone') {
+      const timezones = dynamicOptions?.timezones || [];
+      return (
+        <div style={{ width: '100%', minWidth: 240 }}>
+          <SearchableSelect
+            options={timezones}
+            value={typeof setting.value === 'string' ? setting.value : String(setting.value ?? 'UTC')}
+            onChange={(val) => handleValueChange(setting.id, val)}
+            disabled={!canEdit}
+            placeholder="Select default timezone..."
+            searchPlaceholder="Search timezone..."
+          />
+        </div>
+      );
+    }
+    if (setting.key === 'default_locale') {
+      const languages = dynamicOptions?.languages || [];
+      return (
+        <div style={{ width: '100%', minWidth: 200 }}>
+          <SearchableSelect
+            options={languages}
+            value={typeof setting.value === 'string' ? setting.value : String(setting.value ?? 'en-US')}
+            onChange={(val) => handleValueChange(setting.id, val)}
+            disabled={!canEdit}
+            placeholder="Select default locale/language..."
+            searchPlaceholder="Search locale or language..."
+          />
+        </div>
       );
     }
     return (
@@ -510,6 +756,7 @@ function renderTypedInput(
         setting={setting}
         canEdit={canEdit}
         handleValueChange={handleValueChange}
+        dynamicOptions={dynamicOptions}
       />
     );
   }
@@ -536,6 +783,7 @@ export default function SystemSettingsPage() {
 
   const [settings, setSettings] = useState<SystemSetting[]>([]);
   const [originalSettings, setOriginalSettings] = useState<SystemSetting[]>([]);
+  const [dynamicOptions, setDynamicOptions] = useState<SettingsDynamicOptions | null>(null);
   const [isDataLoading, setIsDataLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -570,9 +818,15 @@ export default function SystemSettingsPage() {
     if (!isAdmin) return;
     setIsRefreshing(true);
     try {
-      const response = await apiFetch<PagedResponse<SystemSetting>>('/settings?limit=100&sort_by=sort_order&sort_order=asc');
-      setSettings(response.items);
-      setOriginalSettings(response.items);
+      const [settingsResp, optionsResp] = await Promise.all([
+        apiFetch<PagedResponse<SystemSetting>>('/settings?limit=100&sort_by=sort_order&sort_order=asc'),
+        apiFetch<SettingsDynamicOptions>('/settings/options').catch(() => null),
+      ]);
+      setSettings(settingsResp.items);
+      setOriginalSettings(settingsResp.items);
+      if (optionsResp) {
+        setDynamicOptions(optionsResp);
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to load system settings.';
       toast.error(message);
@@ -591,10 +845,16 @@ export default function SystemSettingsPage() {
 
     async function init() {
       try {
-        const response = await apiFetch<PagedResponse<SystemSetting>>('/settings?limit=100&sort_by=sort_order&sort_order=asc');
+        const [settingsResp, optionsResp] = await Promise.all([
+          apiFetch<PagedResponse<SystemSetting>>('/settings?limit=100&sort_by=sort_order&sort_order=asc'),
+          apiFetch<SettingsDynamicOptions>('/settings/options').catch(() => null),
+        ]);
         if (isMounted) {
-          setSettings(response.items);
-          setOriginalSettings(response.items);
+          setSettings(settingsResp.items);
+          setOriginalSettings(settingsResp.items);
+          if (optionsResp) {
+            setDynamicOptions(optionsResp);
+          }
         }
       } catch (err: unknown) {
         if (isMounted) {
@@ -803,7 +1063,7 @@ export default function SystemSettingsPage() {
       return matchesCategory && section.settings.length > 0;
     });
 
-    const coveredKeys = new Set(SETTING_SECTIONS.flatMap((s) => s.keys));
+    const coveredKeys = new Set([...SETTING_SECTIONS.flatMap((s) => s.keys), 'enable_session_timeout']);
     const extraSettings = filteredSettings.filter((s) => !coveredKeys.has(s.key));
     if (extraSettings.length > 0) {
       standardSections.push({
@@ -1422,7 +1682,7 @@ export default function SystemSettingsPage() {
                       {/* Form Control */}
                       <td style={{ padding: '0.85rem 1rem' }}>
                         <div style={{ maxWidth: 320 }}>
-                          {renderTypedInput(setting, canEdit, handleValueChange)}
+                          {renderTypedInput(setting, canEdit, handleValueChange, settings, dynamicOptions)}
                         </div>
                       </td>
 
@@ -1648,7 +1908,7 @@ export default function SystemSettingsPage() {
                         {/* Right: Typed Form Control & Revert Button */}
                         <div style={{ flex: '0 0 auto', minWidth: 260, maxWidth: 340, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.65rem' }}>
                           <div style={{ width: '100%' }}>
-                            {renderTypedInput(setting, canEdit, handleValueChange)}
+                            {renderTypedInput(setting, canEdit, handleValueChange, settings, dynamicOptions)}
                           </div>
 
                           {/* Single Setting Revert Button */}

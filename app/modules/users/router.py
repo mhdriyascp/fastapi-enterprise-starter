@@ -207,7 +207,7 @@ async def toggle_status(
     "/{identifier}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete user",
-    description="Deletes or disables a user account (soft or hard delete based on permissions and options).",
+    description="Deletes or disables a user account (soft-delete or purge based on permissions and options).",
 )
 async def delete_user(
     identifier: Annotated[
@@ -239,7 +239,7 @@ async def delete_user(
     if hard_delete is True and not can_hard_delete:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have permission to permanently delete user accounts. Only soft-deletion is permitted based on your RBAC permissions.",
+            detail="You do not have permission to purge user accounts. Only soft-deletion is permitted based on your RBAC permissions.",
         )
     effective_hard_delete = bool(hard_delete)
 

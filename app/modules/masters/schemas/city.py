@@ -1,6 +1,9 @@
+from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.shared.base_schema import BaseSchema
 
 
 class CityCreate(BaseModel):
@@ -39,12 +42,16 @@ class CityUpdate(BaseModel):
         return value
 
 
-class CityResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class CityResponse(BaseSchema):
     id: int
     public_id: UUID
     country_id: int
     state_id: int | None
     name: str
     is_active: bool
+    created_by_id: UUID | None = None
+    updated_by_id: UUID | None = None
+    is_deleted: bool = False
+    deleted_at: datetime | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None

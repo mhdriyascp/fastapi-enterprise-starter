@@ -27,6 +27,7 @@ The **Menus** domain module manages hierarchical navigation structures in the CR
    │ icon: String(100, Nullable)                            │
    │ sort_order: Integer (Default 0)                        │
    │ is_active: Boolean (Default True)                      │
+   │ show_in_header: Boolean (Default True)                 │
    └───────────────┬────────────────────────┬───────────────┘
                    │                        │
        1:N         │                        │ 1:N
@@ -86,11 +87,19 @@ When a client queries `/api/v1/menus/my-menus`, the visibility engine executes t
 ## 🖥️ Frontend Management Workspace (`/menus`)
 
 The Next.js management dashboard provides a full visual CRUD workspace for RBAC navigation:
-- **Interactive Tree View**: Visualizes nested parent/child navigation nodes with real-time active status badges, quick `+ Add Child`, `Edit`, and `Delete` triggers.
-- **High-Density Table View**: Searchable catalog of all menu items with search by title, code, or path, segmented status filters (`All (N)`, `Active (N)`, `Inactive (N)`, `Deleted (N)`) with dynamic live count badges, and hierarchy level selector.
+- **Interactive Tree View**: Visualizes nested parent/child navigation nodes with real-time active status badges, `In Header: Yes/No` badges, quick `+ Add Child`, `Edit`, and `Delete` triggers.
+- **High-Density Table View**: Searchable catalog of all menu items with search by title, code, or path, segmented status filters (`All (N)`, `Active (N)`, `Inactive (N)`, `Deleted (N)`), hierarchy level selector, and a dedicated **Header Nav** column with one-click toggles.
+- **Top Header Display Toggle**: In addition to sidebar navigation, administrators can toggle `show_in_header` on any menu item or via Create/Edit modals (`Show in Top Header Navigation bar`), determining which items appear in the dedicated horizontal sub-header navigation.
+- **Two-Tier Header Navigation & RBAC Filtering**:
+  - The application header uses a two-tier layout:
+    - **Top Row**: Full-width global search (`maxWidth: 560px`) and top-right actions (Theme, Notifications, Profile Menu, Pulse Status).
+    - **Bottom Sub-Header Row**: Horizontal navigation bar rendered directly underneath the search bar and top row, displaying active menus with icons and nested dropdowns.
+  - Sub-header menus are strictly governed by RBAC (`/api/v1/menus/my-menus`) and filtered by `show_in_header !== false`. Visibility can also be toggled globally via System Settings (`enable_top_header_menus`).
+  - **Parent-Anchored Dropdown Menus**: Floating submenu popovers are rendered via `createPortal` to `document.body` to bypass stacking context and blur filter clipping. The dropdown's position is strictly anchored directly below the parent menu button (`top: Math.round(rect.bottom + 2)`), aligning horizontally with the parent button's left edge (`rect.left`), or shifting to right-aligned with the parent button (`rect.right - width`) if approaching the viewport boundary. When open, the parent button receives an active highlight with an inverted chevron.
+  - **Full Viewport Responsiveness & Sliding Track**: The navigation track supports smooth horizontal sliding via left/right chevron buttons (`<` and `>`), mousewheel scrolling, and native touch swipe (`-webkit-overflow-scrolling: touch`), ensuring full accessibility across desktop, tablet (1024px, 768px), and mobile (640px, 480px, 390px) viewports without truncation. Outside clicks, page scrolling, and window resizing automatically dismiss open dropdowns.
 - **Context-Aware Bulk Action Bar**: Checkbox multi-selection for bulk deletion, restoration (`.btn-restore`), and permanent purging (`.btn-danger`).
-- **Create & Edit Modals**: Spacious glassmorphism modal layout (`maxWidth: 740px`) with 2-column responsive input grids, real-time code generator preview, SearchableSelect hierarchy picker, and icon taxonomy mapping.
-- **Live Sidebar Synchronization**: Creating, modifying, or deleting any menu item automatically triggers `refreshMenus()`, synchronizing the active navigation sidebar without requiring a page reload.
+- **Create & Edit Modals**: Spacious glassmorphism modal layout (`maxWidth: 740px`) with 2-column responsive input grids, real-time code generator preview, SearchableSelect hierarchy picker, icon taxonomy mapping, and header navigation display checkbox.
+- **Live Synchronization**: Creating, modifying, or toggling any menu item automatically triggers `refreshMenus()`, synchronizing both the active sidebar and the top header navigation immediately.
 
 ---
 

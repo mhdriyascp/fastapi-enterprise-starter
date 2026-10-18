@@ -97,6 +97,8 @@ export interface MenuItem {
   order_no?: number;
   /** Whether this menu item is currently enabled in navigation */
   is_active: boolean;
+  /** Whether this menu item is displayed in the top header navigation */
+  show_in_header?: boolean;
   /** Whether this menu item has been soft-deleted */
   is_deleted?: boolean;
   /** UTC timestamp of soft deletion */
@@ -124,6 +126,7 @@ export interface MenuCreateInput {
   sort_order?: number;
   parent_id?: string | null;
   is_active?: boolean;
+  show_in_header?: boolean;
 }
 
 /**
@@ -137,6 +140,7 @@ export interface MenuUpdateInput {
   sort_order?: number;
   parent_id?: string | null;
   is_active?: boolean;
+  show_in_header?: boolean;
 }
 
 /**
@@ -345,86 +349,78 @@ export interface MasterListResponse<T> {
   limit: number;
 }
 
-export interface MasterCountry {
-  id: number;
+export interface BaseMasterEntity {
+  id?: number;
   public_id: string;
+  is_active: boolean;
+  is_deleted?: boolean;
+  deleted_at?: string | null;
+  created_by_id?: string | null;
+  updated_by_id?: string | null;
+  created_at?: string;
+  updated_at?: string | null;
+}
+
+export interface MasterCountry extends BaseMasterEntity {
+  id: number;
   code: string;
   iso3_code?: string | null;
   name: string;
   phone_code?: string | null;
   default_currency_id?: number | null;
   default_currency?: MasterCurrency | null;
-  is_active: boolean;
 }
 
-export interface MasterState {
+export interface MasterState extends BaseMasterEntity {
   id: number;
-  public_id: string;
   country_id: number;
   code?: string | null;
   name: string;
-  is_active: boolean;
 }
 
-export interface MasterCity {
+export interface MasterCity extends BaseMasterEntity {
   id: number;
-  public_id: string;
   country_id: number;
   state_id?: number | null;
   name: string;
-  is_active: boolean;
 }
 
-export interface MasterCurrency {
-  id?: number;
-  public_id: string;
+export interface MasterCurrency extends BaseMasterEntity {
   code: string;
   name: string;
   symbol?: string | null;
   decimal_places: number;
-  is_active: boolean;
 }
 
-export interface MasterTimeZone {
-  public_id: string;
+export interface MasterTimeZone extends BaseMasterEntity {
   name: string;
   label: string;
   utc_offset?: string | null;
-  is_active: boolean;
 }
 
-export interface MasterLanguage {
-  public_id: string;
+export interface MasterLanguage extends BaseMasterEntity {
   code: string;
   name: string;
   native_name?: string | null;
-  is_active: boolean;
 }
 
-export interface MasterIndustry {
-  public_id: string;
+export interface MasterIndustry extends BaseMasterEntity {
   code: string;
   name: string;
   description?: string | null;
-  is_active: boolean;
 }
 
-export interface MasterUnitOfMeasure {
-  public_id: string;
+export interface MasterUnitOfMeasure extends BaseMasterEntity {
   code: string;
   name: string;
   symbol?: string | null;
   category?: string | null;
-  is_active: boolean;
 }
 
-export interface MasterTypeEntity {
-  id?: number;
-  public_id: string;
+export interface MasterTypeEntity extends BaseMasterEntity {
   code: string;
   name: string;
   description?: string | null;
-  is_active: boolean;
 }
 
 export type MasterAddressType = MasterTypeEntity;
@@ -432,29 +428,21 @@ export type MasterCommunicationType = MasterTypeEntity;
 export type MasterDocumentType = MasterTypeEntity;
 export type MasterIdentificationType = MasterTypeEntity;
 
-export interface MasterBrand {
-  id?: number;
-  public_id: string;
+export interface MasterBrand extends BaseMasterEntity {
   code: string;
   name: string;
   description?: string | null;
-  is_active: boolean;
 }
 
-export interface MasterTax {
-  id?: number;
-  public_id: string;
+export interface MasterTax extends BaseMasterEntity {
   code: string;
   name: string;
   rate: number;
   tax_type: string;
   country_id: number;
-  is_active: boolean;
 }
 
-export interface MasterAddress {
-  id?: number;
-  public_id: string;
+export interface MasterAddress extends BaseMasterEntity {
   organization_id?: number | null;
   branch_id?: number | null;
   address_type_id: number;
@@ -469,7 +457,6 @@ export interface MasterAddress {
   longitude?: number | null;
   notes?: string | null;
   is_default: boolean;
-  is_active: boolean;
 }
 
 /**

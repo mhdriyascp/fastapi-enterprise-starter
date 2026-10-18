@@ -80,6 +80,13 @@ class Menu(AuditEntityBase):
         server_default=text("true"),
     )
 
+    show_in_header: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default=text("true"),
+    )
+
     # Hierarchical tree relationships
     parent: Mapped[Menu | None] = relationship(
         "Menu",

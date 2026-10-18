@@ -64,6 +64,7 @@ class MenuService:
             icon=menu.icon,
             sort_order=menu.sort_order,
             is_active=menu.is_active,
+            show_in_header=getattr(menu, "show_in_header", True),
             is_deleted=bool(getattr(menu, "is_deleted", False)),
             deleted_at=getattr(menu, "deleted_at", None),
             role_ids=role_ids,
@@ -165,6 +166,7 @@ class MenuService:
             sort_order=data.sort_order,
             parent_id=resolved_parent_id,
             is_active=data.is_active,
+            show_in_header=data.show_in_header,
         )
         self.db.add(menu)
         await self.db.flush()
@@ -282,6 +284,8 @@ class MenuService:
             menu.sort_order = data.sort_order
         if data.is_active is not None:
             menu.is_active = data.is_active
+        if data.show_in_header is not None:
+            menu.show_in_header = data.show_in_header
 
         # Update role assignments if provided
         if data.role_ids is not None:
@@ -554,6 +558,7 @@ class MenuService:
                 icon=m.icon,
                 sort_order=m.sort_order,
                 is_active=m.is_active,
+                show_in_header=getattr(m, "show_in_header", True),
                 is_deleted=bool(getattr(m, "is_deleted", False)),
                 deleted_at=getattr(m, "deleted_at", None),
                 children=[],

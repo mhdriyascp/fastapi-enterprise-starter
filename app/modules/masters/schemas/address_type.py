@@ -1,6 +1,9 @@
+from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
+
+from app.shared.base_schema import BaseSchema
 
 
 class AddressTypeCreate(BaseModel):
@@ -16,12 +19,16 @@ class AddressTypeUpdate(BaseModel):
     is_active: bool | None = None
 
 
-class AddressTypeResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class AddressTypeResponse(BaseSchema):
     id: int
     public_id: UUID
     code: str
     name: str
     description: str | None
     is_active: bool
+    created_by_id: UUID | None = None
+    updated_by_id: UUID | None = None
+    is_deleted: bool = False
+    deleted_at: datetime | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None

@@ -133,6 +133,7 @@ export default function MenusPage() {
     sort_order: number;
     parent_id: string;
     is_active: boolean;
+    show_in_header: boolean;
   }>({
     title: '',
     code: '',
@@ -141,6 +142,7 @@ export default function MenusPage() {
     sort_order: 10,
     parent_id: '',
     is_active: true,
+    show_in_header: true,
   });
 
   const [formError, setFormError] = useState<string | null>(null);
@@ -332,6 +334,7 @@ export default function MenusPage() {
       sort_order: 10,
       parent_id: parentId ? String(parentId) : '',
       is_active: true,
+      show_in_header: true,
     });
     setFormError(null);
     setFieldErrors({});
@@ -349,6 +352,7 @@ export default function MenusPage() {
       sort_order: menu.sort_order ?? menu.order_no ?? 10,
       parent_id: menu.parent_id !== null && menu.parent_id !== undefined ? String(menu.parent_id) : '',
       is_active: menu.is_active,
+      show_in_header: menu.show_in_header !== false,
     });
     setFormError(null);
     setFieldErrors({});
@@ -399,6 +403,7 @@ export default function MenusPage() {
           sort_order: Number(formData.sort_order) || 0,
           parent_id: formData.parent_id.trim() ? formData.parent_id.trim() : null,
           is_active: formData.is_active,
+          show_in_header: formData.show_in_header,
         };
 
         await apiFetch<MenuItem>('/menus', {
@@ -416,6 +421,7 @@ export default function MenusPage() {
           sort_order: Number(formData.sort_order) || 0,
           parent_id: formData.parent_id.trim() ? formData.parent_id.trim() : null,
           is_active: formData.is_active,
+          show_in_header: formData.show_in_header,
         };
 
         await apiFetch<MenuItem>(`/menus/${selectedMenu.id}`, {
@@ -442,6 +448,24 @@ export default function MenusPage() {
     }
   }
 
+  async function handleToggleShowInHeader(item: MenuItem) {
+    try {
+      const nextVal = item.show_in_header === false;
+      await apiFetch(`/menus/${item.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ show_in_header: nextVal }),
+      });
+      toast.success(
+        `Menu "${item.title}" ${nextVal ? 'will now show' : 'will no longer show'} in the top header.`
+      );
+      await loadMenus();
+      await refreshSidebarMenus();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to update header display.';
+      toast.error(msg);
+    }
+  }
+
   async function handleDeleteMenu() {
     if (!deleteCandidate) return;
     setIsSubmitting(true);
@@ -453,7 +477,7 @@ export default function MenusPage() {
 
       toast.success(
         isHardDelete
-          ? `Menu "${deleteCandidate.title}" permanently deleted.`
+          ? `Menu "${deleteCandidate.title}" purged successfully.`
           : `Menu "${deleteCandidate.title}" soft-deleted / deactivated.`
       );
       setDeleteCandidate(null);
@@ -634,6 +658,18 @@ export default function MenusPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
             <span className={`badge ${item.is_active ? 'badge-success' : 'badge-danger'}`} style={{ fontSize: '0.68rem' }}>
               {item.is_active ? 'Active' : 'Disabled'}
+            </span>
+
+            <span
+              className={`badge ${item.show_in_header !== false ? 'badge-info' : 'badge-neutral'}`}
+              style={{ fontSize: '0.68rem', cursor: 'pointer' }}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleToggleShowInHeader(item);
+              }}
+              title="Click to toggle top header display"
+            >
+              {item.show_in_header !== false ? 'In Header: Yes' : 'In Header: No'}
             </span>
 
             {/* View Button */}
@@ -1024,6 +1060,7 @@ export default function MenusPage() {
                 <th>Destination Path</th>
                 <th>Sort Order</th>
                 <th>Status</th>
+                <th>Header Nav</th>
                 <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>
             </thead>
@@ -1106,6 +1143,17 @@ export default function MenusPage() {
                       <span className={`badge ${item.is_deleted ? 'badge-danger' : item.is_active ? 'badge-success' : 'badge-warning'}`}>
                         {item.is_deleted ? 'Deleted' : item.is_active ? 'Active' : 'Disabled'}
                       </span>
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleShowInHeader(item)}
+                        className={`badge ${item.show_in_header !== false ? 'badge-info' : 'badge-neutral'}`}
+                        style={{ cursor: 'pointer', border: 'none', background: item.show_in_header !== false ? 'rgba(56, 189, 248, 0.15)' : 'var(--bg-input)', color: item.show_in_header !== false ? '#38bdf8' : 'var(--text-muted)' }}
+                        title="Click to toggle top header display"
+                      >
+                        {item.show_in_header !== false ? 'Visible' : 'Hidden'}
+                      </button>
                     </td>
                     <td style={{ textAlign: 'right' }}>
                       <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -1396,6 +1444,14 @@ export default function MenusPage() {
                       </span>
                     </td>
                   </tr>
+                  <tr>
+                    <th>Top Header Display</th>
+                    <td>
+                      <span className={`badge ${viewingMenu.show_in_header !== false ? 'badge-info' : 'badge-neutral'}`}>
+                        {viewingMenu.show_in_header !== false ? 'Visible in Header' : 'Sidebar Only'}
+                      </span>
+                    </td>
+                  </tr>
                 </tbody>
               </table>
             </div>
@@ -1677,6 +1733,19 @@ export default function MenusPage() {
                 </label>
               </div>
 
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
+                <input
+                  type="checkbox"
+                  id="show_in_header_toggle"
+                  checked={formData.show_in_header}
+                  onChange={(e) => setFormData({ ...formData, show_in_header: e.target.checked })}
+                  style={{ width: '16px', height: '16px', accentColor: 'var(--accent-primary)', cursor: 'pointer' }}
+                />
+                <label htmlFor="show_in_header_toggle" style={{ fontSize: '0.85rem', color: 'var(--text-primary)', cursor: 'pointer' }}>
+                  Show in Top Header Navigation bar
+                </label>
+              </div>
+
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap', gap: '0.75rem', marginTop: '1.25rem' }}>
                 <button
                   type="button"
@@ -1707,7 +1776,7 @@ export default function MenusPage() {
         isOpen={!!deleteCandidate}
         onClose={() => setDeleteCandidate(null)}
         onConfirm={handleDeleteMenu}
-        title={isHardDelete ? "Permanently Delete Menu Item?" : "Deactivate Menu Item?"}
+        title={isHardDelete ? "Purge Menu Item?" : "Deactivate Menu Item?"}
         subtitle={isHardDelete ? "This action permanently purges the navigation item from the database." : "This will deactivate the navigation item."}
         message={
           deleteCandidate ? (
@@ -1722,7 +1791,7 @@ export default function MenusPage() {
             )
           ) : null
         }
-        confirmLabel={isHardDelete ? "Permanently Delete" : "Deactivate Menu"}
+        confirmLabel={isHardDelete ? "Purge Menu Item" : "Deactivate Menu"}
         variant="danger"
         isLoading={isSubmitting}
       />
@@ -1751,7 +1820,11 @@ export default function MenusPage() {
         isOpen={bulkDeleteConfirmOpen}
         onClose={() => setBulkDeleteConfirmOpen(false)}
         onConfirm={handleBulkDelete}
-        title={`Delete ${selectedIds.size} Selected Menu(s)?`}
+        title={
+          bulkHardDeleteRequested
+            ? `Purge ${selectedIds.size} Selected Menu(s)?`
+            : `Soft Delete ${selectedIds.size} Selected Menu(s)?`
+        }
         subtitle={`${selectedIds.size} items selected`}
         message={
           <div>
@@ -1767,13 +1840,17 @@ export default function MenusPage() {
                   onChange={(e) => setBulkHardDeleteRequested(e.target.checked)}
                 />
                 <label htmlFor="bulk_menu_hard_delete_check" style={{ fontSize: '0.82rem', color: 'var(--danger)', fontWeight: 600 }}>
-                  Permanently purge records (Hard Delete)
+                  Purge records immediately (Bypass Trash)
                 </label>
               </div>
             )}
           </div>
         }
-        confirmLabel={`Delete ${selectedIds.size} Menus`}
+        confirmLabel={
+          bulkHardDeleteRequested
+            ? `Purge (${selectedIds.size})`
+            : `Soft Delete (${selectedIds.size})`
+        }
         variant="danger"
         isLoading={isBulkDeleting}
       />

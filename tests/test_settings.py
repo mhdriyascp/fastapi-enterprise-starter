@@ -35,9 +35,12 @@ async def test_get_public_settings_unauthenticated():
         assert "company_name" in public_settings
         assert "default_timezone" in public_settings
         assert "default_locale" in public_settings
-        # Non-public settings like password policy or session timeouts must NOT leak
+        # Non-public settings like password policy or brute force mitigation must NOT leak
         assert "password_min_length" not in public_settings
-        assert "session_timeout_mins" not in public_settings
+        assert "max_login_attempts" not in public_settings
+        # Client governance settings must be available for frontend inactivity guard
+        assert "enable_session_timeout" in public_settings
+        assert "session_timeout_mins" in public_settings
 
 
 @pytest.mark.asyncio
@@ -290,3 +293,39 @@ async def test_settings_restricted_to_administrators():
         if user_to_delete:
             await db.delete(user_to_delete)
             await db.commit()
+
+
+@pytest.mark.asyncio
+async def test_get_settings_options_authenticated():
+    """Verify that dynamic select options (modules, roles, currencies, timezones, languages) are returned."""
+    token = await get_admin_token()
+    headers = {"Authorization": f"Bearer {token}"}
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        res = await client.get("/api/v1/settings/options", headers=headers)
+        assert res.status_code == 200
+        data = res.json()
+        assert "modules" in data
+        assert "roles" in data
+        assert "currencies" in data
+        assert "timezones" in data
+        assert "languages" in data
+
+        # Check modules list includes active and upcoming modules
+        modules = data["modules"]
+        module_values = [m["value"] for m in modules]
+        assert "organizations" in module_values
+        assert "settings" in module_values
+        assert "leads" in module_values
+        assert "deal" in module_values
+
+        # Check roles list includes seeded roles
+        roles = data["roles"]
+        role_values = [r["value"] for r in roles]
+        assert "super_admin" in role_values or "admin" in role_values
+
+        # Check currencies list includes USD
+        currencies = data["currencies"]
+        currency_values = [c["value"] for c in currencies]
+        assert "USD" in currency_values

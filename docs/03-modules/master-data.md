@@ -2,48 +2,50 @@
 
 ## Overview
 
-The Master Data module provides centralized governance and CRUD administration for 12 core reference lookup catalogs required by enterprise business systems.
+The Master Data module provides centralized governance and CRUD administration for 15 core reference lookup catalogs required by enterprise business systems. All 15 catalogs strictly inherit from `AuditEntityBase`, providing unified operator audit attribution (`created_by_id`, `updated_by_id`) and two-stage lifecycle deletion (`is_deleted`, `deleted_at`).
 
 - **Backend Module Path**: [`app/modules/masters/`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/app/modules/masters/)
-- **Database Models**: [`app/infrastructure/database/models/general_master/`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/app/infrastructure/database/models/general_master/)
+- **Database Models**: [`app/infrastructure/database/models/masters/`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/app/infrastructure/database/models/masters/)
 - **Registry & Router Factory**: [`app/modules/masters/registry.py`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/app/modules/masters/registry.py)
 - **Frontend Workspace**: [`frontend/src/app/(dashboard)/masters/page.tsx`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/frontend/src/app/(dashboard)/masters/page.tsx)
 - **Frontend Layout**: [`frontend/src/app/(dashboard)/masters/layout.tsx`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/frontend/src/app/(dashboard)/masters/layout.tsx)
 
 ---
 
-## 12 Supported Master Catalogs
+## 15 Supported Master Catalogs
 
 The platform groups master data into four functional enterprise domains:
 
 ### 1. Geographic & Regional Catalogs
 | Catalog | Endpoint Slug | Key Attributes | Lookup Constraints |
 |---|---|---|---|
-| **Countries** | `/masters/countries` | `name`, `code` (ISO-2), `iso3_code`, `phone_code`, `default_currency_id`, `is_active` | Root entity linked to `default_currency` (Many Countries -> One Currency) |
-| **States / Provinces** | `/masters/states` | `name`, `code`, `country_id`, `is_active` | Cascades to `Country` |
-| **Cities** | `/masters/cities` | `name`, `country_id`, `state_id`, `is_active` | Cascades to `Country` & `State` |
-| **Time Zones** | `/masters/time-zones` | `name` (IANA canonical), `label`, `utc_offset`, `is_active` | Root entity |
+| **Countries** | `/masters/countries` | `name`, `code` (ISO-2), `iso3_code`, `phone_code`, `default_currency_id`, `is_active`, `is_deleted` | Root entity linked to `default_currency` (Many Countries -> One Currency) |
+| **States / Provinces** | `/masters/states` | `name`, `code`, `country_id`, `is_active`, `is_deleted` | Cascades to `Country` |
+| **Cities** | `/masters/cities` | `name`, `country_id`, `state_id`, `is_active`, `is_deleted` | Cascades to `Country` & `State` |
+| **Time Zones** | `/masters/time-zones` | `name` (IANA canonical), `label`, `utc_offset`, `is_active`, `is_deleted` | Root entity |
 
 ### 2. Financial & Commerce Catalogs
 | Catalog | Endpoint Slug | Key Attributes | Notes |
 |---|---|---|---|
-| **Currencies** | `/masters/currencies` | `name`, `code` (ISO 4217), `symbol`, `decimal_places`, `is_active` | Monetary precision formatting |
-| **Units of Measure** | `/masters/units-of-measure` | `name`, `code`, `category`, `is_active` | Weight, Volume, Length, Quantity |
+| **Currencies** | `/masters/currencies` | `name`, `code` (ISO 4217), `symbol`, `decimal_places`, `is_active`, `is_deleted` | Monetary precision formatting |
+| **Taxes & Tariffs** | `/masters/taxes` | `name`, `code`, `rate`, `tax_type`, `country_id`, `is_active`, `is_deleted` | Fiscal tax calculation levies |
+| **Units of Measure** | `/masters/units-of-measure` | `name`, `code`, `category`, `is_active`, `is_deleted` | Weight, Volume, Length, Quantity |
 
 ### 3. Classifications & Taxonomies
 | Catalog | Endpoint Slug | Key Attributes | Notes |
 |---|---|---|---|
-| **Industries** | `/masters/industries` | `name`, `code`, `description`, `is_active` | Standard industrial classification |
-| **Languages** | `/masters/languages` | `name`, `code` (ISO 639), `native_name`, `is_active` | Vernacular script support |
+| **Industries** | `/masters/industries` | `name`, `code`, `description`, `is_active`, `is_deleted` | Standard industrial classification |
+| **Brands & Trademarks** | `/masters/brands` | `name`, `code`, `description`, `is_active`, `is_deleted` | Commercial registered trademarks |
+| **Languages** | `/masters/languages` | `name`, `code` (ISO 639), `native_name`, `is_active`, `is_deleted` | Vernacular script support |
 
 ### 4. System Types & Taxonomies
 | Catalog | Endpoint Slug | Key Attributes | Standard Instances |
 |---|---|---|---|
-| **Address Types** | `/masters/address-types` | `name`, `code`, `description`, `is_active` | Billing, Shipping, Headquarters, Warehouse |
-| **Addresses** | `/masters/addresses` | `address_line1`, `address_type_id`, `country_id`, `postal_code`, `is_default` | Physical & operational site location addresses |
-| **Communication Types** | `/masters/communication-types` | `name`, `code`, `description`, `is_active` | Work Email, Personal Phone, Mobile, Slack |
-| **Document Types** | `/masters/document-types` | `name`, `code`, `description`, `is_active` | Contract, Invoice, PO, NDA, Certification |
-| **Identification Types** | `/masters/identification-types` | `name`, `code`, `description`, `is_active` | Passport, National ID, Tax Number, SSN |
+| **Address Types** | `/masters/address-types` | `name`, `code`, `description`, `is_active`, `is_deleted` | Billing, Shipping, Headquarters, Warehouse |
+| **Addresses** | `/masters/addresses` | `address_line1`, `address_type_id`, `country_id`, `postal_code`, `is_default`, `is_deleted` | Physical & operational site location addresses |
+| **Communication Types** | `/masters/communication-types` | `name`, `code`, `description`, `is_active`, `is_deleted` | Work Email, Personal Phone, Mobile, Slack |
+| **Document Types** | `/masters/document-types` | `name`, `code`, `description`, `is_active`, `is_deleted` | Contract, Invoice, PO, NDA, Certification |
+| **Identification Types** | `/masters/identification-types` | `name`, `code`, `description`, `is_active`, `is_deleted` | Passport, National ID, Tax Number, SSN |
 
 ---
 
@@ -138,3 +140,31 @@ Across domain modules (Organizations, Menus, Roles, Permissions, and standard Ma
   - **Currencies**: Permits manual entry and editing of official ISO 4217 3-letter currency codes (e.g. `USD`, `EUR`, `JPY`, `GBP`).
 - **Live Synchronization on Form Updates**: When editing an existing entity, modifying the display name, label, or title immediately updates the autogenerated code in real time in the UI and sends the synchronized code to the API, ensuring codes remain strictly in sync with entity names across creations and updates.
 - **Backend Fallback Generation**: The backend CRUD service automatically generates and synchronizes system codes from `name`, `label`, or `title` if omitted or empty during creation and update operations.
+
+---
+
+## RBAC-Governed Lifecycle Management (Soft-Delete, Purge, & Restore)
+
+All 15 master catalogs adhere to an enterprise RBAC-controlled lifecycle identical to `Address` (`addresses`):
+
+### 1. Unified Audit & Soft-Delete Parity
+- Every catalog model inherits from `AuditEntityBase` with:
+  - `is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, index=True, nullable=False)`
+  - `deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)`
+  - `created_by_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)`
+  - `updated_by_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)`
+- Standard queries (`include_deleted=False`) automatically exclude soft-deleted entities.
+
+### 2. Strict Role-Based Access Control (RBAC)
+Any role can execute soft-delete, purge, or restore operations when an administrator grants them the corresponding module permission:
+
+| Lifecycle Action | HTTP Route | Required RBAC Permission | Behavior & Audit Trail |
+| :--- | :--- | :--- | :--- |
+| **Soft Delete** | `DELETE /api/v1/masters/<catalog>/{identifier}` | `masters:delete` (or `*.delete`) | Sets `is_deleted=True`, stamps `deleted_at=utcnow()`, updates `updated_by_id=operator_id`. Accessible to any role granted `masters:delete`. |
+| **Purge** | `DELETE /api/v1/masters/<catalog>/{identifier}?hard_delete=true` | `masters:hard_delete` (or `*.hard_delete` / Admin) | Validated via `is_user_authorized_for_hard_delete`. Permanently cascades and deletes entity from PostgreSQL. Accessible to any role granted `masters:hard_delete`. |
+| **Restore** | `POST /api/v1/masters/<catalog>/{identifier}/restore` | `masters:restore` (or `*.restore`) | Validated via `is_user_authorized_for_restore`. Reverts `is_deleted=False`, sets `deleted_at=None`, updates `updated_by_id=operator_id`. Accessible to any role granted `masters:restore`. |
+
+### 3. Delegated Deleted Record Visibility
+- Users possessing `masters:restore` or `masters:hard_delete` permissions automatically receive access to soft-deleted entities (`can_view_deleted=True` and `effective_include_deleted=True`).
+- Non-admin roles (e.g. `catalog_operator`, `support_lead`) granted restore or hard-delete privileges can query, inspect, and manage archived entries in the `Deleted` tab without requiring root administrative status.
+

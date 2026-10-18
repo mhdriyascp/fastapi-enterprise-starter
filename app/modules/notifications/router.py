@@ -158,6 +158,21 @@ async def mark_all_read(
 
 
 @router.delete(
+    "/clear-all",
+    status_code=status.HTTP_200_OK,
+    summary="Clear all notifications",
+    description="Deletes all notifications visible to the user.",
+)
+async def clear_all(
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[User, Depends(require_permission("notification.delete"))],
+) -> dict[str, int]:
+    service = NotificationService(db)
+    deleted = await service.clear_all(current_user.id)
+    return {"deleted": deleted}
+
+
+@router.delete(
     "/{identifier}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a notification",
@@ -187,18 +202,3 @@ async def delete_notification(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Notification with identifier '{str_val}' not found.",
         )
-
-
-@router.delete(
-    "/clear-all",
-    status_code=status.HTTP_200_OK,
-    summary="Clear all notifications",
-    description="Deletes all notifications visible to the user.",
-)
-async def clear_all(
-    db: Annotated[AsyncSession, Depends(get_db_session)],
-    current_user: Annotated[User, Depends(require_permission("notification.delete"))],
-) -> dict[str, int]:
-    service = NotificationService(db)
-    deleted = await service.clear_all(current_user.id)
-    return {"deleted": deleted}

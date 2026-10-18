@@ -212,7 +212,7 @@ async def update_organization_status(
     "/{identifier}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete organization",
-    description="Deletes an organization record by external UUID public_id or internal ID (soft or hard delete based on permissions and options).",
+    description="Deletes an organization record by external UUID public_id or internal ID (soft-delete or purge based on permissions and options).",
 )
 async def delete_organization(
     identifier: Annotated[
@@ -241,7 +241,7 @@ async def delete_organization(
     if hard_delete is True and not can_hard_delete:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have permission to permanently delete organizations. Only soft-deletion is permitted based on your RBAC permissions.",
+            detail="You do not have permission to purge organizations. Only soft-deletion is permitted based on your RBAC permissions.",
         )
     effective_hard_delete = bool(hard_delete)
 

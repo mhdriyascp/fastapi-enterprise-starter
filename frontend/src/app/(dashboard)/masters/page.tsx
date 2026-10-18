@@ -7,6 +7,7 @@ import { useToast } from '@/lib/toast-context';
 import { useAuth } from '@/lib/auth-context';
 import { generateMasterCode } from '@/lib/code-generator';
 import { ConfirmationModal } from '@/components/ui/confirmation-modal';
+import { FormattedDate } from '@/components/ui/formatted-date';
 import { SearchableSelect, SelectOption } from '@/components/ui/searchable-select';
 import { useDefaultPageSize } from '@/lib/use-page-size';
 import {
@@ -888,7 +889,7 @@ function MastersWorkspace() {
       });
       toast.success(
         isHardDelete
-          ? `${activeConfig.singular} permanently deleted.`
+          ? `${activeConfig.singular} purged successfully.`
           : `${activeConfig.singular} soft-deleted / deactivated successfully.`
       );
       setDeletingRecord(null);
@@ -1885,7 +1886,17 @@ function MastersWorkspace() {
                     .map(([key, val]) => (
                       <tr key={key}>
                         <th style={{ textTransform: 'capitalize' }}>{key.replace(/_/g, ' ')}</th>
-                        <td>{val !== null && val !== undefined ? String(val) : '—'}</td>
+                        <td>
+                          {val !== null && val !== undefined ? (
+                            key.endsWith('_at') || (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(val)) ? (
+                              <FormattedDate value={String(val)} />
+                            ) : (
+                              String(val)
+                            )
+                          ) : (
+                            '—'
+                          )}
+                        </td>
                       </tr>
                     ))}
                 </tbody>
@@ -3134,7 +3145,7 @@ function MastersWorkspace() {
         isOpen={!!deletingRecord}
         onClose={() => setDeletingRecord(null)}
         onConfirm={handleDeleteConfirm}
-        title={isHardDelete ? `Permanently Delete ${activeConfig.singular}?` : `Deactivate ${activeConfig.singular}?`}
+        title={isHardDelete ? `Purge ${activeConfig.singular}?` : `Deactivate ${activeConfig.singular}?`}
         subtitle={isHardDelete ? "This will permanently purge this record from the database." : "This will change the operational state to inactive."}
         message={
           deletingRecord ? (
@@ -3157,7 +3168,7 @@ function MastersWorkspace() {
             )
           ) : null
         }
-        confirmLabel={isHardDelete ? "Permanently Delete" : "Confirm Deactivation"}
+        confirmLabel={isHardDelete ? "Purge" : "Confirm Deactivation"}
         variant="danger"
         isLoading={isSubmitting}
       />
@@ -3192,7 +3203,7 @@ function MastersWorkspace() {
         onConfirm={handleBulkDelete}
         title={
           bulkHardDeleteRequested
-            ? `Permanently Purge ${selectedIds.size} Selected ${activeConfig.singular}(s)?`
+            ? `Purge ${selectedIds.size} Selected ${activeConfig.singular}(s)?`
             : `Soft Delete ${selectedIds.size} Selected ${activeConfig.singular}(s)?`
         }
         subtitle={`${selectedIds.size} record${selectedIds.size === 1 ? '' : 's'} selected`}
@@ -3226,7 +3237,7 @@ function MastersWorkspace() {
         }
         confirmLabel={
           bulkHardDeleteRequested
-            ? `Permanently Purge (${selectedIds.size})`
+            ? `Purge (${selectedIds.size})`
             : `Soft Delete (${selectedIds.size})`
         }
         variant="danger"
