@@ -3,10 +3,10 @@
  * Central single-source-of-truth for application metadata, branding, and environment URLs.
  */
 export const siteConfig = {
-  name: "Enterprise CRM Platform",
+  name: "Enterprise Djio One",
   shortName: "Enterprise CRM",
   description:
-    "High-throughput enterprise CRM platform featuring dynamic RBAC, multi-tenant organization management, hierarchical dynamic menus, and real-time operational intelligence.",
+    "High-throughput enterprise Djio One featuring dynamic RBAC, multi-tenant organization management, hierarchical dynamic menus, and real-time operational intelligence.",
   url: process.env.NEXT_PUBLIC_APP_URL || "https://crm.enterprise.internal",
   ogImage: "/og-image.png",
   authors: [

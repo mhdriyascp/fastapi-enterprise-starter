@@ -1,4 +1,4 @@
-# Enterprise CRM Platform — Backend Foundation
+# Enterprise Djio One — Backend Foundation
 
 > **A modular, production-ready enterprise backend built with FastAPI, SQLAlchemy 2.0 (Async), PostgreSQL, Pydantic v2, and UV.**  
 > Designed for scalable SaaS, CRM, and ERP applications with centralized Role-Based Access Control (RBAC), multi-version API architecture, and strict AI-assisted development standards.

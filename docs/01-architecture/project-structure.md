@@ -1,8 +1,8 @@
-CRM Platform — Project Structure and Architecture
+Djio One — Project Structure and Architecture
 
 1. Project Overview
 
-The CRM Platform is a backend application built with FastAPI, Python, SQLAlchemy, and PostgreSQL.
+The Djio One is a backend application built with FastAPI, Python, SQLAlchemy, and PostgreSQL.
 
 The application is designed to provide reusable APIs for customer relationship management and related business operations. Its architecture separates API routing, business logic, database access, authentication, authorization, and application configuration.
 
@@ -1103,7 +1103,7 @@ Verify route registration, database behavior, permissions, validation, and failu
 
 21. Summary
 
-The CRM Platform uses FastAPI as its HTTP layer, SQLAlchemy and PostgreSQL for persistence, Pydantic for API data validation, Alembic for schema migrations, JWT-based authentication, and RBAC for authorization.
+The Djio One uses FastAPI as its HTTP layer, SQLAlchemy and PostgreSQL for persistence, Pydantic for API data validation, Alembic for schema migrations, JWT-based authentication, and RBAC for authorization.
 
 The application uses a hybrid API architecture:
 

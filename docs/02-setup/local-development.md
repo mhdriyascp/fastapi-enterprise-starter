@@ -42,7 +42,7 @@ cp .env.example .env
 
 Ensure your `.env` contains valid database credentials and a generated JWT secret:
 ```dotenv
-APP_NAME=CRM Platform
+APP_NAME=Djio One
 APP_VERSION=1.0.0
 ENVIRONMENT=development
 DEBUG=true

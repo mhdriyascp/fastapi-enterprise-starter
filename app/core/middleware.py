@@ -1,4 +1,6 @@
-"""Enterprise middleware for request correlation and distributed tracing."""
+"""
+Enterprise middleware for request correlation and distributed tracing in the Djio One API.
+"""
 
 import uuid
 

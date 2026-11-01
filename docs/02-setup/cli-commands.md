@@ -1,6 +1,6 @@
-CRM Platform — Application Commands Reference
+Djio One — Application Commands Reference
 
-This document contains commonly used commands for developing, running, testing, and maintaining the CRM Platform.
+This document contains commonly used commands for developing, running, testing, and maintaining the Djio One.
 
 Run commands from the project root unless otherwise specified.
 

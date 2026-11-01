@@ -8,7 +8,7 @@ DEFAULT_SETTINGS = [
     {
         "category": "general",
         "key": "company_name",
-        "value": "Enterprise CRM Platform",
+        "value": "Enterprise Djio One",
         "value_type": "string",
         "label": "Company Legal Name",
         "description": "Primary organization brand name displayed across the platform and invoices.",

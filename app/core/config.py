@@ -1,3 +1,5 @@
+# Configuration settings for the Djio One API application.
+
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import field_validator
@@ -5,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    app_name: str = "CRM Platform API"
+    app_name: str = "Djio One API"
     app_version: str = "1.0.0"
     environment: str = "development"
     debug: bool = True
@@ -20,6 +22,15 @@ class Settings(BaseSettings):
 
     # Default application timezone
     app_timezone: str = "UTC"
+
+    @field_validator("debug", mode="before")
+    @classmethod
+    def assemble_debug(cls, value: object) -> bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.strip().lower() in ("true", "1", "yes", "on", "t")
+        return False
 
     # Cross-Origin Resource Sharing (CORS) origins
     cors_origins: list[str] = [
@@ -59,6 +70,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        extra="ignore",
     )
 
 

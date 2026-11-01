@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { AnimatedModal } from '@/components/ui/animated-modal';
 import { apiFetch } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/lib/toast-context';
@@ -1296,27 +1297,14 @@ export default function UsersPage() {
       {/* ========================================================================= */}
       {/* 1. Production-Ready User Detail Specification Inspector Modal             */}
       {/* ========================================================================= */}
-      {viewingUser && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="modal-backdrop"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setViewingUser(null);
-          }}
-        >
-          <div
-            className="modal-dialog card"
-            style={{
-              maxWidth: '680px',
-              padding: '2rem',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '1.25rem',
-              border: '1px solid var(--border-subtle)',
-              backgroundColor: 'var(--bg-surface)',
-            }}
-          >
+      <AnimatedModal
+        isOpen={!!viewingUser}
+        onClose={() => setViewingUser(null)}
+        maxWidth="680px"
+        padding="2rem"
+        dialogStyle={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', border: '1px solid var(--border-subtle)', backgroundColor: 'var(--bg-surface)' }}
+      >
+        {viewingUser && <>
             {/* Modal Header */}
             <div
               style={{
@@ -1562,34 +1550,20 @@ export default function UsersPage() {
                 Close Inspector
               </button>
             </div>
-          </div>
-        </div>
-      )}
+        </>}
+      </AnimatedModal>
 
       {/* ========================================================================= */}
       {/* 2. Create New User Modal                                                  */}
       {/* ========================================================================= */}
-      {isCreateModalOpen && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="modal-backdrop"
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !isCreating) setIsCreateModalOpen(false);
-          }}
-        >
-          <div
-            className="modal-dialog card"
-            style={{
-              maxWidth: '580px',
-              padding: '2rem',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '1.25rem',
-              border: '1px solid var(--border-subtle)',
-              backgroundColor: 'var(--bg-surface)',
-            }}
-          >
+      <AnimatedModal
+        isOpen={isCreateModalOpen}
+        onClose={() => { if (!isCreating) setIsCreateModalOpen(false); }}
+        maxWidth="580px"
+        padding="2rem"
+        dialogStyle={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', border: '1px solid var(--border-subtle)', backgroundColor: 'var(--bg-surface)' }}
+        disableBackdropClose={isCreating}
+      >
             {/* Header */}
             <div
               style={{
@@ -1864,34 +1838,20 @@ export default function UsersPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+      </AnimatedModal>
 
       {/* ========================================================================= */}
       {/* 3. Enterprise Edit User Modal                                             */}
       {/* ========================================================================= */}
-      {editingUser && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="modal-backdrop"
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !isSubmitting) setEditingUser(null);
-          }}
-        >
-          <div
-            className="modal-dialog card"
-            style={{
-              maxWidth: '580px',
-              padding: '2rem',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '1.25rem',
-              border: '1px solid var(--border-subtle)',
-              backgroundColor: 'var(--bg-surface)',
-            }}
-          >
+      <AnimatedModal
+        isOpen={!!editingUser}
+        onClose={() => setEditingUser(null)}
+        maxWidth="580px"
+        padding="2rem"
+        dialogStyle={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', border: '1px solid var(--border-subtle)', backgroundColor: 'var(--bg-surface)' }}
+        disableBackdropClose={isSubmitting}
+      >
+        {editingUser && <>
             {/* Header */}
             <div
               style={{
@@ -2150,9 +2110,8 @@ export default function UsersPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+        </>}
+      </AnimatedModal>
 
       {/* ========================================================================= */}
       {/* 3. Delete Confirmation Dialog                                             */}

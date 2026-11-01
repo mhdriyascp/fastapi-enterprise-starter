@@ -36,7 +36,7 @@ The System Settings domain governs platform-wide parameters, security policies, 
 
 | Category | Key | Production Default | Type | Public? | Description |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `general` | `company_name` | `"Enterprise CRM Platform"` | `string` | **Yes** | Organization name displayed in headers and emails |
+| `general` | `company_name` | `"Enterprise Djio One"` | `string` | **Yes** | Organization name displayed in headers and emails |
 | `general` | `support_email` | `"support@enterprise.local"`| `string` | **Yes** | Platform support contact address |
 | `general` | `default_timezone` | `"UTC"` | `string` | **Yes** | Default baseline IANA timezone |
 | `general` | `default_locale` | `"en-US"` | `string` | **Yes** | Standard regional locale |

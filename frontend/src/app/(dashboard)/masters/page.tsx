@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, Suspense, useCallback } from 'react';
+import { AnimatedModal } from '@/components/ui/animated-modal';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { apiFetch } from '@/lib/api-client';
 import { useToast } from '@/lib/toast-context';
@@ -1798,25 +1799,14 @@ function MastersWorkspace() {
       {/* ========================================================================= */}
       {/* View Detail Modal (.detail-spec-table) */}
       {/* ========================================================================= */}
-      {viewingRecord && (
-        <div
-          className="modal-backdrop"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setViewingRecord(null);
-          }}
-        >
-          <div
-            className="modal-dialog card"
-            style={{
-              maxWidth: '650px',
-              padding: '2rem',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '1.25rem',
-              border: '1px solid var(--border-subtle)',
-              backgroundColor: 'var(--bg-surface)',
-            }}
-          >
+      <AnimatedModal
+        isOpen={!!viewingRecord}
+        onClose={() => setViewingRecord(null)}
+        maxWidth="650px"
+        padding="2rem"
+        dialogStyle={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', border: '1px solid var(--border-subtle)', backgroundColor: 'var(--bg-surface)' }}
+      >
+        {viewingRecord && <>
             {/* Header */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '1rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -1926,32 +1916,19 @@ function MastersWorkspace() {
                 Close
               </button>
             </div>
-          </div>
-        </div>
-      )}
+        </>}
+      </AnimatedModal>
 
       {/* ========================================================================= */}
       {/* Create Modal */}
       {/* ========================================================================= */}
-      {isCreateModalOpen && (
-        <div
-          className="modal-backdrop"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setIsCreateModalOpen(false);
-          }}
-        >
-          <div
-            className="modal-dialog card"
-            style={{
-              maxWidth: '560px',
-              padding: '2rem',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '1.25rem',
-              border: '1px solid var(--border-subtle)',
-              backgroundColor: 'var(--bg-surface)',
-            }}
-          >
+      <AnimatedModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        maxWidth="560px"
+        padding="2rem"
+        dialogStyle={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', border: '1px solid var(--border-subtle)', backgroundColor: 'var(--bg-surface)' }}
+      >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '1rem' }}>
               <div>
                 <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
@@ -2538,32 +2515,18 @@ function MastersWorkspace() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+      </AnimatedModal>
 
       {/* ========================================================================= */}
       {/* Edit Modal */}
       {/* ========================================================================= */}
-      {editingRecord && (
-        <div
-          className="modal-backdrop"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setEditingRecord(null);
-          }}
-        >
-          <div
-            className="modal-dialog card"
-            style={{
-              maxWidth: '560px',
-              padding: '2rem',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '1.25rem',
-              border: '1px solid var(--border-subtle)',
-              backgroundColor: 'var(--bg-surface)',
-            }}
-          >
+      <AnimatedModal
+        isOpen={!!editingRecord}
+        onClose={() => setEditingRecord(null)}
+        maxWidth="560px"
+        padding="2rem"
+        dialogStyle={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', border: '1px solid var(--border-subtle)', backgroundColor: 'var(--bg-surface)' }}
+      >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '1rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <div
@@ -3134,9 +3097,7 @@ function MastersWorkspace() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+      </AnimatedModal>
 
       {/* ========================================================================= */}
       {/* Deactivate / Delete Confirmation Dialog */}

@@ -1,3 +1,7 @@
+"""
+Security utilities for the Djio One API application.
+"""
+
 import hashlib
 import uuid
 from dataclasses import dataclass
@@ -19,8 +23,6 @@ password_hasher = PasswordHasher()
 
 
 # Password security
-
-
 def hash_password(password: str) -> str:
     return password_hasher.hash(password)
 
@@ -113,6 +115,7 @@ def decode_access_token(token: str) -> UUID | None:
         return None
 
 
+# Refresh-token decoding, validation, and security
 def decode_refresh_token(
     token: str,
 ) -> tuple[UUID, UUID] | None:

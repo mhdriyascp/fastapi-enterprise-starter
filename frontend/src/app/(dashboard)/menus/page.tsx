@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useMemo } from 'react';
+import { AnimatedModal } from '@/components/ui/animated-modal';
 import { apiFetch } from '@/lib/api-client';
 import { MenuItem, MenuCreateInput, MenuUpdateInput } from '@/lib/types';
 import { useMenus } from '@/hooks/use-menus';
@@ -1297,24 +1298,14 @@ export default function MenusPage() {
       )}
 
       {/* Individual Menu Item View Modal */}
-      {viewingMenu && (
-        <div
-          className="modal-backdrop"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setViewingMenu(null);
-          }}
-        >
-          <div
-            className="modal-dialog glass-panel"
-            style={{
-              maxWidth: '680px',
-              padding: '2rem',
-              borderRadius: 'var(--radius-xl)',
-              maxHeight: '90vh',
-              overflowY: 'auto',
-              border: '1px solid var(--border-color)',
-            }}
-          >
+      <AnimatedModal
+        isOpen={!!viewingMenu}
+        onClose={() => setViewingMenu(null)}
+        maxWidth="680px"
+        padding="2rem"
+        dialogStyle={{ borderRadius: 'var(--radius-xl)', maxHeight: '90vh', overflowY: 'auto', border: '1px solid var(--border-color)' }}
+      >
+        {viewingMenu && <>
             {/* Header */}
             <div
               style={{
@@ -1502,26 +1493,18 @@ export default function MenusPage() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+        </>}
+      </AnimatedModal>
 
       {/* Create / Edit Modal Dialog */}
-      {modalMode && (
-        <div className="modal-backdrop">
-          <div
-            className="modal-dialog glass-panel"
-            style={{
-              width: '100%',
-              maxWidth: '740px',
-              padding: 'clamp(1.5rem, 4vw, 2.25rem)',
-              boxShadow: 'var(--shadow-xl)',
-              maxHeight: '90vh',
-              overflowY: 'auto',
-              borderRadius: 'var(--radius-xl)',
-              border: '1px solid var(--border-color)',
-            }}
-          >
+      <AnimatedModal
+        isOpen={!!modalMode}
+        onClose={() => setModalMode(null)}
+        maxWidth="740px"
+        padding="clamp(1.5rem, 4vw, 2.25rem)"
+        dialogStyle={{ width: '100%', boxShadow: 'var(--shadow-xl)', maxHeight: '90vh', overflowY: 'auto', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border-color)' }}
+        disableBackdropClose={isSubmitting}
+      >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', gap: '0.75rem' }}>
               <div>
                 <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)' }}>
@@ -1767,9 +1750,7 @@ export default function MenusPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+      </AnimatedModal>
 
       {/* Delete Confirmation Modal Dialog */}
       <ConfirmationModal

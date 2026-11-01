@@ -2,7 +2,7 @@
 
 ## Overview
 
-The **Menus** domain module manages hierarchical navigation structures in the CRM platform. Menu visibility is dynamically determined and enforced based on the currently authenticated user's assigned **roles** and **permissions**.
+The **Menus** domain module manages hierarchical navigation structures in the Djio One. Menu visibility is dynamically determined and enforced based on the currently authenticated user's assigned **roles** and **permissions**.
 
 - **Source Code**: [`app/modules/menus/`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/app/modules/menus/)
 - **Models**: [`app/modules/menus/models.py`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/app/modules/menus/models.py)
@@ -90,6 +90,12 @@ The Next.js management dashboard provides a full visual CRUD workspace for RBAC 
 - **Interactive Tree View**: Visualizes nested parent/child navigation nodes with real-time active status badges, `In Header: Yes/No` badges, quick `+ Add Child`, `Edit`, and `Delete` triggers.
 - **High-Density Table View**: Searchable catalog of all menu items with search by title, code, or path, segmented status filters (`All (N)`, `Active (N)`, `Inactive (N)`, `Deleted (N)`), hierarchy level selector, and a dedicated **Header Nav** column with one-click toggles.
 - **Top Header Display Toggle**: In addition to sidebar navigation, administrators can toggle `show_in_header` on any menu item or via Create/Edit modals (`Show in Top Header Navigation bar`), determining which items appear in the dedicated horizontal sub-header navigation.
+- **Dynamic Dashboard Sidebar & Submenu Resolution**:
+  - The authenticated dashboard sidebar and contextual sub-sidebar are rendered directly from `GET /api/v1/menus/my-menus` (no hardcoded sidebar route definitions).
+  - Primary items and nested submenu items are sorted client-side by `sort_order` (fallback: `order_no`) and title to preserve deterministic order parity with database configuration.
+  - The contextual sub-sidebar automatically follows the currently active parent menu and renders recursive descendants (including grouped label rows for non-clickable parent categories), resolving prior gaps where submenu sections could disappear on valid routes.
+  - A dedicated **Menus** label is rendered above primary navigation items, and submenu entries remain available on mobile/tablet through an in-rail mobile submenu block when the secondary desktop sidebar is hidden.
+  - The dashboard shell uses a responsive, enterprise layout with a compact search-first header and a clean navigation rail optimized for ERP/CRM workflows without removing route functionality.
 - **Two-Tier Header Navigation & RBAC Filtering**:
   - The application header uses a two-tier layout:
     - **Top Row**: Full-width global search (`maxWidth: 560px`) and top-right actions (Theme, Notifications, Profile Menu, Pulse Status).

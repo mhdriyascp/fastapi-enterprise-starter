@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useMemo } from 'react';
+import { AnimatedModal } from '@/components/ui/animated-modal';
 import { apiFetch } from '@/lib/api-client';
 import { PagedResponse, Organization, OrganizationCreateInput, OrganizationUpdateInput } from '@/lib/types';
 import {
@@ -1160,21 +1161,14 @@ export default function OrganizationsPage() {
       )}
 
       {/* Individual Organization View Modal */}
-      {viewingOrg && (
-        <div
-          className="modal-backdrop"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setViewingOrg(null);
-          }}
-        >
-          <div
-            className="modal-dialog glass-panel"
-            style={{
-              maxWidth: '680px',
-              padding: '2rem',
-              border: '1px solid var(--border-color)',
-            }}
-          >
+      <AnimatedModal
+        isOpen={!!viewingOrg}
+        onClose={() => setViewingOrg(null)}
+        maxWidth="680px"
+        padding="2rem"
+        dialogStyle={{ border: '1px solid var(--border-color)' }}
+      >
+        {viewingOrg && <>
             {/* Header */}
             <div
               style={{
@@ -1409,22 +1403,17 @@ export default function OrganizationsPage() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+        </>}
+      </AnimatedModal>
 
       {/* Create / Edit Organization Modal */}
-      {modalMode && (
-        <div
-          className="modal-backdrop"
-        >
-          <div
-            className="modal-dialog glass-panel"
-            style={{
-              maxWidth: '560px',
-              padding: '2rem',
-            }}
-          >
+      <AnimatedModal
+        isOpen={!!modalMode}
+        onClose={() => setModalMode(null)}
+        maxWidth="560px"
+        padding="2rem"
+        disableBackdropClose={isSubmitting}
+      >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
               <div>
                 <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)' }}>
@@ -1723,9 +1712,7 @@ export default function OrganizationsPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+      </AnimatedModal>
 
       {/* Delete Confirmation Modal */}
       <ConfirmationModal

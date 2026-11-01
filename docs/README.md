@@ -1,6 +1,6 @@
-# CRM Platform — Documentation Hub
+# Djio One — Documentation Hub
 
-Welcome to the central technical and business documentation for the **Enterprise CRM Platform Backend**. This directory contains modular, structured documentation designed for software engineers, solution architects, business analysts, and AI coding agents.
+Welcome to the central technical and business documentation for the **Enterprise Djio One Backend**. This directory contains modular, structured documentation designed for software engineers, solution architects, business analysts, and AI coding agents.
 
 ---
 

@@ -54,7 +54,7 @@ RUN uv sync --frozen --no-dev --no-install-project
 USER appuser
 
 # 3. Production ASGI launch:
-CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
 ```
 
 ---

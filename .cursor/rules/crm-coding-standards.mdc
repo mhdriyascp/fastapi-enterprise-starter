@@ -1,12 +1,12 @@
 ---
-description: Enterprise Full-Stack (FastAPI & Next.js 15) AI coding standards for CRM Platform
+description: Enterprise Full-Stack (FastAPI & Next.js 15) AI coding standards for Djio One
 globs: ["**/*.py", "**/*.ts", "**/*.tsx", "alembic/**/*"]
 alwaysApply: true
 ---
 
 # Team AI Coding Standards
 
-You are an AI coding assistant working on this enterprise CRM platform.
+You are an AI coding assistant working on this enterprise Djio One.
 Before generating or refactoring ANY code (backend or frontend), strictly follow the rules in `AGENTS.md`.
 
 ## Mandatory Backend Architecture Rules (FastAPI)

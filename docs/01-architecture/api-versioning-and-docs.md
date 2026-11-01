@@ -2,7 +2,7 @@
 
 ## Overview
 
-The CRM platform is engineered to support seamless API evolution without disrupting existing API consumers. The system exposes multiple API namespaces alongside completely **isolated, interactive Scalar documentation portals** for each API version.
+The Djio One is engineered to support seamless API evolution without disrupting existing API consumers. The system exposes multiple API namespaces alongside completely **isolated, interactive Scalar documentation portals** for each API version.
 
 ---
 

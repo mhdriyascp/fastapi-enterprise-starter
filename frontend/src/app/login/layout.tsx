@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
   title: 'Secure Authentication & Sign In',
-  description: 'Sign in to the Enterprise CRM Platform with your corporate credentials, SSO, or multi-factor token.',
+  description: 'Sign in to the Enterprise Djio One with your corporate credentials, SSO, or multi-factor token.',
   robots: {
     index: true,
     follow: true,

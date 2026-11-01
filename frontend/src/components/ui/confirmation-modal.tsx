@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useEffect, useCallback } from 'react';
+import React from 'react';
 import { AlertCircle, AlertTriangle, Loader2 } from 'lucide-react';
 import { Button } from './button';
+import { AnimatedModal } from './animated-modal';
 
 export type ConfirmationModalVariant = 'danger' | 'warning' | 'primary';
 
@@ -54,30 +55,6 @@ export function ConfirmationModal({
   isLoading = false,
   icon,
 }: ConfirmationModalProps) {
-  // ESC key listener to safely dismiss modal
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !isLoading) {
-        onClose();
-      }
-    },
-    [onClose, isLoading]
-  );
-
-  useEffect(() => {
-    if (isOpen) {
-      window.addEventListener('keydown', handleKeyDown);
-      // Lock body scroll when modal is active
-      document.body.style.overflow = 'hidden';
-    }
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = '';
-    };
-  }, [isOpen, handleKeyDown]);
-
-  if (!isOpen) return null;
-
   // Variant design tokens
   const isDanger = variant === 'danger';
   const isWarning = variant === 'warning';
@@ -103,45 +80,20 @@ export function ConfirmationModal({
   const DefaultIcon = isDanger ? AlertCircle : isWarning ? AlertTriangle : AlertCircle;
 
   return (
-    <div
-      className="modal-backdrop"
-      onClick={(e) => {
-        if (e.target === e.currentTarget && !isLoading) {
-          onClose();
-        }
-      }}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="confirm-dialog-title"
-      style={{
-        position: 'fixed',
-        inset: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.65)',
-        backdropFilter: 'blur(8px)',
-        WebkitBackdropFilter: 'blur(8px)',
+    <AnimatedModal
+      isOpen={isOpen}
+      onClose={isLoading ? undefined : onClose}
+      disableBackdropClose={isLoading}
+      maxWidth="460px"
+      padding="1.75rem"
+      dialogStyle={{
         display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 9999,
-        padding: '1.25rem',
+        flexDirection: 'column',
+        gap: '1.25rem',
+        border: dialogBorder,
       }}
+      ariaLabel={title}
     >
-      <div
-        className="modal-dialog card glass-panel"
-        style={{
-          width: '100%',
-          maxWidth: '460px',
-          padding: '1.75rem',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '1.25rem',
-          border: dialogBorder,
-          backgroundColor: 'var(--bg-surface)',
-          borderRadius: 'var(--radius-lg)',
-          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.6)',
-          animation: 'modalFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
-        }}
-      >
         {/* Header Icon + Title */}
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.85rem' }}>
           <div
@@ -224,7 +176,6 @@ export function ConfirmationModal({
             <span>{isLoading ? 'Processing...' : confirmLabel}</span>
           </button>
         </div>
-      </div>
-    </div>
+    </AnimatedModal>
   );
 }

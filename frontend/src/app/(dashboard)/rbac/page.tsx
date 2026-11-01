@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useMemo, Suspense } from 'react';
+import { AnimatedModal } from '@/components/ui/animated-modal';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { apiFetch } from '@/lib/api-client';
 import { useToast } from '@/lib/toast-context';
@@ -2132,24 +2133,14 @@ function RbacWorkspace() {
       )}
 
       {/* Individual Role View Modal */}
-      {viewingRole && (
-        <div
-          className="modal-backdrop"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setViewingRole(null);
-          }}
-        >
-          <div
-            className="modal-dialog glass-panel"
-            style={{
-              maxWidth: '680px',
-              padding: '2rem',
-              borderRadius: 'var(--radius-xl)',
-              maxHeight: '90vh',
-              overflowY: 'auto',
-              border: '1px solid var(--border-color)',
-            }}
-          >
+      <AnimatedModal
+        isOpen={!!viewingRole}
+        onClose={() => setViewingRole(null)}
+        maxWidth="680px"
+        padding="2rem"
+        dialogStyle={{ borderRadius: 'var(--radius-xl)', maxHeight: '90vh', overflowY: 'auto', border: '1px solid var(--border-color)' }}
+      >
+        {viewingRole && <>
             {/* Header */}
             <div
               style={{
@@ -2317,29 +2308,18 @@ function RbacWorkspace() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+        </>}
+      </AnimatedModal>
 
       {/* Individual Permission View Modal */}
-      {viewingPermission && (
-        <div
-          className="modal-backdrop"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setViewingPermission(null);
-          }}
-        >
-          <div
-            className="modal-dialog glass-panel"
-            style={{
-              maxWidth: '640px',
-              padding: '2rem',
-              borderRadius: 'var(--radius-xl)',
-              maxHeight: '90vh',
-              overflowY: 'auto',
-              border: '1px solid var(--border-color)',
-            }}
-          >
+      <AnimatedModal
+        isOpen={!!viewingPermission}
+        onClose={() => setViewingPermission(null)}
+        maxWidth="640px"
+        padding="2rem"
+        dialogStyle={{ borderRadius: 'var(--radius-xl)', maxHeight: '90vh', overflowY: 'auto', border: '1px solid var(--border-color)' }}
+      >
+        {viewingPermission && <>
             {/* Header */}
             <div
               style={{
@@ -2492,22 +2472,18 @@ function RbacWorkspace() {
                 <span>Edit Permission</span>
               </button>
             </div>
-          </div>
-        </div>
-      )}
+        </>}
+      </AnimatedModal>
 
       {/* Role Create/Edit Modal */}
-      {roleModalMode && (
-        <div className="modal-backdrop">
-          <div
-            className="glass-panel"
-            style={{
-              width: '100%',
-              maxWidth: '480px',
-              padding: '2rem',
-              boxShadow: 'var(--shadow-lg)',
-            }}
-          >
+      <AnimatedModal
+        isOpen={!!roleModalMode}
+        onClose={() => setRoleModalMode(null)}
+        maxWidth="480px"
+        padding="2rem"
+        dialogStyle={{ width: '100%', boxShadow: 'var(--shadow-lg)' }}
+        disableBackdropClose={isSubmitting}
+      >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
               <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)' }}>
                 {roleModalMode === 'create' ? 'Create Business Role' : 'Edit Business Role'}
@@ -2636,22 +2612,17 @@ function RbacWorkspace() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+      </AnimatedModal>
 
       {/* Permission Create/Edit Modal */}
-      {permissionModalMode && (
-        <div className="modal-backdrop">
-          <div
-            className="glass-panel"
-            style={{
-              width: '100%',
-              maxWidth: '480px',
-              padding: '2rem',
-              boxShadow: 'var(--shadow-lg)',
-            }}
-          >
+      <AnimatedModal
+        isOpen={!!permissionModalMode}
+        onClose={() => setPermissionModalMode(null)}
+        maxWidth="480px"
+        padding="2rem"
+        dialogStyle={{ width: '100%', boxShadow: 'var(--shadow-lg)' }}
+        disableBackdropClose={isSubmitting}
+      >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
               <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)' }}>
                 {permissionModalMode === 'create' ? 'Register New Permission' : 'Edit Permission'}
@@ -2857,9 +2828,7 @@ function RbacWorkspace() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+      </AnimatedModal>
 
       {/* Delete Role Confirmation Dialog */}
       <ConfirmationModal

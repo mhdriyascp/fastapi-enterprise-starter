@@ -2,7 +2,7 @@
 
 ## Overview
 
-The CRM platform frontend is an enterprise-grade, responsive dashboard built with **React and Next.js (App Router)** in TypeScript. It is integrated directly within the repository in the [`frontend/`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/frontend/) directory as a modular monorepo.
+The Djio One frontend is an enterprise-grade, responsive dashboard built with **React and Next.js (App Router)** in TypeScript. It is integrated directly within the repository in the [`frontend/`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/frontend/) directory as a modular monorepo. The dashboard shell emphasizes a clean corporate aesthetic, a search-first header, dynamic RBAC navigation, and a responsive multi-tier sidebar suited to ERP/CRM workflows.
 
 ---
 
@@ -142,8 +142,9 @@ Sidebar navigation items are **never hardcoded in frontend components**. Instead
 2. The backend evaluates the user's roles and permissions, returning only authorized navigation items structured as a hierarchical tree.
 3. The Sidebar dynamically renders:
    - **Deterministic Sort Order**: Recursively sorted by `sort_order` (or `order_no`) in ascending sequence at both parent and child levels, with stable alphabetical tie-breaking.
-   - Top-level modules with icons and nested sub-menu accordions.
-   - Active route highlighting based on `window.location.pathname`.
+   - A two-tier layout: primary rail from top-level menus and a contextual sub-sidebar from the active parent's children.
+   - Parent rows with child menus open the contextual submenu on click (accordion-style selection), force-expand the sub-sidebar if it was collapsed, and still synchronize to the active URL/tab.
+   - Active route highlighting based on pathname + query tab matching (e.g., `/rbac?tab=roles`).
 
 ---
 
@@ -239,10 +240,8 @@ The dedicated RBAC administration suite provides granular security orchestration
   - Defined in [`frontend/src/app/globals.css`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/frontend/src/app/globals.css).
   - Replaces erratic browser default `<select>` rendering across macOS, Safari, and Chrome with cross-browser SVG chevron down arrows, consistent padding (`padding: 0.55rem 2.5rem 0.55rem 0.85rem`), and theme-aware `<option>` backgrounds (`#1e293b` in dark mode, `#ffffff` in light mode).
   - Resolves option text contrast and selection desynchronization in the RBAC Access Matrix role toolbar ("Configuring Privileges for Role:"), Dashboard period selector, and Menu hierarchy selectors.
-  - Only the active menu's parent category expands by default, while non-active categories remain collapsed to keep navigation clean and uncluttered. Users can still manually toggle any category open or closed.
-  - Whenever an active route or query tab (e.g. `/rbac?tab=roles`, `/rbac?tab=matrix`) is visited, its parent category automatically expands to reveal the selected menu.
-  - Exactly one menu item receives the active selection styling (`var(--accent-glow)` and primary border accent), preventing duplicate parent-child or sibling highlights.
-  - Parent categories with children do NOT trigger route navigation; clicking anywhere on the parent row toggles the submenu expansion exclusively. Navigation is reserved for child/leaf menu items without children.
+  - For responsive ergonomics, the dashboard shell now suppresses breadcrumb pills on tablet/mobile widths and expands header search width while preserving desktop behavior.
+  - The app shell enforces `overflow-x: hidden` and mobile off-canvas width capping (`min(88vw, 320px)`) to prevent horizontal clipping on compact devices.
 - **Select2-Style Searchable Combobox Primitive (`SearchableSelect`)**:
   - Implemented in [`frontend/src/components/ui/searchable-select.tsx`](file:///Users/mr/Documents/My-Workspace/Python%20Learning%20/crm-platform/frontend/src/components/ui/searchable-select.tsx).
   - High-performance modern React Select2 equivalent providing searchable dropdown functionality without jQuery or external library bloat.
@@ -267,8 +266,5 @@ All commands must be run within the `frontend/` directory:
 | **Type Check Only** | `npx tsc --noEmit` | Strict TypeScript compiler check without emitting output files. |
 | **Clean Build Cache** | `rm -rf .next` | Wipes the Next.js compilation cache when resolving stale Turbopack states. |
 | **Mandatory Pre-Commit Gate** | `cd frontend && npm run lint && npm run build` | Full definition of done (DoD) verification gate before pushing code. |
-
-
-
 
 

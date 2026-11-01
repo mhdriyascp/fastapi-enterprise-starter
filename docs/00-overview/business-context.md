@@ -4,7 +4,7 @@
 
 Enterprise application development routinely incurs significant repetitive cost: every new business platform (CRM, ERP, Billing, Inventory, or AI SaaS) requires building user authentication, role-based access control (RBAC), multi-tenancy, auditability, database migration pipelines, and API documentation from scratch.
 
-The **CRM Platform Backend Starter** solves this problem by delivering a **pre-built, hardened, enterprise-grade backend foundation**. It allows engineering teams to focus immediately on domain business logic rather than re-architecting infrastructure.
+The **Djio One Backend Starter** solves this problem by delivering a **pre-built, hardened, enterprise-grade backend foundation**. It allows engineering teams to focus immediately on domain business logic rather than re-architecting infrastructure.
 
 ---
 

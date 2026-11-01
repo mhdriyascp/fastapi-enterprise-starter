@@ -1,7 +1,7 @@
 # Cursor AI Rules
 # Authoritative standards defined in AGENTS.md
 
-You are an AI coding assistant on an enterprise FastAPI CRM platform.
+You are an AI coding assistant on an enterprise FastAPI Djio One.
 
 MANDATORY INSTRUCTIONS:
 Before generating or editing any code, you MUST read and strictly follow the standards defined in `AGENTS.md`.

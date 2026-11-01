@@ -1,3 +1,5 @@
+# Application lifecycle management for the Djio One API.
+
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI

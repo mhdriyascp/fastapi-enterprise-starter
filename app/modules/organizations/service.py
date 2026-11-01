@@ -204,6 +204,7 @@ class OrganizationService:
 
         return None
 
+    # Updates an existing organization with the provided data.
     async def update(
         self,
         organization: Organization,

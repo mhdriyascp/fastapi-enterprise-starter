@@ -13,7 +13,7 @@ Application configuration is centralized under [`app/core/config.py`](file:///Us
 
 | Variable | Type | Default | Description |
 |---|---|---|---|
-| `APP_NAME` | `str` | `"CRM Platform"` | Name displayed in Scalar API documentation and logs. |
+| `APP_NAME` | `str` | `"Djio One"` | Name displayed in Scalar API documentation and logs. |
 | `APP_VERSION` | `str` | `"1.0.0"` | Current version string of the platform. |
 | `ENVIRONMENT` | `str` | `"development"` | Environment identifier (`development`, `staging`, `production`). |
 | `DEBUG` | `bool` | `false` | Enables verbose stack traces and debug output. |

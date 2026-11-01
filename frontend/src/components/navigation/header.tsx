@@ -32,6 +32,7 @@ import {
   Clock,
   Coins,
   History,
+  Sparkles,
 } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { usePublicSettings } from '@/lib/use-public-settings';
@@ -313,6 +314,20 @@ function getHeaderMenuIcon(icon: string | null, size = 15) {
   return <Layers size={size} />;
 }
 
+function sortMenuTree(items: MenuItem[]): MenuItem[] {
+  return [...items]
+    .sort((a, b) => {
+      const left = a.sort_order ?? a.order_no ?? 0;
+      const right = b.sort_order ?? b.order_no ?? 0;
+      if (left !== right) return left - right;
+      return a.title.localeCompare(b.title);
+    })
+    .map((item) => ({
+      ...item,
+      children: sortMenuTree(item.children ?? []),
+    }));
+}
+
 /**
  * Enterprise Header component.
  * Features:
@@ -336,8 +351,11 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
 
   const headerMenus = useMemo(() => {
     if (!menus) return [];
-    return menus.filter(
-      (m) => m.show_in_header !== false && !m.is_deleted && m.is_active !== false
+    return sortMenuTree(menus).filter(
+      (menu) =>
+        menu.show_in_header !== false &&
+        !menu.is_deleted &&
+        menu.is_active !== false
     );
   }, [menus]);
 
@@ -364,15 +382,19 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
   };
 
   useEffect(() => {
-    updateScrollButtons();
+    // Run after paint so the scroll track has its rendered width
+    const id = requestAnimationFrame(() => {
+      updateScrollButtons();
+    });
     const el = subnavScrollRef.current;
-    if (!el) return;
+    if (!el) return () => cancelAnimationFrame(id);
     const observer = new ResizeObserver(() => {
       updateScrollButtons();
     });
     observer.observe(el);
     window.addEventListener('resize', updateScrollButtons);
     return () => {
+      cancelAnimationFrame(id);
       observer.disconnect();
       window.removeEventListener('resize', updateScrollButtons);
     };
@@ -833,19 +855,11 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
 
   return (
     <header className="top-header">
-      {/* Top Row: Left-Aligned Search and Right Action Controls */}
+      {/* Top Row */}
       <div className="top-header-main">
-        {/* Left Area: Mobile Navigation Toggle & Left-Aligned Global Search */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.85rem',
-            flex: 1,
-            maxWidth: '560px',
-            minWidth: 0,
-          }}
-        >
+
+        {/* Left: Mobile toggle + Search */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flex: 1, minWidth: 0 }}>
           {onToggleMobileSidebar && (
             <button
               type="button"
@@ -858,201 +872,108 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
             </button>
           )}
 
-          {/* Global Search Bar with Auto-Suggestions Dropdown (Left Aligned) */}
+          {/* Search */}
           <div
             ref={searchContainerRef}
-            style={{
-              position: 'relative',
-              width: '100%',
-              maxWidth: '560px',
-            }}
+            className="header-search-wrap"
+            style={{ position: 'relative', width: '100%', maxWidth: '520px', flexShrink: 1 }}
           >
-        <Search
-          size={16}
-          style={{
-            position: 'absolute',
-            left: '0.85rem',
-            top: '50%',
-            transform: 'translateY(-50%)',
-            color: 'var(--text-muted)',
-            pointerEvents: 'none',
-          }}
-        />
-        <input
-          ref={searchInputRef}
-          type="text"
-          placeholder="Search routes, modules, accounts... (⌘K)"
-          value={searchQuery}
-          onChange={(e) => {
-            setSearchQuery(e.target.value);
-            setIsSearchOpen(true);
-            setSelectedSearchIndex(0);
-          }}
-          onFocus={() => setIsSearchOpen(true)}
-          onKeyDown={handleSearchKeyDown}
-          className="input-field"
-          style={{
-            paddingLeft: '2.4rem',
-            paddingRight: '3.6rem',
-            height: '40px',
-            fontSize: '0.85rem',
-            background: 'var(--bg-card)',
-            borderColor: isSearchOpen ? 'var(--accent-primary)' : 'var(--border-subtle)',
-            boxShadow: isSearchOpen ? '0 0 0 2px var(--accent-glow)' : 'none',
-            transition: 'var(--transition)',
-          }}
-        />
-        {searchQuery ? (
-          <button
-            type="button"
-            onClick={() => {
-              setSearchQuery('');
-              setIsSearchOpen(false);
-            }}
-            style={{
-              position: 'absolute',
-              right: '0.75rem',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              background: 'transparent',
-              border: 'none',
-              color: 'var(--text-muted)',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-            }}
-          >
-            <X size={14} />
-          </button>
-        ) : (
-          <span
-            style={{
-              position: 'absolute',
-              right: '0.75rem',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              fontSize: '0.6875rem',
-              padding: '0.15rem 0.35rem',
-              borderRadius: 'var(--radius-sm)',
-              background: 'var(--border-subtle)',
-              color: 'var(--text-muted)',
-              fontWeight: 600,
-              pointerEvents: 'none',
-            }}
-          >
-            ⌘K
-          </span>
-        )}
-
-        {/* Floating Auto-Suggestions Dropdown */}
-        {isSearchOpen && searchQuery.trim() && (
-          <div
-            style={{
-              position: 'absolute',
-              top: 'calc(100% + 8px)',
-              left: 0,
-              right: 0,
-              zIndex: 9999,
-              backgroundColor: 'var(--bg-surface)',
-              boxShadow: '0 16px 36px -4px rgba(0, 0, 0, 0.65), 0 4px 12px rgba(0, 0, 0, 0.35)',
-              padding: '0.5rem',
-              borderRadius: 'var(--radius-lg)',
-              maxHeight: '380px',
-              overflowY: 'auto',
-              border: '1px solid var(--border-color)',
-              animation: 'fadeIn 0.15s ease-out',
-            }}
-          >
-            <div
+            <Search size={15} style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
+            <input
+              ref={searchInputRef}
+              type="text"
+              placeholder="Search... (⌘K)"
+              value={searchQuery}
+              onChange={(e) => { setSearchQuery(e.target.value); setIsSearchOpen(true); setSelectedSearchIndex(0); }}
+              onFocus={() => setIsSearchOpen(true)}
+              onKeyDown={handleSearchKeyDown}
+              className="input-field"
               style={{
-                fontSize: '0.6875rem',
-                fontWeight: 700,
-                textTransform: 'uppercase',
-                letterSpacing: '0.08em',
-                color: 'var(--text-muted)',
-                padding: '0.4rem 0.75rem',
-                display: 'flex',
-                justifyContent: 'space-between',
+                paddingLeft: '2.25rem',
+                paddingRight: '3.2rem',
+                height: '38px',
+                fontSize: '0.84rem',
+                background: 'var(--bg-input)',
+                borderColor: isSearchOpen ? 'var(--accent-primary)' : 'var(--border-subtle)',
+                boxShadow: isSearchOpen ? '0 0 0 2px var(--accent-glow)' : 'none',
+                transition: 'var(--transition)',
               }}
-            >
-              <span>Navigation Suggestions</span>
-              <span>{suggestions.length} matching</span>
-            </div>
-
-            {suggestions.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                {suggestions.map((item, idx) => {
-                  const isSelected = idx === selectedSearchIndex;
-                  return (
-                    <div
-                      key={item.id}
-                      onClick={() => handleSelectRoute(item.path)}
-                      onMouseEnter={() => setSelectedSearchIndex(idx)}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: '0.75rem',
-                        padding: '0.65rem 0.75rem',
-                        borderRadius: 'var(--radius-md)',
-                        background: isSelected ? 'var(--accent-glow)' : 'transparent',
-                        cursor: 'pointer',
-                        transition: 'background 0.12s ease',
-                      }}
-                    >
-                      <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <span style={{ fontWeight: 600, fontSize: '0.85rem', color: isSelected ? 'var(--accent-primary)' : 'var(--text-primary)' }}>
-                            {item.title}
-                          </span>
-                          <span
-                            className="badge badge-neutral"
-                            style={{ fontSize: '0.65rem', padding: '0.1rem 0.35rem' }}
-                          >
-                            {item.category}
-                          </span>
-                        </div>
-                        <div
-                          style={{
-                            fontSize: '0.75rem',
-                            color: 'var(--text-muted)',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                            marginTop: '0.15rem',
-                          }}
-                        >
-                          {item.description}
-                        </div>
-                      </div>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-muted)', flexShrink: 0 }}>
-                        <code style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{item.path}</code>
-                        <ArrowRight size={13} style={{ color: isSelected ? 'var(--accent-primary)' : 'var(--text-muted)' }} />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+            />
+            {searchQuery ? (
+              <button type="button" onClick={() => { setSearchQuery(''); setIsSearchOpen(false); }} style={{ position: 'absolute', right: '0.65rem', top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '2px' }}>
+                <X size={13} />
+              </button>
             ) : (
-              <div style={{ padding: '1.25rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.825rem' }}>
-                No routes or pages found matching &ldquo;{searchQuery}&rdquo;.
+              <span style={{ position: 'absolute', right: '0.65rem', top: '50%', transform: 'translateY(-50%)', fontSize: '0.65rem', padding: '0.12rem 0.32rem', borderRadius: 'var(--radius-sm)', background: 'var(--bg-hover)', color: 'var(--text-muted)', fontWeight: 600, pointerEvents: 'none', border: '1px solid var(--border-subtle)' }}>⌘K</span>
+            )}
+
+            {/* Search suggestions dropdown */}
+            {isSearchOpen && searchQuery.trim() && (
+              <div style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, right: 0, zIndex: 9999, backgroundColor: 'var(--bg-surface)', boxShadow: '0 16px 36px -4px rgba(0,0,0,0.65), 0 4px 12px rgba(0,0,0,0.35)', padding: '0.5rem', borderRadius: 'var(--radius-lg)', maxHeight: '380px', overflowY: 'auto', border: '1px solid var(--border-color)', animation: 'fadeIn 0.15s ease-out' }}>
+                <div style={{ fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', padding: '0.4rem 0.75rem', display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Navigation Suggestions</span>
+                  <span>{suggestions.length} matching</span>
+                </div>
+                {suggestions.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                    {suggestions.map((item, idx) => {
+                      const isSelected = idx === selectedSearchIndex;
+                      return (
+                        <div key={item.id} onClick={() => handleSelectRoute(item.path)} onMouseEnter={() => setSelectedSearchIndex(idx)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', padding: '0.65rem 0.75rem', borderRadius: 'var(--radius-md)', background: isSelected ? 'var(--accent-glow)' : 'transparent', cursor: 'pointer', transition: 'background 0.12s ease' }}>
+                          <div style={{ minWidth: 0, flex: 1 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <span style={{ fontWeight: 600, fontSize: '0.85rem', color: isSelected ? 'var(--accent-primary)' : 'var(--text-primary)' }}>{item.title}</span>
+                              <span className="badge badge-neutral" style={{ fontSize: '0.65rem', padding: '0.1rem 0.35rem' }}>{item.category}</span>
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '0.15rem' }}>{item.description}</div>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-muted)', flexShrink: 0 }}>
+                            <code style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{item.path}</code>
+                            <ArrowRight size={13} style={{ color: isSelected ? 'var(--accent-primary)' : 'var(--text-muted)' }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div style={{ padding: '1.25rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.825rem' }}>No routes or pages found matching &ldquo;{searchQuery}&rdquo;.</div>
+                )}
               </div>
             )}
           </div>
-        )}
         </div>
-      </div>
 
-      {/* Right Controls */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', flexShrink: 0 }}>
-        {/* Theme Mode Selector as Dropdown (configurable via system settings) */}
-        {showThemeToggle && (
-          <ThemeToggle variant="dropdown" />
-        )}
+        {/* Right Controls */}
+        <div className="header-right-controls" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
 
-        {/* Enterprise Notification Center */}
-        <div ref={notificationsRef} style={{ position: 'relative' }}>
+          {/* AI Assistant Button */}
+          <button
+            type="button"
+            aria-label="Open AI Assistant"
+            onClick={() => { window.dispatchEvent(new CustomEvent('crm:toggle-ai-chat')); }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '0.4rem',
+              padding: '0 0.85rem', height: '36px',
+              borderRadius: 'var(--radius-md)',
+              background: 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)',
+              border: 'none', color: '#ffffff',
+              cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600,
+              transition: 'var(--transition)', whiteSpace: 'nowrap',
+              boxShadow: '0 2px 8px rgba(59,130,246,0.35)',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(59,130,246,0.45)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(59,130,246,0.35)'; }}
+          >
+            <Sparkles size={14} />
+            <span className="ai-btn-label">Ask AI</span>
+          </button>
+
+          {/* Theme Mode Selector */}
+          {showThemeToggle && <ThemeToggle variant="dropdown" />}
+
+
+          {/* Enterprise Notification Center */}
+          <div ref={notificationsRef} style={{ position: 'relative' }}>
           <button
             type="button"
             onClick={handleToggleNotifications}
@@ -1744,7 +1665,7 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
             </div>
           )}
         </div>
-      </div>
+        </div>
       </div>
 
       {/* Bottom Sub-Header Bar: Configurable & RBAC-Governed Top Header Navigation Menus */}
@@ -1752,6 +1673,12 @@ export function Header({ onToggleMobileSidebar }: HeaderProps) {
         <nav
           className="top-header-subnav"
           aria-label="Top Header Navigation"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            width: '100%',
+            order: 2,
+          }}
         >
           {/* Slide Navigation to Left */}
           {canScrollLeft && (

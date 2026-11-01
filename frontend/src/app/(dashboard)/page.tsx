@@ -5,27 +5,23 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { apiFetch } from '@/lib/api-client';
 import { PagedResponse, Organization, User } from '@/lib/types';
-import { Card } from '@/components/ui/card';
-import { StatCard } from '@/components/ui/stat-card';
-import { SearchableSelect } from '@/components/ui/searchable-select';
-import { FormattedDate } from '@/components/ui/formatted-date';
 import {
   Building2,
   Users,
-  DollarSign,
-  TrendingUp,
-  BarChart3,
-  Layers,
   ArrowUpRight,
+  ArrowRight,
   CheckCircle2,
-  Clock,
   Plus,
   RefreshCw,
-  Briefcase,
-  Wallet,
-  Receipt,
-  FileCheck,
-  CheckCircle,
+  UserPlus,
+  Settings,
+  Shield,
+  Zap,
+  Activity,
+  Database,
+  CheckSquare,
+  Layers,
+  BarChart2,
 } from 'lucide-react';
 
 interface DashboardMetrics {
@@ -36,13 +32,13 @@ interface DashboardMetrics {
 }
 
 /**
- * Enterprise Production CRM Dashboard.
- * Provides executive financial KPIs (ARR, Receivables, Pipeline), opportunity funnel stages,
- * live organization client accounts, registered contacts, and real-time business audit feeds.
+ * Mailtrap-Style Enterprise Dashboard Overview.
+ * Features clean horizontal tabs, high-contrast metrics cards, quick setup action banner,
+ * sales pipeline tracking, and live audit streams.
  */
 export default function DashboardOverviewPage() {
   const { user } = useAuth();
-  const [selectedPeriod, setSelectedPeriod] = useState('This Fiscal Quarter');
+  const [activeTab, setActiveTab] = useState<'overview' | 'activity' | 'receivables' | 'setup'>('overview');
   const [stats, setStats] = useState<DashboardMetrics>({
     orgsCount: 0,
     usersCount: 0,
@@ -50,7 +46,6 @@ export default function DashboardOverviewPage() {
     dbStatus: 'checking',
   });
   const [recentOrgs, setRecentOrgs] = useState<Organization[]>([]);
-  const [recentUsers, setRecentUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -79,7 +74,6 @@ export default function DashboardOverviewPage() {
         }
 
         if (usersData.status === 'fulfilled') {
-          setRecentUsers(usersData.value.items || []);
           usersCount = usersData.value.total || 0;
         }
 
@@ -126,7 +120,6 @@ export default function DashboardOverviewPage() {
         setStats((prev) => ({ ...prev, orgsCount: total }));
       }
       if (usersData.status === 'fulfilled') {
-        setRecentUsers(usersData.value.items || []);
         setStats((prev) => ({ ...prev, usersCount: usersData.value.total || 0 }));
       }
     } finally {
@@ -134,626 +127,636 @@ export default function DashboardOverviewPage() {
     }
   };
 
-  // Pipeline stages mock data (production CRM model)
   const pipelineStages = [
-    { name: '1. Discovery & Inbound', count: 24, value: '$180,000', percentage: 20, color: '#6366f1' },
+    { name: '1. Discovery & Inbound', count: 24, value: '$180,000', percentage: 20, color: '#2563eb' },
     { name: '2. Needs Analysis & Demo', count: 16, value: '$265,000', percentage: 40, color: '#38bdf8' },
     { name: '3. Proposal & Quote Sent', count: 11, value: '$390,000', percentage: 65, color: '#fbbf24' },
     { name: '4. Contract & Security Review', count: 6, value: '$220,000', percentage: 85, color: '#f97316' },
     { name: '5. Closed Won (This Quarter)', count: 19, value: '$685,000', percentage: 100, color: '#10b981' },
   ];
 
-  // Cash flow & receivables breakdown
-  const receivablesData = [
-    { label: 'Current & Unbilled', amount: '$184,500', status: 'Healthy', color: '#10b981' },
-    { label: 'Due in 1-15 Days', amount: '$42,200', status: 'Upcoming', color: '#6366f1' },
-    { label: 'Overdue 16-30 Days', amount: '$16,400', status: 'Follow-up', color: '#f59e0b' },
-    { label: 'Overdue 30+ Days', amount: '$4,150', status: 'Escalated', color: '#f43f5e' },
+  const setupSteps = [
+    { label: 'Create your first organization', done: stats.orgsCount > 0 },
+    { label: 'Invite a team member', done: stats.usersCount > 1 },
+    { label: 'Configure RBAC roles & permissions', done: false },
+    { label: 'Connect external integrations', done: false },
   ];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-      {/* Top Executive Header & Filter Toolbar */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '1.25rem',
-        }}
-      >
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '0.35rem' }}>
-            <span
-              className="badge badge-primary"
-              style={{ fontSize: '0.72rem', letterSpacing: '0.04em' }}
-            >
-              Enterprise Edition
-            </span>
-            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-              Executive Workspace • Account: {user?.email}
-            </span>
-          </div>
-          <h1
-            style={{
-              fontSize: '1.75rem',
-              fontWeight: 800,
-              letterSpacing: '-0.03em',
-              color: 'var(--text-primary)',
-              margin: '0 0 0.25rem 0',
-            }}
-          >
-            Welcome back, {user?.first_name || user?.display_name || 'Executive'}
-          </h1>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
-            Live portfolio analytics across client accounts, revenue pipeline, and team operations.
-          </p>
-        </div>
-
-        {/* Action Controls & Date Period Selector */}
-        <div className="dashboard-toolbar-actions">
-          <div style={{ width: '230px', minWidth: '190px' }}>
-            <SearchableSelect
-              options={[
-                { value: 'This Fiscal Quarter', label: 'This Fiscal Quarter (Q4)', sublabel: 'Oct - Dec 2026' },
-                { value: 'This Month', label: 'This Month (October)', sublabel: 'Current billing period' },
-                { value: 'Year to Date', label: 'Year to Date (2026)', sublabel: 'Full calendar year' },
-                { value: 'Last 30 Days', label: 'Last 30 Days', sublabel: 'Trailing 30-day window' },
-              ]}
-              value={selectedPeriod}
-              onChange={(val) => setSelectedPeriod(val)}
-              placeholder="Filter timeline..."
-              searchPlaceholder="Search periods..."
-              aria-label="Filter timeline"
-            />
-          </div>
-
-          <button
-            onClick={handleManualRefresh}
-            disabled={isRefreshing}
-            className="btn btn-secondary"
-            style={{ height: '38px', fontSize: '0.825rem', padding: '0 0.85rem' }}
-            title="Refresh metrics data"
-          >
-            <RefreshCw size={14} className={isRefreshing ? 'loading-spinner' : ''} />
-            <span>Sync</span>
-          </button>
-
-          <Link href="/organizations" className="btn btn-primary" style={{ height: '38px', fontSize: '0.825rem' }}>
-            <Plus size={15} />
-            <span>Add Account</span>
-          </Link>
-        </div>
-      </div>
-
-      {/* KPI Financial & Operational Metrics Grid (Executive High-Impact Cards) */}
-      <div className="kpi-metrics-grid">
-        <StatCard
-          title="ANNUAL RECURRING REVENUE (ARR)"
-          value="$1,420,800"
-          isLoading={isLoading}
-          icon={<DollarSign size={20} />}
-          iconBg="rgba(16, 185, 129, 0.15)"
-          iconColor="#10b981"
-          subtitle={
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: '#10b981', fontWeight: 600 }}>
-              <TrendingUp size={14} />
-              <span>+18.4% vs last quarter</span>
-            </div>
-          }
-        />
-
-        <StatCard
-          title="ACTIVE CLIENT ACCOUNTS"
-          value={stats.orgsCount}
-          isLoading={isLoading}
-          icon={<Building2 size={20} />}
-          iconBg="rgba(99, 102, 241, 0.15)"
-          iconColor="#818cf8"
-          subtitle={
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: 'var(--text-secondary)' }}>
-              <CheckCircle2 size={14} color="#10b981" />
-              <span>100% active tenant SLA</span>
-            </div>
-          }
-        />
-
-        <StatCard
-          title="OPPORTUNITY PIPELINE (WEIGHTED)"
-          value="$1,140,000"
-          isLoading={isLoading}
-          icon={<Briefcase size={20} />}
-          iconBg="rgba(245, 158, 11, 0.15)"
-          iconColor="#fbbf24"
-          subtitle={
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: '#fbbf24', fontWeight: 600 }}>
-              <BarChart3 size={14} />
-              <span>57 Active Deals in Funnel</span>
-            </div>
-          }
-        />
-
-        <StatCard
-          title="PLATFORM USERS & SEATS"
-          value={stats.usersCount}
-          isLoading={isLoading}
-          icon={<Users size={20} />}
-          iconBg="rgba(14, 165, 233, 0.15)"
-          iconColor="#38bdf8"
-          subtitle={
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: 'var(--text-secondary)' }}>
-              <FileCheck size={14} color="#38bdf8" />
-              <span>Enterprise RBAC secured</span>
-            </div>
-          }
-        />
-      </div>
-
-      {/* Main Analytics Row: Opportunity Funnel + Working Capital Cash Flow */}
-      <div className="dashboard-grid-2col">
-        {/* Opportunity Pipeline Funnel Widget */}
-        <Card padding="1.75rem">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <Layers size={18} color="var(--accent-primary)" />
-                <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                  Sales Pipeline Stages
-                </h3>
-              </div>
-              <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
-                Deal velocity tracking across 5 pipeline conversion gates.
-              </p>
-            </div>
-            <span className="badge badge-success" style={{ fontWeight: 700 }}>
-              64.2% Win Rate
-            </span>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '0.5rem' }}>
-            {pipelineStages.map((stage) => (
-              <div key={stage.name}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8125rem', marginBottom: '0.35rem' }}>
-                  <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{stage.name}</span>
-                  <div style={{ display: 'flex', gap: '1rem', color: 'var(--text-secondary)' }}>
-                    <span>{stage.count} deals</span>
-                    <strong style={{ color: 'var(--text-primary)' }}>{stage.value}</strong>
-                  </div>
-                </div>
-                {/* Visual Pipeline Stage Meter */}
-                <div
-                  style={{
-                    width: '100%',
-                    height: '8px',
-                    borderRadius: 'var(--radius-full)',
-                    background: 'var(--border-subtle)',
-                    overflow: 'hidden',
-                  }}
-                >
-                  <div
-                    style={{
-                      width: `${stage.percentage}%`,
-                      height: '100%',
-                      background: stage.color,
-                      borderRadius: 'var(--radius-full)',
-                      transition: 'width 0.8s ease',
-                    }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginTop: '1.5rem',
-              paddingTop: '1rem',
-              borderTop: '1px solid var(--border-subtle)',
-              fontSize: '0.8125rem',
-            }}
-          >
-            <span style={{ color: 'var(--text-muted)' }}>Average Sales Cycle: <strong>26 Days</strong></span>
-            <Link href="/organizations" style={{ color: 'var(--accent-primary)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-              <span>View Deals</span>
-              <ArrowUpRight size={14} />
-            </Link>
-          </div>
-        </Card>
-
-        {/* Cash Flow & Receivables Summary Widget */}
-        <Card padding="1.75rem">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <Wallet size={18} color="#10b981" />
-                <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                  Receivables & Cash Flow
-                </h3>
-              </div>
-              <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
-                Billing aging schedule and collection efficiency breakdown.
-              </p>
-            </div>
-            <span className="badge badge-primary" style={{ fontWeight: 700 }}>
-              96.8% Collected
-            </span>
-          </div>
-
-          <div className="receivables-grid" style={{ marginTop: '0.75rem' }}>
-            {receivablesData.map((item) => (
-              <div
-                key={item.label}
-                style={{
-                  padding: '1rem',
-                  background: 'var(--bg-input)',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--border-subtle)',
-                }}
-              >
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
-                  {item.label}
-                </div>
-                <div style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-                  {item.amount}
-                </div>
-                <div style={{ marginTop: '0.4rem' }}>
-                  <span
-                    className="badge"
-                    style={{
-                      fontSize: '0.65rem',
-                      background: `${item.color}18`,
-                      color: item.color,
-                      border: `1px solid ${item.color}35`,
-                    }}
-                  >
-                    {item.status}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div
-            style={{
-              marginTop: '1.5rem',
-              padding: '1rem',
-              borderRadius: 'var(--radius-md)',
-              background: 'var(--accent-success-bg)',
-              border: '1px solid rgba(16, 185, 129, 0.2)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-              <Receipt size={18} color="#10b981" />
-              <div>
-                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                  Auto-Reconciliation Active
-                </div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  Next automatic settlement scheduled tonight at 23:59 UTC
-                </div>
-              </div>
-            </div>
-            <span className="badge badge-success" style={{ fontSize: '0.7rem' }}>
-              Automated
-            </span>
-          </div>
-        </Card>
-      </div>
-
-      {/* Two Column Section: Live Accounts Directory & Live Contacts Roster */}
-      <div className="dashboard-grid-2col">
-        {/* Client Accounts / Organizations Table */}
-        <Card padding="1.75rem">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
-            <div>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                Client Accounts & Tenants
-              </h3>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                Master organizations and enterprise clients
-              </p>
-            </div>
-            <Link href="/organizations" className="btn btn-secondary" style={{ padding: '0.45rem 0.85rem', fontSize: '0.8rem' }}>
-              <span>View Directory</span>
-              <ArrowUpRight size={14} />
-            </Link>
-          </div>
-
-          <div className="table-container" style={{ border: 'none', background: 'transparent' }}>
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th style={{ width: '45px', textAlign: 'center' }}>#</th>
-                  <th>Account Name</th>
-                  <th>System Code</th>
-                  <th>Tier & Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {isLoading ? (
-                  <tr>
-                    <td colSpan={4}>
-                      <div className="skeleton" style={{ height: '35px', width: '100%' }} />
-                    </td>
-                  </tr>
-                ) : recentOrgs.length > 0 ? (
-                  recentOrgs.map((org, index) => (
-                    <tr key={org.id}>
-                      <td style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 600 }}>
-                        {index + 1}
-                      </td>
-                      <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-                          <div
-                            style={{
-                              width: '30px',
-                              height: '30px',
-                              borderRadius: 'var(--radius-md)',
-                              background: 'rgba(99, 102, 241, 0.12)',
-                              color: 'var(--accent-primary)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                            }}
-                          >
-                            <Building2 size={16} />
-                          </div>
-                          <div>
-                            <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{org.name}</div>
-                            {org.email && (
-                              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{org.email}</div>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                      <td>
-                        <span className="badge badge-neutral">{org.code}</span>
-                      </td>
-                      <td>
-                        <span className={`badge ${org.is_active ? 'badge-success' : 'badge-danger'}`}>
-                          {org.is_active ? 'Enterprise Active' : 'Suspended'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '1.5rem' }}>
-                      No organization accounts provisioned.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-
-        {/* Recent Platform Contacts & Users Table */}
-        <Card padding="1.75rem">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
-            <div>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                Key Contacts & Team
-              </h3>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                Assigned account executives and team operators
-              </p>
-            </div>
-            <Link href="/users" className="btn btn-secondary" style={{ padding: '0.45rem 0.85rem', fontSize: '0.8rem' }}>
-              <span>Manage Team</span>
-              <ArrowUpRight size={14} />
-            </Link>
-          </div>
-
-          <div className="table-container" style={{ border: 'none', background: 'transparent' }}>
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th style={{ width: '45px', textAlign: 'center' }}>#</th>
-                  <th>Contact</th>
-                  <th>Status</th>
-                  <th>Joined</th>
-                </tr>
-              </thead>
-              <tbody>
-                {isLoading ? (
-                  <tr>
-                    <td colSpan={4}>
-                      <div className="skeleton" style={{ height: '35px', width: '100%' }} />
-                    </td>
-                  </tr>
-                ) : recentUsers.length > 0 ? (
-                  recentUsers.map((u, index) => (
-                    <tr key={u.id}>
-                      <td style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 600 }}>
-                        {index + 1}
-                      </td>
-                      <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-                          <div
-                            style={{
-                              width: '30px',
-                              height: '30px',
-                              borderRadius: '50%',
-                              background: 'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)',
-                              color: '#fff',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontSize: '0.75rem',
-                              fontWeight: 700,
-                            }}
-                          >
-                            {u.first_name ? u.first_name[0].toUpperCase() : u.email[0].toUpperCase()}
-                          </div>
-                          <div>
-                            <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                              {u.display_name || u.email.split('@')[0]}
-                            </div>
-                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{u.email}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td>
-                        <span className={`badge ${u.status === 'active' ? 'badge-success' : 'badge-warning'}`}>
-                          {u.status}
-                        </span>
-                      </td>
-                      <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                          <Clock size={13} />
-                          <FormattedDate value={u.created_at} />
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '1.5rem' }}>
-                      No contact records found.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      </div>
-
-      {/* Enterprise Audit & Activity Stream */}
-      <Card padding="1.75rem">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
+      {/* ── Header & Tabs ── */}
+      <div style={{ borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.25rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
           <div>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-              Executive Audit & Activity Stream
-            </h3>
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-              Real-time feed of tenant onboarding, role assignments, and financial transactions
+            <h1
+              style={{
+                fontSize: '1.5rem',
+                fontWeight: 800,
+                letterSpacing: '-0.02em',
+                color: 'var(--text-primary)',
+                margin: '0 0 0.35rem 0',
+              }}
+            >
+              Dashboard
+            </h1>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+              Welcome back{user?.display_name ? `, ${user.display_name}` : user?.first_name ? `, ${user.first_name}` : ''}. Here&apos;s your platform at a glance.
             </p>
           </div>
-          <span className="badge badge-success">
-            <CheckCircle size={13} />
-            <span>Audit Trail Verified</span>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+            <button
+              onClick={handleManualRefresh}
+              disabled={isRefreshing}
+              className="btn btn-secondary"
+              style={{ height: '36px', fontSize: '0.8rem', padding: '0 0.85rem' }}
+              title="Refresh metrics"
+            >
+              <RefreshCw size={13} className={isRefreshing ? 'loading-spinner' : ''} />
+              <span>Refresh</span>
+            </button>
+            <Link href="/organizations/new" className="btn btn-primary" style={{ height: '36px', fontSize: '0.8rem' }}>
+              <Plus size={14} />
+              <span>Add Organization</span>
+            </Link>
+          </div>
+        </div>
+
+        {/* Horizontal Tabs */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
+          {[
+            { id: 'overview', label: 'Overview' },
+            { id: 'activity', label: 'Activity Logs' },
+            { id: 'receivables', label: 'Cash Flow' },
+            { id: 'setup', label: 'Setup Guide' },
+          ].map((tab) => {
+            const active = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id as typeof activeTab)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  borderBottom: active ? '2px solid var(--accent-primary)' : '2px solid transparent',
+                  padding: '0.6rem 0.2rem',
+                  color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+                  fontSize: '0.875rem',
+                  fontWeight: active ? 600 : 500,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                  marginBottom: '-1px',
+                }}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Row 1: 4 KPI Metric Cards ── */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, 1fr)',
+          gap: '1rem',
+        }}
+      >
+        {/* Total Organizations */}
+        <div
+          className="card"
+          style={{ padding: '1.25rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-card)' }}
+        >
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1rem' }}>
+            <div
+              style={{
+                width: '42px',
+                height: '42px',
+                borderRadius: '10px',
+                background: 'rgba(37, 99, 235, 0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#3b82f6',
+                flexShrink: 0,
+              }}
+            >
+              <Building2 size={20} />
+            </div>
+            <ArrowUpRight size={14} style={{ color: 'var(--text-muted)', marginTop: '2px' }} />
+          </div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '0.3rem' }}>
+            Total Organizations
+          </div>
+          <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.1, marginBottom: '0.6rem' }}>
+            {isLoading ? '—' : stats.orgsCount}
+          </div>
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.25rem',
+              fontSize: '0.72rem',
+              fontWeight: 600,
+              color: '#10b981',
+              background: 'rgba(16, 185, 129, 0.12)',
+              padding: '0.2rem 0.55rem',
+              borderRadius: '999px',
+            }}
+          >
+            +8% this month
           </span>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: '1rem',
-              padding: '0.85rem 1rem',
-              borderRadius: 'var(--radius-md)',
-              background: 'var(--bg-input)',
-              border: '1px solid var(--border-subtle)',
-            }}
-          >
+        {/* Total Users */}
+        <div
+          className="card"
+          style={{ padding: '1.25rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-card)' }}
+        >
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1rem' }}>
             <div
               style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '50%',
-                background: 'rgba(16, 185, 129, 0.15)',
-                color: '#10b981',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-              }}
-            >
-              <DollarSign size={16} />
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                Annual enterprise contract finalized with Acme Corporation ($45,000 ARR)
-              </div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
-                Account Executive: Super Admin • Deal Stage: Closed Won • 10 minutes ago
-              </div>
-            </div>
-          </div>
-
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: '1rem',
-              padding: '0.85rem 1rem',
-              borderRadius: 'var(--radius-md)',
-              background: 'var(--bg-input)',
-              border: '1px solid var(--border-subtle)',
-            }}
-          >
-            <div
-              style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '50%',
+                width: '42px',
+                height: '42px',
+                borderRadius: '10px',
                 background: 'rgba(99, 102, 241, 0.15)',
-                color: '#818cf8',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                color: '#818cf8',
                 flexShrink: 0,
               }}
             >
-              <Building2 size={16} />
+              <Users size={20} />
             </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                Tenant provisioning completed for Global Tech Holdings (Code: ORG-002)
-              </div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
-                Automated System Process • Dedicated Database Partition Verified • 1 hour ago
-              </div>
-            </div>
+            <ArrowUpRight size={14} style={{ color: 'var(--text-muted)', marginTop: '2px' }} />
           </div>
-
-          <div
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '0.3rem' }}>
+            Total Users
+          </div>
+          <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.1, marginBottom: '0.6rem' }}>
+            {isLoading ? '—' : stats.usersCount}
+          </div>
+          <span
             style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: '1rem',
-              padding: '0.85rem 1rem',
-              borderRadius: 'var(--radius-md)',
-              background: 'var(--bg-input)',
-              border: '1px solid var(--border-subtle)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.25rem',
+              fontSize: '0.72rem',
+              fontWeight: 600,
+              color: '#818cf8',
+              background: 'rgba(99, 102, 241, 0.12)',
+              padding: '0.2rem 0.55rem',
+              borderRadius: '999px',
             }}
           >
+            +3 new this week
+          </span>
+        </div>
+
+        {/* System Status */}
+        <div
+          className="card"
+          style={{ padding: '1.25rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-card)' }}
+        >
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1rem' }}>
             <div
               style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '50%',
-                background: 'rgba(245, 158, 11, 0.15)',
-                color: '#fbbf24',
+                width: '42px',
+                height: '42px',
+                borderRadius: '10px',
+                background: 'rgba(16, 185, 129, 0.15)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                color: '#10b981',
                 flexShrink: 0,
               }}
             >
-              <Users size={16} />
+              <Shield size={20} />
             </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                Security audit verified: Zero permission conflicts across RBAC tree
+            <span
+              style={{
+                width: '8px',
+                height: '8px',
+                borderRadius: '50%',
+                background: '#10b981',
+                display: 'inline-block',
+                boxShadow: '0 0 6px #10b981',
+              }}
+            />
+          </div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '0.3rem' }}>
+            System Status
+          </div>
+          <div style={{ fontSize: '2rem', fontWeight: 800, color: '#10b981', lineHeight: 1.1, marginBottom: '0.6rem' }}>
+            Operational
+          </div>
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.25rem',
+              fontSize: '0.72rem',
+              fontWeight: 600,
+              color: 'var(--text-muted)',
+              background: 'rgba(255,255,255,0.04)',
+              padding: '0.2rem 0.55rem',
+              borderRadius: '999px',
+            }}
+          >
+            All services online
+          </span>
+        </div>
+
+        {/* API Latency */}
+        <div
+          className="card"
+          style={{ padding: '1.25rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-card)' }}
+        >
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1rem' }}>
+            <div
+              style={{
+                width: '42px',
+                height: '42px',
+                borderRadius: '10px',
+                background: 'rgba(251, 191, 36, 0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#fbbf24',
+                flexShrink: 0,
+              }}
+            >
+              <Zap size={20} />
+            </div>
+            <ArrowUpRight size={14} style={{ color: 'var(--text-muted)', marginTop: '2px' }} />
+          </div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '0.3rem' }}>
+            API Latency
+          </div>
+          <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.1, marginBottom: '0.6rem' }}>
+            24ms
+          </div>
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.25rem',
+              fontSize: '0.72rem',
+              fontWeight: 600,
+              color: 'var(--text-muted)',
+              background: 'rgba(255,255,255,0.04)',
+              padding: '0.2rem 0.55rem',
+              borderRadius: '999px',
+            }}
+          >
+            Avg response time
+          </span>
+        </div>
+      </div>
+
+      {/* ── Row 2: Sales Pipeline (2/3) + Quick Actions (1/3) ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1rem' }}>
+        {/* Sales Pipeline Funnel */}
+        <div
+          className="card"
+          style={{ padding: '1.25rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-card)' }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Layers size={17} color="#38bdf8" />
+              <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+                Sales Pipeline
+              </h3>
+            </div>
+            <span className="badge badge-success" style={{ fontWeight: 700 }}>64.2% Win Rate</span>
+          </div>
+
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                <th style={{ textAlign: 'left', padding: '0 0 0.6rem', color: 'var(--text-muted)', fontWeight: 600, fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Stage</th>
+                <th style={{ textAlign: 'right', padding: '0 0 0.6rem', color: 'var(--text-muted)', fontWeight: 600, fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Deals</th>
+                <th style={{ textAlign: 'right', padding: '0 0 0.6rem', color: 'var(--text-muted)', fontWeight: 600, fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Value</th>
+                <th style={{ textAlign: 'left', padding: '0 0 0.6rem 1.25rem', color: 'var(--text-muted)', fontWeight: 600, fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.04em', width: '30%' }}>Fill</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pipelineStages.map((stage) => (
+                <tr key={stage.name} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                  <td style={{ padding: '0.7rem 0', color: 'var(--text-primary)', fontWeight: 500 }}>{stage.name}</td>
+                  <td style={{ padding: '0.7rem 0', textAlign: 'right', color: 'var(--text-secondary)' }}>{stage.count}</td>
+                  <td style={{ padding: '0.7rem 0', textAlign: 'right', color: 'var(--text-primary)', fontWeight: 600 }}>{stage.value}</td>
+                  <td style={{ padding: '0.7rem 0 0.7rem 1.25rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <div
+                        style={{
+                          flex: 1,
+                          height: '6px',
+                          borderRadius: '999px',
+                          background: 'var(--border-subtle)',
+                          overflow: 'hidden',
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: `${stage.percentage}%`,
+                            height: '100%',
+                            background: stage.color,
+                            borderRadius: '999px',
+                          }}
+                        />
+                      </div>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', minWidth: '30px', textAlign: 'right' }}>
+                        {stage.percentage}%
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Quick Actions */}
+        <div
+          className="card"
+          style={{ padding: '1.25rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-card)' }}
+        >
+          <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 1.25rem 0' }}>
+            Quick Actions
+          </h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+            {[
+              { label: 'Add Organization', icon: Building2, href: '/organizations/new', color: '#3b82f6' },
+              { label: 'Invite User', icon: UserPlus, href: '/users/invite', color: '#818cf8' },
+              { label: 'View Reports', icon: BarChart2, href: '/reports', color: '#fbbf24' },
+              { label: 'System Settings', icon: Settings, href: '/settings', color: '#94a3b8' },
+            ].map((action) => (
+              <Link
+                key={action.label}
+                href={action.href}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.75rem',
+                  padding: '0.7rem 0.85rem',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--border-subtle)',
+                  background: 'rgba(255,255,255,0.02)',
+                  textDecoration: 'none',
+                  transition: 'background 0.15s ease',
+                }}
+              >
+                <div
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '8px',
+                    background: `${action.color}1a`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: action.color,
+                    flexShrink: 0,
+                  }}
+                >
+                  <action.icon size={16} />
+                </div>
+                <span style={{ flex: 1, fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  {action.label}
+                </span>
+                <ArrowRight size={14} style={{ color: 'var(--text-muted)' }} />
+              </Link>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Row 3: Recent Organizations (left) + System Health (right) ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+        {/* Recent Organizations */}
+        <div
+          className="card"
+          style={{ padding: '1.25rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-card)' }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Building2 size={17} color="#60a5fa" />
+              <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+                Recent Organizations
+              </h3>
+            </div>
+            <Link
+              href="/organizations"
+              style={{ fontSize: '0.78rem', color: 'var(--accent-primary)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.25rem', textDecoration: 'none' }}
+            >
+              View All <ArrowUpRight size={12} />
+            </Link>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {isLoading ? (
+              [1, 2, 3].map((i) => (
+                <div key={i} className="skeleton" style={{ height: '48px', borderRadius: 'var(--radius-md)' }} />
+              ))
+            ) : recentOrgs.length === 0 ? (
+              <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                No organizations yet.
               </div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
-                Compliance Engine v2 • Automated Policy Validator • Today, 09:15 UTC
+            ) : (
+              recentOrgs.slice(0, 5).map((org) => (
+                <div
+                  key={org.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                    padding: '0.6rem 0.75rem',
+                    borderRadius: 'var(--radius-md)',
+                    background: 'rgba(255,255,255,0.02)',
+                    border: '1px solid var(--border-subtle)',
+                  }}
+                >
+                  <span className="badge badge-neutral" style={{ fontFamily: 'monospace', fontSize: '0.7rem', flexShrink: 0 }}>
+                    {org.code}
+                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {org.name}
+                    </div>
+                    {org.created_at && (
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                        {new Date(org.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                      </div>
+                    )}
+                  </div>
+                  <span className={`badge ${org.is_active ? 'badge-success' : 'badge-danger'}`} style={{ flexShrink: 0 }}>
+                    {org.is_active ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* System Health */}
+        <div
+          className="card"
+          style={{ padding: '1.25rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-card)' }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.25rem' }}>
+            <Activity size={17} color="#10b981" />
+            <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+              System Health
+            </h3>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            {/* API Status */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '0.75rem 1rem',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--border-subtle)',
+                background: 'rgba(255,255,255,0.02)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <Zap size={16} color="#fbbf24" />
+                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>API Server</span>
+              </div>
+              <span className={`badge ${stats.apiStatus === 'online' ? 'badge-success' : 'badge-neutral'}`}>
+                {stats.apiStatus === 'online' ? 'Online' : stats.apiStatus === 'checking' ? 'Checking…' : stats.apiStatus}
+              </span>
+            </div>
+
+            {/* DB Status */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '0.75rem 1rem',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--border-subtle)',
+                background: 'rgba(255,255,255,0.02)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <Database size={16} color="#3b82f6" />
+                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>Database</span>
+              </div>
+              <span className={`badge ${stats.dbStatus === 'online' ? 'badge-success' : stats.dbStatus === 'checking' ? 'badge-neutral' : 'badge-danger'}`}>
+                {stats.dbStatus === 'online' ? 'Online' : stats.dbStatus === 'checking' ? 'Checking…' : stats.dbStatus}
+              </span>
+            </div>
+
+            {/* Platform Uptime */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '0.75rem 1rem',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--border-subtle)',
+                background: 'rgba(16, 185, 129, 0.05)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <Shield size={16} color="#10b981" />
+                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>Platform Uptime</span>
+              </div>
+              <span style={{ fontSize: '0.9rem', fontWeight: 800, color: '#10b981' }}>99.98%</span>
+            </div>
+
+            {/* Uptime bar */}
+            <div style={{ marginTop: '0.25rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>
+                <span>30-day availability</span>
+                <span>99.98%</span>
+              </div>
+              <div style={{ height: '6px', borderRadius: '999px', background: 'var(--border-subtle)', overflow: 'hidden' }}>
+                <div style={{ width: '99.98%', height: '100%', background: 'linear-gradient(90deg, #10b981, #34d399)', borderRadius: '999px' }} />
               </div>
             </div>
           </div>
         </div>
-      </Card>
+      </div>
+
+      {/* ── Row 4: Setup Checklist ── */}
+      <div
+        className="card"
+        style={{ padding: '1.25rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-card)' }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.25rem' }}>
+          <CheckSquare size={17} color="#818cf8" />
+          <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+            Platform Setup Checklist
+          </h3>
+          <span className="badge badge-primary" style={{ marginLeft: 'auto' }}>
+            {setupSteps.filter((s) => s.done).length}/{setupSteps.length} Complete
+          </span>
+        </div>
+
+        {/* Progress bar */}
+        <div style={{ height: '6px', borderRadius: '999px', background: 'var(--border-subtle)', overflow: 'hidden', marginBottom: '1.25rem' }}>
+          <div
+            style={{
+              width: `${(setupSteps.filter((s) => s.done).length / setupSteps.length) * 100}%`,
+              height: '100%',
+              background: 'linear-gradient(90deg, #6366f1, #818cf8)',
+              borderRadius: '999px',
+              transition: 'width 0.4s ease',
+            }}
+          />
+        </div>
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            gap: '0.65rem',
+          }}
+        >
+          {setupSteps.map((step) => (
+            <div
+              key={step.label}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.65rem',
+                padding: '0.7rem 0.85rem',
+                borderRadius: 'var(--radius-md)',
+                border: `1px solid ${step.done ? 'rgba(16,185,129,0.25)' : 'var(--border-subtle)'}`,
+                background: step.done ? 'rgba(16,185,129,0.06)' : 'rgba(255,255,255,0.02)',
+              }}
+            >
+              <CheckCircle2
+                size={18}
+                style={{ flexShrink: 0, color: step.done ? '#10b981' : 'var(--text-muted)' }}
+              />
+              <span
+                style={{
+                  fontSize: '0.83rem',
+                  fontWeight: 500,
+                  color: step.done ? 'var(--text-primary)' : 'var(--text-secondary)',
+                  textDecoration: step.done ? 'line-through' : 'none',
+                }}
+              >
+                {step.label}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
